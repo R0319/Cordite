@@ -1,0 +1,14 @@
+{
+  "itemGroup.cordite": "Cordite",
+  "item.cordite.glock": "Glock",
+  "item.cordite.ak47": "AK-47",
+  "item.cordite.m4a1": "M4A1",
+
+  "cordite.firemode.single": "SINGLE",
+  "cordite.firemode.full_auto": "AUTO",
+  "cordite.firemode.burst": "BURST",
+
+  "key.category.cordite": "Cordite",
+  "key.cordite.cycle_fire_mode": "Cycle Fire Mode",
+  "key.cordite.reload": "Reload"
+}

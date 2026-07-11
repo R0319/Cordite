@@ -1,0 +1,14 @@
+{
+  "itemGroup.cordite": "Cordite",
+  "item.cordite.glock": "グロック",
+  "item.cordite.ak47": "AK-47",
+  "item.cordite.m4a1": "M4A1",
+
+  "cordite.firemode.single": "単発",
+  "cordite.firemode.full_auto": "フルオート",
+  "cordite.firemode.burst": "バースト",
+
+  "key.category.cordite": "Cordite",
+  "key.cordite.cycle_fire_mode": "発射モード切替",
+  "key.cordite.reload": "リロード"
+}
