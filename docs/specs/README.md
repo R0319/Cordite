@@ -27,7 +27,7 @@
 | 3 | [03-items.md](03-items.md) | アイテム（銃リスト・防具・その他アイテム） | 🟡 仮 |
 | 4 | [04-enemies.md](04-enemies.md) | 敵仕様（種類・武装・近接システム） | 🟡 仮 |
 | 5 | [05-structures.md](05-structures.md) | 建物生成（基地ダンジョン） | ⬜ 未定 |
-| 6 | [06-animations.md](06-animations.md) | アニメーション（一人称・三人称） | 🔵 検討中 |
+| 6 | [06-animations.md](06-animations.md) | アニメーション（一人称・三人称） | 🟡 仮 |
 | 7 | [07-model-assets.md](07-model-assets.md) | モデル/テクスチャ制作基準（作者用） | 🟡 仮 |
 | 8 | [08-training-targets.md](08-training-targets.md) | 的NPC / 射撃ターゲット | 🔵 検討中 |
 | 9 | [09-npc.md](09-npc.md) | NPC分類 / PMC（敵対人間勢力・拠点守備） | 🟡 仮 |
@@ -82,4 +82,3 @@
 ### まだ仕様策定が必要（数値ではなく設計）
 
 - 建物生成の全仕様（[05-structures.md](05-structures.md)）
-- アニメーション作成方式（[06-animations.md](06-animations.md)）

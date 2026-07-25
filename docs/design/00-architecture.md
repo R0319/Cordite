@@ -47,24 +47,29 @@ net.r0319.cordite
 
 NeoForge 1.21 の Payload（`CustomPacketPayload` + `StreamCodec` + `Type`、`RegisterPayloadHandlersEvent` で登録）を使う。
 
+**採用方式（実装済み）**: 発射1回ごとのリクエストではなく、**トリガー押下状態のみを送り、発射はサーバーtickで駆動する**。
+
 ```
-Client 入力（射撃キー）
-  → [C→S] FireRequestPayload（照準方向 or トリガーのみ）
-      ↓ サーバー検証:
+Client 入力（左クリックの押下/離しエッジ）
+  → [C→S] SetTriggerPayload（bool のみ。状態変化時だけ送信）
+      ↓ サーバーの PlayerTickEvent で毎tick駆動:
+        - 発射モード（単発/フルオート/バースト）に応じて発射判定
         - 前回発射tick と 連射レートでクールダウン判定（改造連射を無効化）
-        - マガジン残弾 / 薬室 / 耐久 チェック
+        - マガジン残弾 / 薬室 チェック
         - 弾道シミュレート（下記）→ 命中判定 → ダメージ適用
       ↓
-  ← [S→C] ShotEffectPayload（周囲クライアントへ: マズルフラッシュ/発射音/トレーサー）
-  ← [S→C] 状態同期（残弾など。ItemStack同期で足りる場合は不要）
+  発射音・トレーサーはサーバーから playSound / sendParticles で周囲へ配信
+  （専用のエフェクト同期パケットは持たない）
+  残弾・発射モードは ItemStack のデータコンポーネント同期で伝わる
 ```
 
-- **アンチチート**: サーバーが「最終発射tick」「残弾」を保持。規定間隔より速い要求は破棄。ダメージ量もサーバーが算出（クライアント値を信用しない）。
+- 詳細は [firing.md](firing.md) を参照（本ファイルは骨組みのみ）。
+- **アンチチート**: サーバーが「最終発射tick」「残弾」を保持。規定間隔より速い要求は破棄。ダメージ量もサーバーが算出（クライアント値を信用しない）。トリガー状態パケットは bool のみで、発射数・ダメージ・方向をクライアントに申告させない。
 
 ## ヒット方式：弾道シミュレート 🟡
 
 - 仕様に**弾速（blocks/秒）**があるため（[../specs/02-guns.md](../specs/02-guns.md#武器別ステータス仮)）、純ヒットスキャンではなく**飛翔体（travel timeあり）**を採用。
-- 実装は「弾丸Entity」か「サーバー側の軽量弾丸トラッカー（Entityを使わずtickで前進＆レイキャスト）」を検討。大量発射時のパフォーマンス（[../specs/02-guns.md] のLMG等）を考慮して後者寄りで詳細設計する。
+- **決定済み**: 「サーバー側の軽量弾丸トラッカー」（Entityを使わずtickで前進＆レイキャスト）を採用・実装済み（`combat/GunProjectile` / `combat/ProjectileManager`、[firing.md](firing.md) 参照）。大量発射時のパフォーマンス（[../specs/02-guns.md](../specs/02-guns.md) のLMG等）のため弾丸Entityは使わない。
 - ショットガンは1発で複数ペレット分の弾道。
 
 ## クライアント表示
@@ -75,11 +80,11 @@ Client 入力（射撃キー）
 
 ## 未決定（実装時に個別設計）
 
-- 弾道: 弾丸Entity か 軽量トラッカーか
 - gunpack 定義のサーバー→クライアント同期方式（参加時／リロード時）
 - 近接システムの判定方式（[../specs/04-enemies.md](../specs/04-enemies.md#近接システム)）
 - 的NPC・敵AIの実装（[../specs/08-training-targets.md](../specs/08-training-targets.md) / [../specs/04-enemies.md](../specs/04-enemies.md)）
-- アニメーション再生システム（[../specs/06-animations.md](../specs/06-animations.md) 確定後）
+- アニメーション再生システム: 方向性は決定済み（外部ライブラリ不使用・Bedrock Edition形式(`geometry.json`+`animation.json`)を自前パース＋軽量補間、viewmodel/worldmodel分離、[../specs/06-animations.md](../specs/06-animations.md#アニメーション作成方式-仮)）。パース方式・補間アルゴリズム・状態遷移の詳細設計は実装直前に `docs/design/animation-system.md` を書く
+- **アニメーション状態のネットワーク同期方式（未定・後日検討）**: リロード中/ADS中等の状態を周囲プレイヤーにどう伝えるか。上記アニメーション再生システムの設計時にあわせて決定する
 
 ## 関連
 
