@@ -1,6 +1,7 @@
 package net.r0319.cordite.combat;
 
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.Map;
 import java.util.UUID;
@@ -25,6 +26,20 @@ public final class GunFireManager {
         public int burstRemaining = 0;
         /** リロード完了ゲームtick（未リロード時は Long.MIN_VALUE。比較のみで減算しない）。 */
         public long reloadCompleteTick = Long.MIN_VALUE;
+        /**
+         * リロード中の銃スタック（同一性比較用）。リロードは「プレイヤー」ではなく
+         * 「その銃」に紐づくため、別の銃へ持ち替えたらリロードは中断する
+         * （持ち替えで別の銃が即装填される不正を防ぐ）。
+         */
+        public ItemStack reloadingStack = ItemStack.EMPTY;
+        /** 前tickにメインハンドで保持していたスタック（持ち替え検出用・同一性比較のみ）。 */
+        public ItemStack lastHeldStack = ItemStack.EMPTY;
+
+        /** リロードを中断する。 */
+        public void cancelReload() {
+            reloadCompleteTick = Long.MIN_VALUE;
+            reloadingStack = ItemStack.EMPTY;
+        }
 
         // --- 射撃トリガー（クライアントから同期） ---
         /** トリガー押下中か。 */

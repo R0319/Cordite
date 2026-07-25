@@ -1,22 +1,31 @@
 package net.r0319.cordite.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.InputEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.r0319.cordite.Cordite;
 import net.r0319.cordite.item.gun.GunItem;
 import net.r0319.cordite.network.CycleFireModePayload;
 import net.r0319.cordite.network.ReloadPayload;
 import net.r0319.cordite.network.SetTriggerPayload;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * クライアントの銃入力。左クリック=射撃（トリガー状態をサーバーへ送信）、V=モード切替、R=リロード。
- * 銃所持中は左クリックのバニラ挙動（ブロック破壊・近接攻撃）を抑制する。実際の発射処理はサーバー側。
+ *
+ * <p><b>左クリックの競合対策</b>: 発射に左クリック（{@code keyAttack}）を使うが、バニラも同じキーで
+ * 採掘・近接攻撃・腕振りを行う。バニラは {@code Minecraft.tick()} 内で毎tick {@code keyAttack.isDown()}
+ * をポーリングして {@code continueAttack()}（採掘＋腕振り）を呼ぶため、イベントのキャンセルだけでは止まらず、
+ * 「撃つと銃が上下する（採掘の腕振り）」「ブロックを壊そうとする」という症状になる。<br>
+ * そこで銃所持中は {@link ClientTickEvent.Pre}（バニラの入力処理より前）で {@code keyAttack} の押下状態を
+ * 毎tick落とし、溜まったクリックも捨てて、バニラの左クリック処理を完全に無効化する。発射判定には無効化した
+ * {@code isDown()} が使えないので、GLFW から物理ボタン状態を直接読む。実際の発射処理はサーバー側。</p>
  */
 @EventBusSubscriber(modid = Cordite.MODID, value = Dist.CLIENT)
 public final class ClientInputHandler {
@@ -24,18 +33,41 @@ public final class ClientInputHandler {
 
     /** 直近でサーバーへ送ったトリガー状態（変化時のみ送信）。 */
     private static boolean lastTriggerSent = false;
+    /** 前tickのメインハンドスタック（持ち替え検出用・同一性比較のみ）。 */
+    private static ItemStack lastHeldStack = ItemStack.EMPTY;
 
     private static boolean holdingGun(Minecraft mc) {
         return mc.player != null && mc.player.getMainHandItem().getItem() instanceof GunItem;
     }
 
+    /**
+     * 攻撃キー（既定は左クリック）が物理的に押されているかを GLFW から直接読む。
+     * {@link #suppressVanillaAttack} で {@code keyAttack.isDown()} を毎tick false に上書きするため、
+     * 発射判定にはそれを使えず、OS のボタン状態を直接参照する。
+     */
+    private static boolean isAttackPhysicallyDown(Minecraft mc) {
+        InputConstants.Key key = mc.options.keyAttack.getKey();
+        long window = mc.getWindow().getWindow();
+        if (key.getType() == InputConstants.Type.MOUSE) {
+            return GLFW.glfwGetMouseButton(window, key.getValue()) == GLFW.GLFW_PRESS;
+        }
+        return InputConstants.isKeyDown(window, key.getValue());
+    }
+
     @SubscribeEvent
-    public static void onClientTick(ClientTickEvent.Post event) {
+    public static void onClientTick(ClientTickEvent.Pre event) { // バニラの入力処理より前に走らせる
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.getConnection() == null) {
             lastTriggerSent = false; // 未接続: 送信状態をリセット
+            lastHeldStack = ItemStack.EMPTY;
             return;
         }
+
+        // 持ち替え検出: サーバー側も持ち替えで過渡状態をリセットするため、
+        // トリガーを押しっぱなしでも次の判定で必ず再送されるようにする（状態不一致の防止）
+        ItemStack held = mc.player.getMainHandItem();
+        boolean heldChanged = held != lastHeldStack;
+        lastHeldStack = held;
 
         boolean holdingGun = holdingGun(mc);
         boolean guiOpen = mc.screen != null;
@@ -52,30 +84,33 @@ public final class ClientInputHandler {
             }
         }
 
-        // 射撃トリガー（左クリック押下状態の変化を送信）
-        boolean wantFire = holdingGun && !guiOpen
+        // 射撃トリガー（左クリックの物理押下状態を送信）
+        boolean triggerDown = holdingGun && !guiOpen
                 && mc.mouseHandler.isMouseGrabbed()
-                && mc.options.keyAttack.isDown();
-        if (wantFire != lastTriggerSent) {
-            PacketDistributor.sendToServer(new SetTriggerPayload(wantFire));
-            lastTriggerSent = wantFire;
+                && isAttackPhysicallyDown(mc);
+
+        // 銃所持中はバニラの左クリック処理（採掘・近接攻撃・腕振り）を無効化
+        if (holdingGun && !guiOpen) {
+            suppressVanillaAttack(mc);
+        }
+
+        if (triggerDown != lastTriggerSent || heldChanged) {
+            PacketDistributor.sendToServer(new SetTriggerPayload(triggerDown));
+            lastTriggerSent = triggerDown;
         }
     }
 
-    /** 銃所持中は左クリック（攻撃）のバニラ処理を抑制（近接攻撃・ブロック破壊開始を止める）。 */
-    @SubscribeEvent
-    public static void onAttackInput(InputEvent.InteractionKeyMappingTriggered event) {
-        Minecraft mc = Minecraft.getInstance();
-        if (event.isAttack() && holdingGun(mc)) {
-            event.setCanceled(true);
+    /**
+     * バニラの左クリック処理を無効化する。キュー済みのクリックを消費して {@code startAttack}（単発の
+     * 攻撃・採掘開始）を呼ばせず、押下状態を false に落として {@code continueAttack}（毎tickの採掘＋腕振り）
+     * も止める。GLFW のボタンコールバックは押下/離しのエッジでしか発火しないため、一度 false にすれば
+     * 押しっぱなしでも再度 true には戻らない（発射は {@link #isAttackPhysicallyDown} で別途検出する）。
+     */
+    private static void suppressVanillaAttack(Minecraft mc) {
+        KeyMapping attack = mc.options.keyAttack;
+        while (attack.consumeClick()) {
+            // 溜まった単発クリックを捨てる
         }
-    }
-
-    /** 銃所持中は左クリック長押しでのブロック破壊（再開始）を抑制。 */
-    @SubscribeEvent
-    public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
-        if (event.getEntity().getMainHandItem().getItem() instanceof GunItem) {
-            event.setCanceled(true);
-        }
+        attack.setDown(false);
     }
 }

@@ -7,6 +7,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.r0319.cordite.Cordite;
+import net.r0319.cordite.item.gun.FireMode;
 
 /**
  * 銃の可変状態を保持する Data Component 群（docs/design/00-architecture.md 参照）。
@@ -26,13 +27,17 @@ public final class ModDataComponents {
                     .build());
 
     /**
-     * 現在の発射モード（{@code FireMode.ordinal()}）。未設定の場合は銃の既定モード扱い。
+     * 現在の発射モード。未設定の場合は銃の既定モード扱い。
      * クライアントHUD表示のため networkSynchronized。
+     *
+     * <p>永続化は enum の並び順に依存しない name ベース（{@link FireMode#CODEC}）。
+     * ordinal で保存すると将来 {@code FireMode} に値を追加・並べ替えた際、
+     * 既存セーブの銃が別モードに化けるため。</p>
      */
-    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> FIRE_MODE =
-            COMPONENTS.register("fire_mode", () -> DataComponentType.<Integer>builder()
-                    .persistent(Codec.INT)
-                    .networkSynchronized(ByteBufCodecs.VAR_INT)
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<FireMode>> FIRE_MODE =
+            COMPONENTS.register("fire_mode", () -> DataComponentType.<FireMode>builder()
+                    .persistent(FireMode.CODEC)
+                    .networkSynchronized(FireMode.STREAM_CODEC)
                     .build());
 
     /**

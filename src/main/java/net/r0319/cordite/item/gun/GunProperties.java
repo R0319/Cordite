@@ -10,7 +10,7 @@ import java.util.List;
  * 単発（セミオート）機ではトリガーを引ける現実的な連射上限（速射キャップ）として扱う。</p>
  *
  * @param baseDamage    基礎ダメージ
- * @param muzzleVelocity 弾速 blocks/秒（現状のヒットスキャンMVPでは未使用。飛翔体化で使用）
+ * @param muzzleVelocity 弾速 blocks/秒（{@code ProjectileManager} の軽量弾丸トラッカーで使用）
  * @param effectiveRange 有効射程 blocks
  * @param falloffStart   減衰開始距離 blocks
  * @param rpm            発射レート（実銃のサイクリックレート/速射上限、rounds/分）

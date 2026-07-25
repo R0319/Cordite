@@ -6,7 +6,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
@@ -31,31 +33,52 @@ public final class GunServerEvents {
         }
 
         GunFireManager.State state = GunFireManager.get(player);
+        ItemStack held = player.getMainHandItem();
 
-        completeReloadIfDue(player, state);
-        driveFiring(player, state);
+        handleHeldChange(state, held);
+        completeReloadIfDue(player, state, held);
+        driveFiring(player, state, held);
+
+        state.lastHeldStack = held;
     }
 
-    /** リロード完了（時間経過後の実際の装填）。 */
-    private static void completeReloadIfDue(Player player, GunFireManager.State state) {
+    /**
+     * メインハンドのスタックが変わった（持ち替え）ときの過渡状態リセット。
+     * リロードは銃ごとなので中断し、バースト残数も引き継がせない。
+     */
+    private static void handleHeldChange(GunFireManager.State state, ItemStack held) {
+        if (held == state.lastHeldStack) {
+            return; // 同一スタック（同じスロットを持ち続けている）
+        }
+        state.cancelReload();
+        state.burstRemaining = 0;
+        // 持ち替え直後にトリガー押しっぱなしで単発が暴発しないよう、押下済み扱いにする
+        state.firedThisPress = true;
+    }
+
+    /**
+     * リロード完了（時間経過後の実際の装填）。
+     * リロードを開始した銃を今も持っている場合のみ装填する（持ち替えによる不正装填を防ぐ）。
+     */
+    private static void completeReloadIfDue(Player player, GunFireManager.State state, ItemStack held) {
         if (state.reloadCompleteTick == Long.MIN_VALUE) {
             return;
         }
-        if (player.level().getGameTime() >= state.reloadCompleteTick) {
-            state.reloadCompleteTick = Long.MIN_VALUE;
+        if (player.level().getGameTime() < state.reloadCompleteTick) {
+            return;
+        }
+        ItemStack reloading = state.reloadingStack;
+        state.cancelReload();
 
-            ItemStack held = player.getMainHandItem();
-            if (held.getItem() instanceof GunItem gun) {
-                gun.completeReload(held);
-                player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                        SoundEvents.CROSSBOW_LOADING_END, SoundSource.PLAYERS, 1.0f, 1.0f);
-            }
+        if (held == reloading && held.getItem() instanceof GunItem gun) {
+            gun.completeReload(held);
+            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.CROSSBOW_LOADING_END, SoundSource.PLAYERS, 1.0f, 1.0f);
         }
     }
 
     /** トリガー押下状態と発射モードに応じてサーバー側で発射する。 */
-    private static void driveFiring(Player player, GunFireManager.State state) {
-        ItemStack held = player.getMainHandItem();
+    private static void driveFiring(Player player, GunFireManager.State state, ItemStack held) {
         if (!(held.getItem() instanceof GunItem gun)) {
             // 銃を持っていない: トリガー状態をリセット
             state.triggerHeld = false;
@@ -107,5 +130,27 @@ public final class GunServerEvents {
     @SubscribeEvent
     public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         GunFireManager.clear(event.getEntity());
+    }
+
+    /**
+     * 銃所持中はブロック破壊を禁止（サーバー権威）。クライアント側の左クリック抑制
+     * （{@link net.r0319.cordite.client.ClientInputHandler}）に加え、サーバーでも確実に止める。
+     */
+    @SubscribeEvent
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getPlayer().getMainHandItem().getItem() instanceof GunItem) {
+            event.setCanceled(true);
+        }
+    }
+
+    /**
+     * 銃所持中は近接攻撃（殴打）を禁止（サーバー権威）。クライアント側の左クリック抑制だけでは
+     * 改造クライアントの直接パケット送信を防げないため、サーバーでも止める。
+     */
+    @SubscribeEvent
+    public static void onAttackEntity(AttackEntityEvent event) {
+        if (event.getEntity().getMainHandItem().getItem() instanceof GunItem) {
+            event.setCanceled(true);
+        }
     }
 }

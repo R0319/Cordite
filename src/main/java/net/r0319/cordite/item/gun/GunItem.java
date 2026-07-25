@@ -3,10 +3,12 @@ package net.r0319.cordite.item.gun;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.InteractionHand;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.r0319.cordite.combat.GunFireManager;
 import net.r0319.cordite.combat.ProjectileManager;
 import net.r0319.cordite.registry.ModDataComponents;
@@ -35,6 +37,33 @@ public class GunItem extends Item {
         return props;
     }
 
+    /**
+     * 銃ではブロックを破壊・攻撃できない（サーバー権威）。クライアントの左クリック抑制
+     * （{@link net.r0319.cordite.client.ClientInputHandler}）と併せて、破壊予測・採掘進行を
+     * サーバー/クライアント双方で禁止する。実際の破壊除去は {@code BlockEvent.BreakEvent} でも止める
+     * （{@link net.r0319.cordite.event.GunServerEvents}）。
+     */
+    @Override
+    public boolean canAttackBlock(BlockState state, Level level, BlockPos pos, Player player) {
+        return false;
+    }
+
+    /**
+     * 「構え直し」アニメーション（一人称でアイテムが一度下がって戻る、雪玉/クロスボウ発射時と同じ動き）は
+     * 同じ銃を持ち続けている限り再生しない。バニラの既定実装は {@code !oldStack.equals(newStack)} で、
+     * {@code ItemStack.equals} はデータコンポーネントの中身まで比較するため、発射のたびに変化する
+     * {@link net.r0319.cordite.registry.ModDataComponents#MAGAZINE_AMMO}/{@code CHAMBERED} が
+     * 「別アイテムに変わった」と誤判定され、毎発リエクイップ演出が入ってしまう
+     * （耐久値変化で武器/道具が毎回リエクイップしないようにするのと同じ対策）。
+     */
+    @Override
+    public boolean shouldCauseReequipAnimation(ItemStack oldStack, ItemStack newStack, boolean slotChanged) {
+        if (slotChanged) {
+            return true; // ホットバー切り替え等は通常通り演出する
+        }
+        return oldStack.getItem() != newStack.getItem();
+    }
+
     // --- 状態アクセサ ---
 
     /** マガジン内の残弾（薬室を含まない）。 */
@@ -61,13 +90,11 @@ public class GunItem extends Item {
     }
 
     public FireMode getFireMode(ItemStack stack) {
-        Integer ordinal = stack.get(ModDataComponents.FIRE_MODE.get());
-        FireMode[] all = FireMode.values();
-        if (ordinal == null || ordinal < 0 || ordinal >= all.length) {
-            return props.defaultMode();
+        FireMode mode = stack.get(ModDataComponents.FIRE_MODE.get());
+        if (mode == null || !props.fireModes().contains(mode)) {
+            return props.defaultMode(); // 未設定、またはこの銃が対応しないモード
         }
-        FireMode mode = all[ordinal];
-        return props.fireModes().contains(mode) ? mode : props.defaultMode();
+        return mode;
     }
 
     // --- 発射（サーバーtickから呼ばれる。サーバー権威） ---
@@ -118,7 +145,8 @@ public class GunItem extends Item {
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.CROSSBOW_SHOOT, SoundSource.PLAYERS, 1.0f, 1.0f);
         ProjectileManager.fire(level, player, props);
-        player.swing(InteractionHand.MAIN_HAND);
+        // バニラの腕振り（player.swing）は使わない: 毎発「殴るモーション」で銃が上下して見えるため。
+        // 反動などの発射モーションは作者制作アニメで別途再生する。
         return true;
     }
 
@@ -127,7 +155,7 @@ public class GunItem extends Item {
     /** 発射モードを次へ循環する。 */
     public void cycleFireMode(Player player, ItemStack stack) {
         FireMode next = props.nextMode(getFireMode(stack));
-        stack.set(ModDataComponents.FIRE_MODE.get(), next.ordinal());
+        stack.set(ModDataComponents.FIRE_MODE.get(), next);
         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.LEVER_CLICK, SoundSource.PLAYERS, 0.7f, 1.4f);
     }
@@ -143,6 +171,7 @@ public class GunItem extends Item {
             return; // すでにリロード中
         }
         state.reloadCompleteTick = now + props.reloadTicks();
+        state.reloadingStack = stack; // この銃に紐づける（別の銃へ持ち替えたら中断される）
         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.CROSSBOW_LOADING_START, SoundSource.PLAYERS, 1.0f, 1.0f);
     }
