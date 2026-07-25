@@ -22,3 +22,6 @@ run
 
 # Claude Code local settings (per-machine, not shared)
 .claude/settings.local.json
+
+# ローカル環境専用メモ（絶対パス等、GitHubに上げない）
+CLAUDE.local.md
