@@ -59,7 +59,17 @@ public final class BedrockAnimationLoader {
         if (!boneJson.has(key)) {
             return new Keyframe[0];
         }
-        JsonObject track = boneJson.getAsJsonObject(key);
+        JsonElement element = boneJson.get(key);
+        if (element.isJsonArray()) {
+            // キーフレームではなく数値配列が直接書かれている場合は「アニメーション全体で一定のポーズ」
+            // （idleの静止ポーズ等）を意味する。時刻0の単一キーフレームとして扱えば、
+            // AnimationSamplerはどの時刻でもこの値を返す（frames.length==1の分岐）。
+            JsonArray staticArr = element.getAsJsonArray();
+            Vector3f staticValue = new Vector3f(
+                    staticArr.get(0).getAsFloat(), staticArr.get(1).getAsFloat(), staticArr.get(2).getAsFloat());
+            return new Keyframe[] {new Keyframe(0f, staticValue)};
+        }
+        JsonObject track = element.getAsJsonObject();
         List<Keyframe> keyframes = new ArrayList<>();
         for (String timeKey : track.keySet()) {
             JsonElement valueElement = track.get(timeKey);

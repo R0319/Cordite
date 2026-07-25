@@ -10,6 +10,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.r0319.cordite.Cordite;
+import net.r0319.cordite.client.anim.GunAnimationState;
 import net.r0319.cordite.item.gun.GunItem;
 import net.r0319.cordite.network.CycleFireModePayload;
 import net.r0319.cordite.network.ReloadPayload;
@@ -35,9 +36,35 @@ public final class ClientInputHandler {
     private static boolean lastTriggerSent = false;
     /** 前tickのメインハンドスタック（持ち替え検出用・同一性比較のみ）。 */
     private static ItemStack lastHeldStack = ItemStack.EMPTY;
+    /** リロードアニメーションの多重トリガー防止用（サーバーの実際のリロード完了tickとは別管理の予測値）。 */
+    private static long localReloadingUntilTick = Long.MIN_VALUE;
 
     private static boolean holdingGun(Minecraft mc) {
         return mc.player != null && mc.player.getMainHandItem().getItem() instanceof GunItem;
+    }
+
+    /**
+     * リロード要求を送る際、クライアント側であらかじめreload/reload_emptyアニメーションを
+     * 開始しておく（サーバー権威の実際のリロード成立を待たず、体感を優先したローカル予測）。
+     * サーバー側の{@code GunItem#startReload}と同じ条件（マガジン満タンでない・既にリロード中でない）を
+     * クライアントでも確認し、実際には受理されないリロードで無駄にアニメーションを再生しないようにする。
+     * サーバーがリクエストを拒否した場合でも、アニメーションが少し空回りするだけで実害はない。
+     */
+    private static void triggerReloadAnimationIfEligible(Minecraft mc, ItemStack held) {
+        if (!(held.getItem() instanceof GunItem gun) || mc.player == null) {
+            return;
+        }
+        long now = mc.player.level().getGameTime();
+        boolean magazineFull = gun.getMagazine(held) >= gun.getAmmoCapacity();
+        boolean alreadyReloading = now < localReloadingUntilTick;
+        if (magazineFull || alreadyReloading) {
+            return;
+        }
+        GunAnimationState.Action action = gun.isChambered(held)
+                ? GunAnimationState.Action.RELOAD
+                : GunAnimationState.Action.RELOAD_EMPTY;
+        GunAnimationState.play(action, now);
+        localReloadingUntilTick = now + gun.getProps().reloadTicks();
     }
 
     /**
@@ -60,6 +87,7 @@ public final class ClientInputHandler {
         if (mc.player == null || mc.getConnection() == null) {
             lastTriggerSent = false; // 未接続: 送信状態をリセット
             lastHeldStack = ItemStack.EMPTY;
+            localReloadingUntilTick = Long.MIN_VALUE;
             return;
         }
 
@@ -80,6 +108,7 @@ public final class ClientInputHandler {
         }
         while (ModKeyMappings.RELOAD.consumeClick()) {
             if (holdingGun && !guiOpen) {
+                triggerReloadAnimationIfEligible(mc, held);
                 PacketDistributor.sendToServer(ReloadPayload.INSTANCE);
             }
         }

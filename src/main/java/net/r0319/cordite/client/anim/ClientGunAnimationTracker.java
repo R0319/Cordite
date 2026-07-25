@@ -45,7 +45,7 @@ public final class ClientGunAnimationTracker {
         int total = gun.getTotalAmmo(held);
 
         if (!changedGun && lastTotalAmmo >= 0 && total < lastTotalAmmo) {
-            GunAnimationState.play(mc.level.getGameTime());
+            GunAnimationState.play(GunAnimationState.Action.FIRE, mc.level.getGameTime());
         }
 
         lastHeldStack = held;
