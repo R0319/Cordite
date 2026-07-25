@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "statusMessage": "必読ドキュメントを読み込み中...",
+            "command": "printf '# セッション開始: プロジェクト必読ドキュメント\\n\\nCLAUDE.md はハーネスが自動ロード済み。以下は技術設計 docs/design/00-architecture.md の全文（毎セッション自動注入）。実装前に必ず踏まえること。\\n\\n---\\n\\n'; cat docs/design/00-architecture.md 2>/dev/null || echo '(docs/design/00-architecture.md が見つかりません)'"
+          }
+        ]
+      }
+    ]
+  }
+}
