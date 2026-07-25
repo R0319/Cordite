@@ -21,7 +21,11 @@ import java.util.Map;
  *
  * <p>座標変換規則（GeckoLib実装で実証済みの規則をそのまま踏襲。docs/design/animation-system.md 参照）:</p>
  * <ul>
- *   <li>位置(pivot/origin): X座標のみ符号反転。1 Bedrock単位 = 1/16 ブロック。</li>
+ *   <li>位置(pivot/origin): X座標のみ符号反転。1 Bedrock単位 = 1/16 ブロック。
+ *       ここで出す座標は<b>「モデル原点を0とした相対座標」</b>であり、Javaアイテムモデル空間
+ *       （ブロックの角が原点）ではない。Bedrockはブロック中心をX/Zの0とする centered grid、
+ *       Javaはブロックの角が0なので、両者にはX/Zで8px(=0.5ブロック)のズレがある。この差分は
+ *       描画側（{@code GunItemRenderer} の基準点合わせ）で吸収する。</li>
  *   <li>回転: X回転・Y回転のみ符号反転、Z回転はそのまま。度→ラジアン変換。</li>
  *   <li>回転の適用順序: X→Y→Z（PoseStackへは mulPose を Z→Y→X の順で積む）。</li>
  *   <li>回転は必ず「先に位置をJava座標系へ変換してから」適用する（生のBedrock座標のまま
@@ -90,7 +94,9 @@ public final class BedrockGeometryLoader {
         GunBone actualRoot = baked.get("root");
         if (actualRoot == null) {
             LOGGER.warn("[Cordite] {}: 'root'ボーンが見つからないため、全トップレベルボーンをまとめて描画します", id);
-            actualRoot = new GunBone("__model_root__", new Vector3f(0, 0, 0), List.of(), roots);
+            actualRoot = new GunBone("__model_root__", new Vector3f(0, 0, 0), new Vector3f(0, 0, 0),
+                    List.of(), roots, null, null);
+            actualRoot.linkChildren();
         } else if (roots.size() > 1) {
             LOGGER.info("[Cordite] {}: 'root'以外のトップレベルボーン{}個は描画対象から除外しました（参考オブジェクトとみなす）",
                     id, roots.size() - 1);
@@ -105,12 +111,22 @@ public final class BedrockGeometryLoader {
         Vector3f pivotRaw = readVec3(boneJson, "pivot", 0, 0, 0);
 
         List<BakedCube> cubes = new ArrayList<>();
+        Vector3f boundsMin = null;
+        Vector3f boundsMax = null;
         if (boneJson.has("cubes")) {
             for (JsonElement ce : boneJson.getAsJsonArray("cubes")) {
-                BakedCube baked = bakeCube(ce.getAsJsonObject(), pivotRaw, tw, th);
+                JsonObject cubeJson = ce.getAsJsonObject();
+                BakedCube baked = bakeCube(cubeJson, pivotRaw, tw, th);
                 if (baked != null) {
                     cubes.add(baked);
                 }
+                // AABBはUV形式に関わらず全キューブから計算する。描画できないBox UVのキューブでも
+                // 「腕プレースホルダの箱」としてハンドアンカーの基準に使うため（GunBone#boundsMin）。
+                if (boundsMin == null) {
+                    boundsMin = new Vector3f(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY);
+                    boundsMax = new Vector3f(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY);
+                }
+                expandBounds(cubeJson, pivotRaw, boundsMin, boundsMax);
             }
         }
 
@@ -123,10 +139,28 @@ public final class BedrockGeometryLoader {
                 pivotRaw.x() - parentPivotRaw.x(),
                 pivotRaw.y() - parentPivotRaw.y(),
                 pivotRaw.z() - parentPivotRaw.z());
+        Vector3f modelOffset = mirrorAndScale(pivotRaw.x(), pivotRaw.y(), pivotRaw.z());
 
-        GunBone bone = new GunBone(name, localOffset, cubes, children);
+        GunBone bone = new GunBone(name, localOffset, modelOffset, cubes, children, boundsMin, boundsMax);
+        bone.linkChildren();
         outBaked.put(name, bone);
         return bone;
+    }
+
+    /** キューブ8隅をボーンローカルのJava座標系へ変換し、AABBを広げる。 */
+    private static void expandBounds(JsonObject cubeJson, Vector3f bonePivotRaw, Vector3f min, Vector3f max) {
+        Vector3f origin = readVec3(cubeJson, "origin", 0, 0, 0);
+        Vector3f size = readVec3(cubeJson, "size", 0, 0, 0);
+        Vector3f maxRaw = new Vector3f(origin).add(size);
+        Quaternionf rotQ = cubeRotationQuat(cubeJson);
+        Vector3f cubePivotJava = cubePivotJava(cubeJson, origin, size, bonePivotRaw);
+
+        for (int i = 0; i < 8; i++) {
+            Vector3f cornerRaw = corner(origin, maxRaw, i & 1, (i >> 1) & 1, (i >> 2) & 1);
+            BakedCube.Vertex v = toVertex(cornerRaw, cubePivotJava, rotQ, bonePivotRaw, 0f, 0f);
+            min.set(Math.min(min.x(), v.x()), Math.min(min.y(), v.y()), Math.min(min.z(), v.z()));
+            max.set(Math.max(max.x(), v.x()), Math.max(max.y(), v.y()), Math.max(max.z(), v.z()));
+        }
     }
 
     private static BakedCube bakeCube(JsonObject cubeJson, Vector3f bonePivotRaw, float tw, float th) {
@@ -142,21 +176,8 @@ public final class BedrockGeometryLoader {
         Vector3f size = readVec3(cubeJson, "size", 0, 0, 0);
         Vector3f max = new Vector3f(origin).add(size);
 
-        Vector3f cubePivot = cubeJson.has("pivot")
-                ? readVec3(cubeJson, "pivot", 0, 0, 0)
-                : new Vector3f(origin).add(size.x() / 2f, size.y() / 2f, size.z() / 2f);
-        Vector3f cubeRotation = readVec3(cubeJson, "rotation", 0, 0, 0);
-        boolean hasRotation = cubeRotation.lengthSquared() > 1.0e-8f;
-        // 回転はボーン/アニメーションと同じ規則（X・Y符号反転、Z反転なし）で、
-        // 先にJava座標系へ変換した点に対して適用する（クラス冒頭のコメント参照）。
-        Quaternionf rotQ = hasRotation
-                ? new Quaternionf()
-                        .rotateZ((float) Math.toRadians(cubeRotation.z()))
-                        .rotateY((float) Math.toRadians(-cubeRotation.y()))
-                        .rotateX((float) Math.toRadians(-cubeRotation.x()))
-                : null;
-        Vector3f cubePivotJava = mirrorAndScale(
-                cubePivot.x() - bonePivotRaw.x(), cubePivot.y() - bonePivotRaw.y(), cubePivot.z() - bonePivotRaw.z());
+        Quaternionf rotQ = cubeRotationQuat(cubeJson);
+        Vector3f cubePivotJava = cubePivotJava(cubeJson, origin, size, bonePivotRaw);
 
         List<BakedCube.Quad> quads = new ArrayList<>();
         addFace(quads, uv, "north", tw, th, bonePivotRaw, cubePivotJava, rotQ,
@@ -235,6 +256,31 @@ public final class BedrockGeometryLoader {
             local.add(cubePivotJava);
         }
         return new BakedCube.Vertex(local.x(), local.y(), local.z(), u, v);
+    }
+
+    /**
+     * キューブの静的回転（{@code rotation}）のクォータニオン。回転なしなら null。
+     * ボーン/アニメーションと同じ規則（X・Y符号反転、Z反転なし）で、
+     * 先にJava座標系へ変換した点に対して適用する（クラス冒頭のコメント参照）。
+     */
+    private static Quaternionf cubeRotationQuat(JsonObject cubeJson) {
+        Vector3f cubeRotation = readVec3(cubeJson, "rotation", 0, 0, 0);
+        if (cubeRotation.lengthSquared() <= 1.0e-8f) {
+            return null;
+        }
+        return new Quaternionf()
+                .rotateZ((float) Math.toRadians(cubeRotation.z()))
+                .rotateY((float) Math.toRadians(-cubeRotation.y()))
+                .rotateX((float) Math.toRadians(-cubeRotation.x()));
+    }
+
+    /** キューブ回転の中心を、ボーンpivot相対のJava座標系で返す（{@code pivot} 省略時はキューブ中心）。 */
+    private static Vector3f cubePivotJava(JsonObject cubeJson, Vector3f origin, Vector3f size, Vector3f bonePivotRaw) {
+        Vector3f cubePivot = cubeJson.has("pivot")
+                ? readVec3(cubeJson, "pivot", 0, 0, 0)
+                : new Vector3f(origin).add(size.x() / 2f, size.y() / 2f, size.z() / 2f);
+        return mirrorAndScale(
+                cubePivot.x() - bonePivotRaw.x(), cubePivot.y() - bonePivotRaw.y(), cubePivot.z() - bonePivotRaw.z());
     }
 
     private static Vector3f corner(Vector3f min, Vector3f max, int xSel, int ySel, int zSel) {
