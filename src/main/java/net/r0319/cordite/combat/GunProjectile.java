@@ -1,40 +1,45 @@
 package net.r0319.cordite.combat;
 
-import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.r0319.cordite.item.gun.GunProperties;
-import org.joml.Vector3f;
+import net.r0319.cordite.gunpack.GunDefinition;
 
 /**
  * 軽量な弾丸トラッカー（Entityを使わない）。サーバーtickごとに弾速ぶんだけ前進し、
  * 移動区間をレイキャストして命中判定する（docs/design/00-architecture.md の「軽量トラッカー」方式）。
+ * 命中/射程到達で {@link #isDead()} になる。
  *
- * <p>全弾に曳光弾トレイルを付けて弾道を可視化する。命中/射程到達で {@link #isDead()} になる。</p>
+ * <p><b>見た目は持たない</b>。曳光弾の表示は発射時に1発1パケットだけ配って
+ * クライアントが描く（{@link net.r0319.cordite.network.TracerPayload} /
+ * {@link net.r0319.cordite.client.render.TracerRenderer}）。以前はここから弾道上へ
+ * パーティクルを撒いていたが、1発あたり数十パケット飛ぶうえ表示もtick単位の点列にしかならなかった。</p>
  */
 public class GunProjectile {
-    /** 曳光弾の色（オレンジ）。 */
-    private static final Vector3f TRACER_COLOR = new Vector3f(1.0f, 0.55f, 0.15f);
-    private static final DustParticleOptions TRACER = new DustParticleOptions(TRACER_COLOR, 0.6f);
-    /** トレイル粒子の間隔（blocks）。 */
-    private static final double TRACER_STEP = 0.5;
     /** 当たり判定の膨らみ。 */
     private static final double HIT_INFLATE = 0.25;
     /** 安全のための最大生存tick。 */
     private static final int MAX_TICKS = 100;
+    /** 着弾時に飛び散るブロック破片の数と勢い。🟡仮（見た目の調整値）。 */
+    private static final int IMPACT_DEBRIS_COUNT = 8;
+    private static final double IMPACT_DEBRIS_SPEED = 0.08;
+    /** エンティティ命中時の粒子数。🟡仮。 */
+    private static final int IMPACT_HIT_COUNT = 6;
 
     private final ServerLevel level;
     private final Player owner;
-    private final GunProperties props;
+    private final GunDefinition props;
     private final Vec3 origin;
     private final Vec3 velocity; // blocks/tick
     private Vec3 pos;
@@ -42,7 +47,7 @@ public class GunProjectile {
     private int age;
     private boolean dead;
 
-    public GunProjectile(ServerLevel level, Player owner, GunProperties props, Vec3 origin, Vec3 direction) {
+    public GunProjectile(ServerLevel level, Player owner, GunDefinition props, Vec3 origin, Vec3 direction) {
         this.level = level;
         this.owner = owner;
         this.props = props;
@@ -75,19 +80,17 @@ public class GunProjectile {
                 e -> e != owner && e.isAlive() && e.isPickable() && !e.isSpectator());
 
         if (hit != null) {
-            Vec3 hp = hit.getLocation();
-            drawTracer(start, hp);
-            applyDamage(hit.getEntity(), hp);
+            applyDamage(hit.getEntity(), hit.getLocation());
+            spawnEntityImpact(hit.getLocation());
             dead = true;
             return;
         }
         if (block.getType() != HitResult.Type.MISS) {
-            drawTracer(start, end);
+            spawnBlockImpact(block);
             dead = true;
             return;
         }
 
-        drawTracer(start, next);
         pos = next;
         traveled += velocity.length();
         age++;
@@ -131,15 +134,27 @@ public class GunProjectile {
         return (float) (props.baseDamage() * distFactor * partFactor);
     }
 
-    private void drawTracer(Vec3 from, Vec3 to) {
-        double dist = from.distanceTo(to);
-        if (dist < 1.0e-4) {
-            return;
+    /**
+     * ブロックへの着弾エフェクト（当たった場所の破片＋煙）。
+     *
+     * <p>弾道のトレイルと違い<b>着弾の1点で1回だけ</b>撒くので、サーバーからの{@code sendParticles}で
+     * 十分軽い（弾道全体に撒いていた頃の「1発で数十パケット」にはならない）。周囲のプレイヤーにも
+     * 見えるため、着弾点はここで出すのが素直（曳光弾のように専用パケットを作る必要がない）。</p>
+     */
+    private void spawnBlockImpact(BlockHitResult hit) {
+        Vec3 point = hit.getLocation();
+        BlockState state = level.getBlockState(hit.getBlockPos());
+        if (!state.isAir()) {
+            // 当たった面から少し手前に出さないと、破片がブロックの内側に埋まって見えない
+            Vec3 offset = point.add(Vec3.atLowerCornerOf(hit.getDirection().getNormal()).scale(0.1));
+            level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, state),
+                    offset.x, offset.y, offset.z, IMPACT_DEBRIS_COUNT, 0.0, 0.0, 0.0, IMPACT_DEBRIS_SPEED);
+            level.sendParticles(ParticleTypes.SMOKE, offset.x, offset.y, offset.z, 1, 0.0, 0.0, 0.0, 0.0);
         }
-        Vec3 dir = to.subtract(from).scale(1.0 / dist);
-        for (double d = 0; d < dist; d += TRACER_STEP) {
-            Vec3 p = from.add(dir.scale(d));
-            level.sendParticles(TRACER, p.x, p.y, p.z, 1, 0, 0, 0, 0);
-        }
+    }
+
+    /** エンティティへの着弾エフェクト（バニラのダメージ表示に加える小さな血飛沫代わり）。 */
+    private void spawnEntityImpact(Vec3 point) {
+        level.sendParticles(ParticleTypes.CRIT, point.x, point.y, point.z, IMPACT_HIT_COUNT, 0.1, 0.1, 0.1, 0.0);
     }
 }

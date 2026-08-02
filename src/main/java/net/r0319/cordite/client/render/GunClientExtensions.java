@@ -47,6 +47,6 @@ public final class GunClientExtensions {
 
     @SubscribeEvent
     public static void onRegisterClientExtensions(RegisterClientExtensionsEvent event) {
-        event.registerItem(EXTENSIONS, ModItems.GLOCK.get(), ModItems.AK47.get(), ModItems.M4A1.get());
+        event.registerItem(EXTENSIONS, ModItems.GUN.get());
     }
 }

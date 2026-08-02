@@ -1,0 +1,18 @@
+{
+  "name": "M4A1",
+  "base_damage": 6.0,
+  "muzzle_velocity": 170.0,
+  "effective_range": 60.0,
+  "falloff_start": 40.0,
+  "rpm": 800,
+  "reload_seconds": 2.3,
+  "mag_size": 30,
+  "pellet_count": 1,
+  "recoil_pitch": 1.3,
+  "recoil_yaw": 0.45,
+  "hip_spread_deg": 2.5,
+  "fire_modes": ["single", "full_auto", "burst"],
+  "bolt_type": "closed",
+  "hold_open_on_empty": true,
+  "fire_sound": "cordite:pistol_fire"
+}

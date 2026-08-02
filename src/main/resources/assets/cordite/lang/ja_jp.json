@@ -1,14 +1,22 @@
 {
   "itemGroup.cordite": "Cordite",
-  "item.cordite.glock": "グロック",
-  "item.cordite.ak47": "AK-47",
-  "item.cordite.m4a1": "M4A1",
+  "item.cordite.gun": "銃",
+  "commands.cordite.give.unknown_gun": "未知のCordite銃です: %s",
+  "commands.cordite.give.success.single": "%s 個の %s を %s に与えました",
+  "commands.cordite.give.success.multiple": "%s 個の %s を %s 人に与えました",
 
   "cordite.firemode.single": "単発",
   "cordite.firemode.full_auto": "フルオート",
   "cordite.firemode.burst": "バースト",
 
+  "hud.cordite.empty": "弾切れ  [%s] でリロード",
+
+  "subtitles.cordite.gun.fire": "銃声",
+  "subtitles.cordite.gun.mag_out": "マガジンを抜く音",
+  "subtitles.cordite.gun.mag_in": "マガジンを挿す音",
+
   "key.category.cordite": "Cordite",
   "key.cordite.cycle_fire_mode": "発射モード切替",
-  "key.cordite.reload": "リロード"
+  "key.cordite.reload": "リロード",
+  "key.cordite.inspect": "武器を見る"
 }

@@ -1,7 +1,5 @@
 package net.r0319.cordite.event;
 
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -71,9 +69,8 @@ public final class GunServerEvents {
         state.cancelReload();
 
         if (held == reloading && held.getItem() instanceof GunItem gun) {
-            gun.completeReload(held);
-            player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.CROSSBOW_LOADING_END, SoundSource.PLAYERS, 1.0f, 1.0f);
+            gun.completeReload(held, player.level());
+            // 装填音はアニメーションの sound_effects 側で鳴らす（GunItem#startReload のコメント参照）
         }
     }
 
@@ -84,14 +81,16 @@ public final class GunServerEvents {
             state.triggerHeld = false;
             state.prevTriggerHeld = false;
             state.burstRemaining = 0;
+            state.dryFiredThisPress = false;
             return;
         }
 
         boolean pressEdge = state.triggerHeld && !state.prevTriggerHeld;
-        FireMode mode = gun.getFireMode(held);
+        FireMode mode = gun.getFireMode(held, player.level());
 
         if (pressEdge) {
             state.firedThisPress = false;
+            state.dryFiredThisPress = false; // 引き直しで空撃ち音を1回だけ鳴らし直す
             if (mode == FireMode.BURST) {
                 state.burstRemaining = FireMode.BURST_COUNT;
             }

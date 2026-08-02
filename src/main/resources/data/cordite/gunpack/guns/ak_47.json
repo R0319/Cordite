@@ -1,0 +1,18 @@
+{
+  "name": "AK-47",
+  "base_damage": 7.0,
+  "muzzle_velocity": 160.0,
+  "effective_range": 60.0,
+  "falloff_start": 40.0,
+  "rpm": 600,
+  "reload_seconds": 2.5,
+  "mag_size": 30,
+  "pellet_count": 1,
+  "recoil_pitch": 1.8,
+  "recoil_yaw": 0.6,
+  "hip_spread_deg": 3.0,
+  "fire_modes": ["single", "full_auto"],
+  "bolt_type": "closed",
+  "hold_open_on_empty": false,
+  "fire_sound": "cordite:pistol_fire"
+}

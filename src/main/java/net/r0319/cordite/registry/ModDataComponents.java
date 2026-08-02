@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.r0319.cordite.Cordite;
@@ -11,7 +12,7 @@ import net.r0319.cordite.item.gun.FireMode;
 
 /**
  * 銃の可変状態を保持する Data Component 群（docs/design/00-architecture.md 参照）。
- * 銃ID・基礎性能などの不変値はここには入れない（{@code GunProperties} 側で持つ）。
+ * 銃IDは {@link #GUN_ID} に保持し、基礎性能などの不変値は gunpack の定義側で持つ。
  */
 public final class ModDataComponents {
     private ModDataComponents() {}
@@ -19,7 +20,14 @@ public final class ModDataComponents {
     public static final DeferredRegister<DataComponentType<?>> COMPONENTS =
             DeferredRegister.create(Registries.DATA_COMPONENT_TYPE, Cordite.MODID);
 
-    /** 現在のマガジン残弾。未設定の場合は満タン扱い（{@code GunProperties.magSize}）。 */
+    /** このスタックが参照する gunpack 定義のID。 */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<ResourceLocation>> GUN_ID =
+            COMPONENTS.register("gun_id", () -> DataComponentType.<ResourceLocation>builder()
+                    .persistent(ResourceLocation.CODEC)
+                    .networkSynchronized(ResourceLocation.STREAM_CODEC)
+                    .build());
+
+    /** 現在のマガジン残弾。未設定の場合は gunpack 定義上の満タン扱い。 */
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> MAGAZINE_AMMO =
             COMPONENTS.register("magazine_ammo", () -> DataComponentType.<Integer>builder()
                     .persistent(Codec.INT)

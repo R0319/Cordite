@@ -1,14 +1,22 @@
 {
   "itemGroup.cordite": "Cordite",
-  "item.cordite.glock": "Glock",
-  "item.cordite.ak47": "AK-47",
-  "item.cordite.m4a1": "M4A1",
+  "item.cordite.gun": "Gun",
+  "commands.cordite.give.unknown_gun": "Unknown Cordite gun: %s",
+  "commands.cordite.give.success.single": "Gave %s × %s to %s",
+  "commands.cordite.give.success.multiple": "Gave %s × %s to %s players",
 
   "cordite.firemode.single": "SINGLE",
   "cordite.firemode.full_auto": "AUTO",
   "cordite.firemode.burst": "BURST",
 
+  "hud.cordite.empty": "EMPTY  Press [%s] to Reload",
+
+  "subtitles.cordite.gun.fire": "Gun fires",
+  "subtitles.cordite.gun.mag_out": "Magazine removed",
+  "subtitles.cordite.gun.mag_in": "Magazine inserted",
+
   "key.category.cordite": "Cordite",
   "key.cordite.cycle_fire_mode": "Cycle Fire Mode",
-  "key.cordite.reload": "Reload"
+  "key.cordite.reload": "Reload",
+  "key.cordite.inspect": "Inspect Weapon"
 }

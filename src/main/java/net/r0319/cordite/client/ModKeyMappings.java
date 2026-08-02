@@ -23,9 +23,14 @@ public final class ModKeyMappings {
     public static final KeyMapping RELOAD =
             new KeyMapping("key.cordite.reload", GLFW.GLFW_KEY_R, CATEGORY);
 
+    /** 点検（既定: N）。銃を眺めるだけでゲームプレイには影響しない。 */
+    public static final KeyMapping INSPECT =
+            new KeyMapping("key.cordite.inspect", GLFW.GLFW_KEY_N, CATEGORY);
+
     @SubscribeEvent
     public static void register(RegisterKeyMappingsEvent event) {
         event.register(CYCLE_FIRE_MODE);
         event.register(RELOAD);
+        event.register(INSPECT);
     }
 }

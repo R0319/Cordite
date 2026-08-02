@@ -1,0 +1,41 @@
+{
+    "pistol_fire": {
+        "category": "player",
+        "subtitle": "subtitles.cordite.gun.fire",
+        "sounds": [
+            {
+                "name": "cordite:gun/pistol_fire",
+                "stream": false
+            }
+        ]
+    },
+    "smg_magazine_eject": {
+        "category": "player",
+        "subtitle": "subtitles.cordite.gun.mag_out",
+        "sounds": [
+            {
+                "name": "cordite:gun/smg_magazine_eject",
+                "stream": false
+            }
+        ]
+    },
+    "smg_magazine_insert": {
+        "category": "player",
+        "subtitle": "subtitles.cordite.gun.mag_in",
+        "sounds": [
+            {
+                "name": "cordite:gun/smg_magazine_insert",
+                "stream": false
+            }
+        ]
+    },
+    "sniper_ready": {
+        "category": "player",
+        "sounds": [
+            {
+                "name": "cordite:gun/sniper_ready",
+                "stream": false
+            }
+        ]
+    }
+}

@@ -9,6 +9,7 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.r0319.cordite.registry.ModCreativeTabs;
 import net.r0319.cordite.registry.ModDataComponents;
 import net.r0319.cordite.registry.ModItems;
+import net.r0319.cordite.registry.ModSounds;
 import org.slf4j.Logger;
 
 /**
@@ -27,6 +28,7 @@ public class Cordite {
         ModDataComponents.COMPONENTS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
         ModCreativeTabs.TABS.register(modEventBus);
+        ModSounds.SOUNDS.register(modEventBus);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }

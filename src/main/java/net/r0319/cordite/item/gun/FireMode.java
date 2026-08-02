@@ -8,7 +8,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.util.StringRepresentable;
 
 /**
- * 発射モード。実銃準拠でどの銃がどのモードを持つかは {@link GunProperties#fireModes()} で決まる。
+ * 発射モード。実銃準拠でどの銃がどのモードを持つかは gunpack 定義の {@code fireModes} で決まる。
  *
  * <ul>
  *   <li>{@link #SINGLE} — 単発（セミオート）。トリガーごとに1発。押しっぱなしでは連射しない。</li>

@@ -1,5 +1,8 @@
 package net.r0319.cordite.item.gun;
 
+import com.mojang.serialization.Codec;
+import net.minecraft.util.StringRepresentable;
+
 /**
  * ボルト方式。薬室（チャンバー）内弾薬の扱いが変わる。
  *
@@ -10,7 +13,21 @@ package net.r0319.cordite.item.gun;
  *       薬室待機はなく、満タンはマガジン容量ちょうど。</li>
  * </ul>
  */
-public enum BoltType {
-    CLOSED,
-    OPEN
+public enum BoltType implements StringRepresentable {
+    CLOSED("closed"),
+    OPEN("open");
+
+    /** 永続化用（enum の並び順に依存しない name ベース）。 */
+    public static final Codec<BoltType> CODEC = StringRepresentable.fromEnum(BoltType::values);
+
+    private final String serializedName;
+
+    BoltType(String serializedName) {
+        this.serializedName = serializedName;
+    }
+
+    @Override
+    public String getSerializedName() {
+        return serializedName;
+    }
 }

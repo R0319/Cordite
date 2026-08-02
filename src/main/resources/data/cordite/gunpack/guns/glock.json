@@ -1,0 +1,18 @@
+{
+  "name": "Glock",
+  "base_damage": 5.0,
+  "muzzle_velocity": 120.0,
+  "effective_range": 30.0,
+  "falloff_start": 20.0,
+  "rpm": 400,
+  "reload_seconds": 1.8,
+  "mag_size": 17,
+  "pellet_count": 1,
+  "recoil_pitch": 1.1,
+  "recoil_yaw": 0.35,
+  "hip_spread_deg": 2.0,
+  "fire_modes": ["single"],
+  "bolt_type": "closed",
+  "hold_open_on_empty": true,
+  "fire_sound": "cordite:pistol_fire"
+}

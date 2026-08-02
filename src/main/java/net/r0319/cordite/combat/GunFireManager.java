@@ -48,6 +48,17 @@ public final class GunFireManager {
         public boolean prevTriggerHeld = false;
         /** 現在の押下で単発を撃ったか（SINGLEの二重発射防止）。 */
         public boolean firedThisPress = false;
+        /**
+         * 現在の押下で空撃ち音を鳴らしたか。実銃はトリガーを引き切った1回しか撃発機構が動かないため、
+         * フルオート/バーストで引きっぱなしにしても空撃ち音を連打しない。
+         */
+        public boolean dryFiredThisPress = false;
+
+        /**
+         * ADS（サイトを覗いている）か。クライアントから同期される（{@link net.r0319.cordite.network.SetAdsPayload}）。
+         * 腰だめ時に弾をばらつかせる判定に使う（拡散量の算出はサーバー側で行う）。
+         */
+        public boolean aiming = false;
     }
 
     private static final Map<UUID, State> STATES = new ConcurrentHashMap<>();

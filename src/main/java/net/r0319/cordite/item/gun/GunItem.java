@@ -1,17 +1,26 @@
 package net.r0319.cordite.item.gun;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.r0319.cordite.combat.GunFireManager;
 import net.r0319.cordite.combat.ProjectileManager;
+import net.r0319.cordite.gunpack.GunDefinition;
+import net.r0319.cordite.gunpack.GunDefinitions;
+import net.r0319.cordite.network.GunFiredPayload;
 import net.r0319.cordite.registry.ModDataComponents;
+
+import java.util.Objects;
 
 /**
  * 銃アイテム。発射はバニラの「アイテム使用」状態を使わず、独自の射撃システムで駆動する
@@ -26,15 +35,39 @@ import net.r0319.cordite.registry.ModDataComponents;
  * （＝ホットバーにクールタイムバーが出ない）。</p>
  */
 public class GunItem extends Item {
-    private final GunProperties props;
-
-    public GunItem(GunProperties props, Properties properties) {
+    public GunItem(Properties properties) {
         super(properties.stacksTo(1));
-        this.props = props;
     }
 
-    public GunProperties getProps() {
-        return props;
+    /** スタックに設定された gunpack 定義ID。素の銃など未設定時は null。 */
+    public static ResourceLocation gunId(ItemStack stack) {
+        return stack == null ? null : stack.get(ModDataComponents.GUN_ID.get());
+    }
+
+    /** 論理サイドに対応する gunpack 定義。ワールド未確定時は安全側で null を返す。 */
+    public static GunDefinition definitionOf(ItemStack stack, Level level) {
+        ResourceLocation id = gunId(stack);
+        if (id == null || level == null) {
+            return null;
+        }
+        return level.isClientSide ? GunDefinitions.client(id) : GunDefinitions.server(id);
+    }
+
+    /** クリエイティブタブなどで使う、指定された gunpack 定義を参照する銃スタックを作る。 */
+    public static ItemStack createStack(ResourceLocation gunId) {
+        ItemStack stack = new ItemStack(net.r0319.cordite.registry.ModItems.GUN.get());
+        stack.set(ModDataComponents.GUN_ID.get(), gunId);
+        return stack;
+    }
+
+    @Override
+    public Component getName(ItemStack stack) {
+        ResourceLocation id = gunId(stack);
+        GunDefinition definition = id == null ? null : GunDefinitions.client(id);
+        if (definition == null) {
+            return Component.translatable("item.cordite.gun");
+        }
+        return definition.name().orElseGet(() -> Component.translatable("item." + id.getNamespace() + "." + id.getPath()));
     }
 
     /**
@@ -61,38 +94,45 @@ public class GunItem extends Item {
         if (slotChanged) {
             return true; // ホットバー切り替え等は通常通り演出する
         }
-        return oldStack.getItem() != newStack.getItem();
+        return !Objects.equals(gunId(oldStack), gunId(newStack));
     }
 
     // --- 状態アクセサ ---
 
     /** マガジン内の残弾（薬室を含まない）。 */
-    public int getMagazine(ItemStack stack) {
-        return stack.getOrDefault(ModDataComponents.MAGAZINE_AMMO.get(), props.magSize());
+    public int getMagazine(ItemStack stack, Level level) {
+        GunDefinition definition = definitionOf(stack, level);
+        return definition == null ? 0 : stack.getOrDefault(ModDataComponents.MAGAZINE_AMMO.get(), definition.magSize());
     }
 
     /** 薬室に弾があるか。オープンボルトは常に false。 */
-    public boolean isChambered(ItemStack stack) {
-        if (props.boltType() == BoltType.OPEN) {
+    public boolean isChambered(ItemStack stack, Level level) {
+        GunDefinition definition = definitionOf(stack, level);
+        if (definition == null || definition.boltType() == BoltType.OPEN) {
             return false;
         }
         return stack.getOrDefault(ModDataComponents.CHAMBERED.get(), true);
     }
 
     /** 合計装弾数（マガジン＋薬室）。 */
-    public int getTotalAmmo(ItemStack stack) {
-        return getMagazine(stack) + (isChambered(stack) ? 1 : 0);
+    public int getTotalAmmo(ItemStack stack, Level level) {
+        return getMagazine(stack, level) + (isChambered(stack, level) ? 1 : 0);
     }
 
     /** 表示用の最大弾薬数（弾倉容量。薬室ぶんは含めない）。 */
-    public int getAmmoCapacity() {
-        return props.magSize();
+    public int getAmmoCapacity(ItemStack stack, Level level) {
+        GunDefinition definition = definitionOf(stack, level);
+        return definition == null ? 0 : definition.magSize();
     }
 
-    public FireMode getFireMode(ItemStack stack) {
+    public FireMode getFireMode(ItemStack stack, Level level) {
+        GunDefinition definition = definitionOf(stack, level);
+        if (definition == null) {
+            return FireMode.SINGLE;
+        }
         FireMode mode = stack.get(ModDataComponents.FIRE_MODE.get());
-        if (mode == null || !props.fireModes().contains(mode)) {
-            return props.defaultMode(); // 未設定、またはこの銃が対応しないモード
+        if (mode == null || !definition.fireModes().contains(mode)) {
+            return definition.defaultMode(); // 未設定、またはこの銃が対応しないモード
         }
         return mode;
     }
@@ -102,6 +142,10 @@ public class GunItem extends Item {
     /** レート／リロード／残弾を検証して1発撃つ。撃てたら true。 */
     public boolean tryFire(Player player, ItemStack stack, GunFireManager.State state) {
         if (!(player.level() instanceof ServerLevel level)) {
+            return false;
+        }
+        GunDefinition props = definitionOf(stack, level);
+        if (props == null) {
             return false;
         }
         long now = level.getGameTime();
@@ -116,14 +160,21 @@ public class GunItem extends Item {
         }
 
         boolean closed = props.boltType() == BoltType.CLOSED;
-        int mag = getMagazine(stack);
-        boolean chamber = isChambered(stack);
+        int mag = getMagazine(stack, level);
+        boolean chamber = isChambered(stack, level);
         boolean hasRound = closed ? chamber : mag > 0;
 
         if (!hasRound) {
-            // 空撃ち
-            level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    SoundEvents.DISPENSER_FAIL, SoundSource.PLAYERS, 0.6f, 1.2f);
+            // 空撃ち。ホールドオープンする銃（Glock/M4A1等）は撃ち切った時点でスライド／ボルトが
+            // 後退位置で保持され撃発機構が働かないため、実銃同様まったく音がしない。
+            // 音が出る銃でも撃発は1トリガーにつき1回なので、押しっぱなしでは連打しない。
+            if (props.holdOpenOnEmpty()) {
+                state.dryFiredThisPress = true; // 無音でも「この押下は処理済み」として扱う
+            } else if (!state.dryFiredThisPress) {
+                level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.DISPENSER_FAIL, SoundSource.PLAYERS, 0.6f, 1.2f);
+                state.dryFiredThisPress = true;
+            }
             state.lastShotTick = now;
             return false;
         }
@@ -142,11 +193,18 @@ public class GunItem extends Item {
         }
         state.lastShotTick = now;
 
+        // 発射音は周囲にも聞こえる必要があるためサーバーから配信する（第1引数nullで本人も含む全員へ）。
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.CROSSBOW_SHOOT, SoundSource.PLAYERS, 1.0f, 1.0f);
-        ProjectileManager.fire(level, player, props);
+                props.fireSound(), SoundSource.PLAYERS, 1.0f, 1.0f);
+        ProjectileManager.fire(level, player, props, state.aiming);
         // バニラの腕振り（player.swing）は使わない: 毎発「殴るモーション」で銃が上下して見えるため。
-        // 反動などの発射モーションは作者制作アニメで別途再生する。
+        // 反動などの発射モーションは作者制作アニメで再生する。その開始トリガーを本人へ送る
+        // （発射音と同じtickなので、反動アニメが銃声と揃う。GunFiredPayload のコメント参照）。
+        // 撃ち切り判定はサーバー側でしか正しく取れない（クライアントの残弾同期はこのパケットより遅れる）
+        if (player instanceof ServerPlayer serverPlayer) {
+            boolean emptyAfterShot = props.holdOpenOnEmpty() && getTotalAmmo(stack, level) <= 0;
+            PacketDistributor.sendToPlayer(serverPlayer, new GunFiredPayload(emptyAfterShot));
+        }
         return true;
     }
 
@@ -154,7 +212,11 @@ public class GunItem extends Item {
 
     /** 発射モードを次へ循環する。 */
     public void cycleFireMode(Player player, ItemStack stack) {
-        FireMode next = props.nextMode(getFireMode(stack));
+        GunDefinition props = definitionOf(stack, player.level());
+        if (props == null) {
+            return;
+        }
+        FireMode next = props.nextMode(getFireMode(stack, player.level()));
         stack.set(ModDataComponents.FIRE_MODE.get(), next);
         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.LEVER_CLICK, SoundSource.PLAYERS, 0.7f, 1.4f);
@@ -162,7 +224,8 @@ public class GunItem extends Item {
 
     /** リロードを開始する（完了は {@link net.r0319.cordite.event.GunServerEvents} が処理）。 */
     public void startReload(Player player, ItemStack stack) {
-        if (getMagazine(stack) >= props.magSize()) {
+        GunDefinition props = definitionOf(stack, player.level());
+        if (props == null || getMagazine(stack, player.level()) >= props.magSize()) {
             return; // マガジンが満タンなら不要
         }
         GunFireManager.State state = GunFireManager.get(player);
@@ -172,21 +235,26 @@ public class GunItem extends Item {
         }
         state.reloadCompleteTick = now + props.reloadTicks();
         state.reloadingStack = stack; // この銃に紐づける（別の銃へ持ち替えたら中断される）
-        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.CROSSBOW_LOADING_START, SoundSource.PLAYERS, 1.0f, 1.0f);
+        // リロード中のメカ音（マガジン脱着）はここでは鳴らさない。開始/完了の2点固定ではモーションと
+        // タイミングが合わない（リロード時間はアニメーション長と別の🟡仮バランス値で、再生速度が伸縮するため）。
+        // アニメーションの sound_effects 側で作者がタイミングを置く（GunAnimationSoundPlayer）。
     }
 
     /**
      * リロード完了時の装填。クローズドボルトは薬室に弾を残していれば「マガジン容量＋薬室」、
      * 撃ち切っていればボルトリリースで薬室に1発送るため合計はマガジン容量ちょうどになる。
      */
-    public void completeReload(ItemStack stack) {
+    public void completeReload(ItemStack stack, Level level) {
+        GunDefinition props = definitionOf(stack, level);
+        if (props == null) {
+            return;
+        }
         int magSize = props.magSize();
         if (props.boltType() == BoltType.OPEN) {
             stack.set(ModDataComponents.MAGAZINE_AMMO.get(), magSize);
             return;
         }
-        boolean chamber = isChambered(stack);
+        boolean chamber = isChambered(stack, level);
         if (chamber) {
             // タクティカルリロード: 薬室の1発は温存 → 合計 magSize + 1
             stack.set(ModDataComponents.MAGAZINE_AMMO.get(), magSize);
