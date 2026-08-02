@@ -32,7 +32,75 @@ Minecraft **NeoForge 1.21.1** の銃PvP Mod。パッケージ: `net.r0319.cordit
   - → Claudeが担当するのは「それらを読み込む/再生する側のコード」と「調整しやすい定数として切り出すところ」まで。
   - **Claudeはゲーム画面を直接確認できないため、見た目に関わる数値をあてずっぽうで決め打ち・繰り返し調整することはしない。** 実機（`runClient`）で見た目を確認しながらの数値決定・チューニングは作者が行う。Claude側で明らかにおかしい値（画面外に出る等の構造的ミス）に気付いた場合は指摘・修正してよいが、見た目の良し悪しの調整は無理に自分で完結させようとせず、作者に委ねる。
 - ローカル環境固有の情報（モデル作業フォルダの絶対パス等、GitHubに上げたくないもの）は `CLAUDE.local.md`（git管理外、`.gitignore`済み）を参照。無ければ作者に確認する。
+- **アセットの取り込みは自動化済み**（`syncGunAssets` Gradleタスク＋`GunModelCache`の自動検出）。作者が作業フォルダで保存して `runClient` すれば反映されるので、**モデル/アニメーション/テクスチャの追加・更新でClaudeがコピーや登録を行う必要はない** → [docs/design/animation-system.md](docs/design/animation-system.md#作業フォルダからの自動同期syncgunassets)
 - 実装前に既存コードを確認し、サーバー権威（ダメージ判定はサーバー側で検証）を守る。
+- ユーザーが実装指示を出している案を一度他に良い改善案がないか思案してから実装に移ること。
+
+## 役割分担: コーディングは Codex に任せる
+
+**このプロジェクトでは実装（コーディング）を Codex CLI に委譲する。**
+
+| 担当 | 範囲 |
+|-----|------|
+| **Claude** | 仕様書・設計書（`docs/`）の作成、調査、エラー/クラッシュ解析、レビュー、ビルド実行、差分確認 |
+| **Codex** | 設計書に沿ったコードの実装（Java・リソースファイル） |
+| **作者** | 3Dモデル/テクスチャ/アニメーション制作、見た目の数値調整、実機確認 |
+
+Codex 向けのプロジェクト規約は **[AGENTS.md](AGENTS.md)**（Codex が自動で読む）。日本語で書く・
+サーバー権威・アセット非改変・コミット禁止などを明記してある。**内容を変えたら AGENTS.md 側も更新すること。**
+
+### 手順
+
+1. **Claude が設計書を書く** → `docs/design/<feature>.md`。実装判断が必要な点は設計書側で決着させる。
+2. **Claude が作業指示書を書く** → リポジトリ直下の `codex-task.md`（`.gitignore` 済みの使い捨て）。
+   - 作業範囲を明示的に区切る（「Step 1〜6 のみ」「このファイルには触るな」）
+   - 参照すべき既存ファイル・踏襲すべき書式を指定する
+   - 「最終メッセージに、変更ファイル一覧と確信の持てなかった箇所を日本語で書け」と指示する
+3. **Codex を呼ぶ**（下記）。プロンプトは短く、`codex-task.md` を読ませる形にする＝トークン節約。
+4. **Claude が `git diff` で差分確認 → `gradlew build` → エラーがあれば解析し、修正指示を `codex-task.md` に書いて 3 へ戻る。**
+
+### Codex の呼び出し方
+
+**MCP 経由（確立済み・これを使う）**: `.mcp.json` に登録済み
+（`claude mcp add --transport stdio --scope project codex -- codex mcp-server`）。
+MCP サーバーはセッション開始時に読み込まれるので、登録を変えたら Claude Code の再起動が必要。
+
+Claude からは `mcp__codex__codex` ツールを次のパラメータで呼ぶ:
+
+| パラメータ | 値 |
+|-----------|---|
+| `prompt` | `codex-task.md を読み、その指示に従って実装してください。` |
+| `cwd` | リポジトリのルート |
+| `sandbox` | **`danger-full-access`**（下記の理由により必須） |
+| `approval-policy` | `never` |
+
+**⚠ Windows 固有の確定事項**: この環境では **Codex のサンドボックスが一切起動できない**
+（`CreateProcessAsUserW failed` / `Windows error 5`）。`~/.codex/config.toml` の
+`[windows] sandbox` が対話ユーザーのトークンを要求するためで、`elevated` / `unelevated` の両方、
+かつ `codex exec` 直叩き・MCP 経由の**どちらでも失敗する**（検証済み）。
+`windows.sandbox` に `none` は存在しない。したがって **`danger-full-access` が唯一動く設定**。
+
+サンドボックス無しで動く以上、歯止めは以下で担保する:
+- `AGENTS.md` — コミット禁止・アセット非改変・見た目の数値非改変
+- `codex-task.md` — 作業範囲を明示的に区切る（「Step 7 のみ」「このファイルには触るな」）
+- **Claude が毎回 `git diff` で差分を確認し、`gradlew compileJava` を回す**
+- 大きな変更の前に作業ツリーをコミットしておく（未コミットの作業は git の保護外）
+
+### Codex が今何をしているかを見る
+
+MCP の戻り値は **Codex の最終メッセージだけ**で、途中のコマンド・思考は含まれない。
+また120秒を超える呼び出しはバックグラウンドタスクへ退避されるため、インライン表示もされない。
+実行中の様子は**セッションログ**（`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`、逐次書き込み）を読む:
+
+```powershell
+.\codex-watch.ps1            # 直近セッションの最後30件
+.\codex-watch.ps1 -Follow    # 実行中をリアルタイム追跡
+```
+
+（`codex-watch.ps1` は `.gitignore` 済み。python/jq がこの環境に無いため PowerShell で実装してある）
+
+`codex exec`（CLI直叩き）を使う場合は非対話モードで、`-o <file>` に最終メッセージだけを出し、
+それ以外は `*> log.txt` へ捨てるとトークンを節約できる。`-a/--ask-for-approval` は `exec` では使えない。
 
 ## サブエージェント（`.claude/agents/`）
 

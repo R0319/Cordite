@@ -25,3 +25,10 @@ run
 
 # ローカル環境専用メモ（絶対パス等、GitHubに上げない）
 CLAUDE.local.md
+
+# ローカル環境専用のGradle設定（アセット作業フォルダの絶対パス等）
+local.properties
+
+# Codex への作業指示ファイル（一時、セッションごとに使い捨て）
+codex-task.md
+codex-watch.ps1
