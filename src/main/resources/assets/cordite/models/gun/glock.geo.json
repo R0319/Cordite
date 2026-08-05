@@ -2987,6 +2987,7 @@
 				},
 				{
 					"name": "right_hand",
+					"parent": "root",
 					"pivot": [-6, 12, 6],
 					"cubes": [
 						{"origin": [-8, 0, 4], "size": [4, 12, 4], "uv": [112, 0]}
@@ -2999,6 +3000,7 @@
 				},
 				{
 					"name": "left_hand",
+					"parent": "root",
 					"pivot": [6, 12, 6.025],
 					"cubes": [
 						{
