@@ -119,6 +119,8 @@ public final class GunHudOverlay {
      * 銃専用のレティクル（作者制作の画像）を画面中央に描く。バニラのクロスヘアは銃所持中は
      * {@link AdsCrosshair} が消しているので、これが唯一の照準表示になる。
      *
+     * <p>三人称では自機の照準表示を出さないため、描画しない。</p>
+     *
      * <p><b>大きさは実際の拡散量そのもの</b>。画像の一辺を、腰だめの拡散角
      * （{@link GunDefinition#hipSpreadDeg()}）が画面上で占める大きさ（直径＝半角の2倍）に換算するので、
      * 「画像の内側に弾が来る」という読み方が成立する。連射・移動によるブルームを実装したら、
@@ -136,6 +138,9 @@ public final class GunHudOverlay {
      */
     private static void drawReticle(GuiGraphics graphics, DeltaTracker deltaTracker, GunDefinition definition,
                                      int screenW, int screenH) {
+        if (!Minecraft.getInstance().options.getCameraType().isFirstPerson()) {
+            return;
+        }
         float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
         if (GunAdsState.progress(partialTick) > 0f) {
             return;
@@ -196,7 +201,8 @@ public final class GunHudOverlay {
                 return;
             }
             Minecraft mc = Minecraft.getInstance();
-            if (mc.player == null || !(mc.player.getMainHandItem().getItem() instanceof GunItem)) {
+            if (mc.player == null || !mc.options.getCameraType().isFirstPerson()
+                    || !(mc.player.getMainHandItem().getItem() instanceof GunItem)) {
                 return;
             }
             event.setCanceled(true);

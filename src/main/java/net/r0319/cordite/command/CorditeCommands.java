@@ -1,12 +1,12 @@
 package net.r0319.cordite.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -42,7 +42,7 @@ public final class CorditeCommands {
         event.getDispatcher().register(Commands.literal("cordite")
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("give")
-                        .then(Commands.argument("gunId", StringArgumentType.word())
+                        .then(Commands.argument("gunId", ResourceLocationArgument.id())
                                 .suggests(GUN_ID_SUGGESTIONS)
                                 .executes(context -> give(context, List.of(context.getSource().getPlayerOrException()), 1))
                                 .then(Commands.argument("targets", EntityArgument.players())
@@ -54,10 +54,16 @@ public final class CorditeCommands {
 
     /** 定義を確認してから各対象へ渡す。未知IDは例外にせず、入力ミスをその場で知らせる。 */
     private static int give(CommandContext<CommandSourceStack> context, Collection<ServerPlayer> targets, int count) {
-        String rawId = StringArgumentType.getString(context, "gunId");
-        ResourceLocation gunId = ResourceLocation.tryParse(rawId);
-        if (gunId == null || GunDefinitions.server(gunId) == null) {
-            context.getSource().sendFailure(Component.translatable("commands.cordite.give.unknown_gun", rawId));
+        ResourceLocation requested = ResourceLocationArgument.getId(context, "gunId");
+        if (GunDefinitions.server(requested) == null
+                && ResourceLocation.DEFAULT_NAMESPACE.equals(requested.getNamespace())) {
+            // 名前空間を省略した入力では、自Modの銃IDを優先して解決する。
+            requested = ResourceLocation.fromNamespaceAndPath(Cordite.MODID, requested.getPath());
+        }
+        // 以降のフィードバックメッセージはラムダ（Supplier）から参照するため、解決後の値をfinalで確定させる。
+        final ResourceLocation gunId = requested;
+        if (GunDefinitions.server(gunId) == null) {
+            context.getSource().sendFailure(Component.translatable("commands.cordite.give.unknown_gun", gunId));
             return 0;
         }
 
