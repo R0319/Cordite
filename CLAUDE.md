@@ -102,12 +102,30 @@ MCP の戻り値は **Codex の最終メッセージだけ**で、途中のコ�
 `codex exec`（CLI直叩き）を使う場合は非対話モードで、`-o <file>` に最終メッセージだけを出し、
 それ以外は `*> log.txt` へ捨てるとトークンを節約できる。`-a/--ask-for-approval` は `exec` では使えない。
 
+## スキル（`.claude/skills/`）— よくある作業の手順書
+
+作業の入口が下表のどれかに当たるときは、**まず該当スキルを読んでから動く**（手順の抜けを防ぐため）。
+
+| スキル | いつ使うか |
+|-------|-----------|
+| `asset-apply` | 「アニメ/テクスチャ/モデル/効果音を更新した、反映して」— 検証→ビルド→確認リスト |
+| `ingame-triage` | 実機確認で見つけた不具合の報告 — 症状の切り分けと担当（コード/アセット/作者）の判定 |
+| `codex-impl` | コードを実装・修正する必要が出たとき — `codex-task.md` からビルド確認までの委譲手順 |
+| `build-check` | 「ビルドして」「エラー出てる」— 禁止事項と既知エラー対処表 |
+| `commit-push` | 「コミットして」— 分割・日本語メッセージ・混入チェック・プッシュまで |
+
+ユーザーレベル（`~/.claude/skills/`、リポジトリ外）に第三者製の `minecraft-neoforge` を導入済み。
+NeoForge 1.21 の API（DataComponent / CustomPacketPayload / DataAttachment / datagen / AT）を
+確認するときの**リファレンス専用**。実装の進め方はこのリポジトリの規約が優先する。
+
 ## サブエージェント（`.claude/agents/`）
 
 - `mc-researcher` — 実装前の既存コード/NeoForge API調査
 - `mc-reviewer` — 武器/ダメージ/同期/パケット変更後のレビュー
-- `mc-spec-tester` — `docs/specs/` とコードの静的な突き合わせ
+- `mc-spec-tester` — `docs/specs/`（仕様・数値）とコードの静的な突き合わせ
+- `mc-doc-sync` — `docs/design/`（技術設計）とコードのズレ、`CLAUDE.md`/`AGENTS.md` の追従漏れ
 - `mc-log-analyzer` — クラッシュログ/スタックトレース解析
+- `mc-asset-validator` — `.geo.json`/`.animation.json`/`.ogg`/`.png` が「コードが拾える形」かの静的検証
 
 ## ビルド
 
