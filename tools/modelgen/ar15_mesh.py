@@ -56,15 +56,15 @@ def handguard(l=L):
 
 def flash_hider_a2(l=L):
     b, z1 = l.bore_y, l.muzzle_z
-    z0 = z1 - 57
+    z0 = z1 - l.fh_len
     out = [
-        lathe(0, b, [(z1 - 20, 11), (z1, 10)], N_MID, M.STEEL_DARK),          # 根元
-        lathe(0, b, [(z0, 10.5), (z0 + 7, 11)], N_MID, M.STEEL_DARK),         # 先端リング
-        lathe(0, b, [(z0 + 7, 6), (z1 - 20, 6)], N_MID, M.BORE, False, False),  # 内側（暗）
-        box(-6, b - 11, z0 + 7, 6, b - 7, z1 - 20, M.STEEL_DARK),             # 下面の板
+        lathe(0, b, [(z1 - 15, 11), (z1, 10)], N_MID, M.STEEL_DARK),          # 根元
+        lathe(0, b, [(z0, 10.5), (z0 + 6, 11)], N_MID, M.STEEL_DARK),         # 先端リング
+        lathe(0, b, [(z0 + 6, 6), (z1 - 15, 6)], N_MID, M.BORE, False, False),  # 内側（暗）
+        box(-6, b - 11, z0 + 6, 6, b - 7, z1 - 15, M.STEEL_DARK),             # 下面の板
     ]
     for ang in (-120, -60, 0, 60, 120):
-        out.append(box(-2, b + 7, z0 + 7, 2, b + 11, z1 - 20, M.STEEL_DARK,
+        out.append(box(-2, b + 7, z0 + 6, 2, b + 11, z1 - 15, M.STEEL_DARK,
                        rotation=(0, 0, ang), pivot=(0, b, (z0 + z1) / 2)))
     return out
 
@@ -73,7 +73,7 @@ def buffer_tube(l=L):
     c = l.bore_y - 4
     z0 = l.lower_rear_z
     return [
-        lathe(0, c, [(z0, 15), (l.buffer_end_z - 3, 15), (l.buffer_end_z, 13.5)], N_BIG, M.RECEIVER),
+        lathe(0, c, [(z0, l.tube_od / 2), (l.buffer_end_z - 3, l.tube_od / 2), (l.buffer_end_z, l.tube_od / 2 - 1.5)], N_BIG, M.RECEIVER),
         lathe(0, c, [(z0, 17.5), (z0 + 10, 17.5)], N_SMALL, M.STEEL_DARK),  # キャッスルナット（八角）
         box(-16, c - 16, z0 + 1, 16, c + 16, z0 + 5, M.STEEL_DARK),         # エンドプレート
     ]
@@ -141,11 +141,12 @@ def lower_receiver(l=L):
 
 
 def magazine_stanag(l=L):
-    """STANAG 30 発弾倉。上 100mm は直線、下 80mm を半径一定で前方へ曲げる（実物と同じ「バナナ」形）。"""
+    """STANAG 30 発弾倉（角張った箱形）。上は直線、マグウェルの下から半径一定で前へ反る（実物と同じ「バナナ」形）。"""
     b = l.bore_y
-    top, split = b - 24, b - 125
+    top = b - l.mag_top_below_bore
+    split = top - l.mag_straight
     zc, half = l.mag_center_z, 32.0
-    arc_len, steps = 80.0, 6
+    arc_len, steps = l.mag_arc, 8
     radius = arc_len / math.radians(MAG_ANGLE)
     center = [(zc, top), (zc, split)]
     tangents = [0.0, 0.0]
@@ -166,21 +167,22 @@ def magazine_stanag(l=L):
     return [
         extrude_x(body, -11, 11, M.MAG),
         extrude_x(plate, -13, 13, M.STEEL_DARK),
-        box(-11.6, split + 5, zc - 25, 11.6, split + 65, zc + 25, M.MAG),  # 側面のリブ（直線部）
+        box(-11.6, split + 5, zc - 25, 11.6, top - 25, zc + 25, M.MAG),  # 側面のリブ（直線部）
     ]
 
 
 def stock_m4(l=L):
-    """M4 ストック: 前端の筒（チューブを包む）から、下縁がつま先へ向かって斜めに下がる。角は丸める。"""
+    """M4 ストック（stock_pos の位置）: 前端の筒（チューブを包む）から、下縁がつま先へ向かって斜めに下がる。"""
     b = l.bore_y
+    f = l.stock_front_z
     z1 = l.butt_z - 8
-    sleeve = [(182, b + 18), (z1, b + 18), (z1, b - 24), (190, b - 24), (182, b - 18)]
-    fin = [(200, b - 20), (z1, b - 20), (z1, b - 86), (z1 - 18, b - 86), (208, b - 30)]
+    sleeve = [(f, b + 18), (z1, b + 18), (z1, b - 24), (f + 8, b - 24), (f, b - 18)]
+    fin = [(f + 18, b - 20), (z1, b - 20), (z1, b - 86), (z1 - 18, b - 86), (f + 26, b - 30)]
     butt = [(z1, b + 20), (l.butt_z, b + 19), (l.butt_z + 1, b - 84), (z1, b - 88)]
     return [
         extrude_x_beveled(sleeve, -17, 17, 5, M.POLYMER, steps=2),   # 上: チューブを包む太い部分
         extrude_x_beveled(fin, -12, 12, 3, M.POLYMER, steps=2),      # 下: 薄いひれ（実物も上より細い）
-        box(-5, b - 30, 186, 5, b - 22, 226, M.STEEL_DARK),     # 調整レバー
+        box(-5, b - 30, f + 4, 5, b - 22, f + 44, M.STEEL_DARK),     # 調整レバー
         extrude_x_beveled(butt, -18, 18, 3, M.RUBBER, steps=2),
     ]
 

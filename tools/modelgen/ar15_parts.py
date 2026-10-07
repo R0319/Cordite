@@ -9,6 +9,8 @@ AR-15 系のパーツライブラリ（単位 mm）。
 A2 フラッシュハイダー 57mm・サイト高 2.6in=66mm・STANAG 弾倉 約 180mm 等）を基にし、
 公表値が無い部分（レシーバー各部の厚み等）は外観写真比の概算。
 """
+import math
+
 from core import box, cbox, round_rod
 import materials as M
 
@@ -20,7 +22,7 @@ RAIL_W_MM = 1.0 * MM_PER_PX   # レール幅 = 1.0px（規約）
 class Layout:
     """部品どうしの取り合い寸法。銃ごとにここだけ変えれば同系統の別銃（M16/HK416 等）に流用できる。"""
     bore_y = 155.4          # ボア軸高さ（グリップ底面基準。A2 グリップはレシーバー下面から約101mm下まである）
-    bolt_face_z = -95.0     # ボルトフェイス（銃身の根元）。上部レシーバー前端から約30mm奥（バレルエクステンション分）
+    bolt_face_z = -88.0     # ボルトフェイス（銃身の根元）。全長 838/756mm（伸長/収縮）とストック位置から逆算
     barrel_len = 368.0      # 14.5in
     upper_front_z = -125.0  # 上部レシーバー前端（写真から）
     upper_rear_z = 70.0     # 上部レシーバー後端（写真から。下部の後端より少し前）
@@ -37,12 +39,28 @@ class Layout:
     mag_center_z = -78.0        # 弾倉の前後中心
     lower_bottom = -54.4    # トリガーメカ部の下面（ボア軸基準）。写真のレール上面→この面が 80.4mm になるよう合わせた
     lower_rear_z = 88.0     # 下部レシーバーの後端（バッファチューブの付け根。写真から）
-    buffer_end_z = 245.0
-    butt_z = 304.0
+    fh_len = 44.0           # A2 フラッシュハイダーの銃身先端からの長さ
+    buffer_end_z = 248.0    # バッファチューブ後端（全長 7.3in=185mm のうち約 25mm がレシーバー内）
+    tube_od = 29.0          # バッファチューブ外径（1.14in）
+    stock_collapsed_butt_z = 256.0   # 最も縮めたときの床尾（チューブ後端のすぐ後ろ）
+    stock_travel = 82.0     # 6 段階の伸縮幅（M4A1 全長 756→838mm の差）
+    stock_pos = 2           # 0=最短 … 5=最長。既定は 3 段目（チューブが長く見えすぎないよう中間）
+    stock_len = 155.0       # ストック本体の長さ（前端〜床尾。最短位置でレシーバーに当たらない長さ）
+    mag_top_below_bore = 14.0   # 弾倉上端（送り出し口）のボア軸からの下がり
+    mag_straight = 60.0     # 弾倉の直線部（上端〜マグウェル下あたり）
+    mag_arc = 112.0         # 弾倉の湾曲部（半径一定で前へ反る）
 
     @property
     def muzzle_z(self):     # 銃身先端
         return self.bolt_face_z - self.barrel_len
+
+    @property
+    def butt_z(self):       # 床尾（ストック位置で変わる）
+        return self.stock_collapsed_butt_z + self.stock_travel * self.stock_pos / 5
+
+    @property
+    def stock_front_z(self):
+        return self.butt_z - self.stock_len
 
     @property
     def rail_top_y(self):
@@ -165,15 +183,15 @@ def handguard(l=L):
 def flash_hider_a2(l=L):
     """A2 バードケージ。下面は閉じ（バードケージ下の板）、他はスリット＝棒で表す。"""
     b, z1 = l.bore_y, l.muzzle_z
-    z0 = z1 - 57
+    z0 = z1 - l.fh_len
     out = [
-        *round_rod(0, b, z1 - 20, z1, 22, M.STEEL_DARK),      # 根元
-        *round_rod(0, b, z0, z0 + 7, 22, M.STEEL_DARK),       # 先端リング
-        cbox(0, b, z0 + 7, z1 - 20, 12, 12, M.BORE),          # 内側（暗）
-        box(-6, b - 11, z0 + 7, 6, b - 7, z1 - 20, M.STEEL_DARK),   # 下面の板
+        *round_rod(0, b, z1 - 15, z1, 22, M.STEEL_DARK),      # 根元
+        *round_rod(0, b, z0, z0 + 6, 22, M.STEEL_DARK),       # 先端リング
+        cbox(0, b, z0 + 6, z1 - 15, 12, 12, M.BORE),          # 内側（暗）
+        box(-6, b - 11, z0 + 6, 6, b - 7, z1 - 15, M.STEEL_DARK),   # 下面の板
     ]
     for ang in (-120, -60, 0, 60, 120):                    # スリット間の棒（銃軸まわりに回転配置）
-        out.append(box(-2, b + 7, z0 + 7, 2, b + 11, z1 - 20, M.STEEL_DARK,
+        out.append(box(-2, b + 7, z0 + 6, 2, b + 11, z1 - 15, M.STEEL_DARK,
                        rotation=(0, 0, ang), pivot=(0, b, (z0 + z1) / 2)))
     return out
 
@@ -415,44 +433,54 @@ def buffer_tube(l=L):
     c = l.bore_y - 4
     z0 = l.lower_rear_z
     return [
-        *round_rod(0, c, z0, l.buffer_end_z, 30, M.RECEIVER),
+        *round_rod(0, c, z0, l.buffer_end_z, l.tube_od, M.RECEIVER),
         *round_rod(0, c, z0, z0 + 10, 35, M.STEEL_DARK),                  # キャッスルナット
         box(-16, c - 16, z0 + 1, 16, c + 16, z0 + 5, M.STEEL_DARK),       # エンドプレート
     ]
 
 
 def stock_m4(l=L):
-    """M4 6 ポジションストック（最伸長位置）。下側の斜面は回転板＋段で埋める。"""
+    """M4 6 ポジションストック（stock_pos の位置）。下側の斜面は回転板＋段で埋める。"""
     b = l.bore_y
-    z0, z1 = 180.0, l.butt_z - 6
-    slope = 39.6  # 下縁 (z0, b-22) → (z0+70, b-80)
+    f, z1 = l.stock_front_z, l.butt_z - 6
+    zr = z1 - 48                        # 後部（つま先側の縦の部分）の前端
+    dz = zr - f
+    slope = math.degrees(math.atan2(58, dz))
+    line = lambda z: b - 22 - (z - f) * 58 / dz   # 下縁の斜面
+    zs1, zs2 = f + dz * 0.25, f + dz * 0.6
     return [
-        box(-17, b - 22, z0, 17, b + 16, z1, M.POLYMER),                       # チューブ外套
-        box(-16, b - 80, 250, 16, b - 22, z1, M.POLYMER),                      # 後部
-        box(-15.7, b - 51, 215, 15.7, b - 22, 250, M.POLYMER),                     # 斜面の内側を段で埋める
-        box(-15.7, b - 34, 195, 15.7, b - 22, 215, M.POLYMER),
-        box(-15.4, b - 22, z0, 15.4, b + 12, z0 + 91, M.POLYMER,
-            rotation=(-slope, 0, 0), pivot=(0, b - 22, z0)),                   # 下側の斜面（板の下縁＝斜面）
-        box(-5, b - 30, z0 + 5, 5, b - 22, z0 + 50, M.STEEL_DARK),             # 調整レバー
+        box(-17, b - 22, f, 17, b + 16, z1, M.POLYMER),                        # チューブ外套
+        box(-16, b - 80, zr, 16, b - 22, z1, M.POLYMER),                       # 後部
+        box(-15.7, line(zs2), zs2, 15.7, b - 22, zr, M.POLYMER),               # 斜面の内側を段で埋める
+        box(-15.7, line(zs1), zs1, 15.7, b - 22, zs2, M.POLYMER),
+        box(-15.4, b - 22, f, 15.4, b + 12, f + math.hypot(dz, 58), M.POLYMER,
+            rotation=(-slope, 0, 0), pivot=(0, b - 22, f)),                   # 下側の斜面（板の下縁＝斜面）
+        box(-5, b - 30, f + 5, 5, b - 22, f + 50, M.STEEL_DARK),               # 調整レバー
         box(-19, b - 85, z1, 19, b + 20, l.butt_z, M.RUBBER),                  # バットプレート
     ]
 
 
-MAG_ANGLE = 14.0
+MAG_ANGLE = 20.0   # 湾曲部全体での反りの角度
 
 
 def magazine_stanag(l=L):
-    """STANAG 30 発弾倉。上半分は直線、下半分を前方へ曲げる（実物の湾曲を 2 分割で近似）。"""
+    """STANAG 30 発弾倉（角張った箱形）。上は直線、マグウェルの下から前へ反る。湾曲は 2 本の箱で近似。"""
     b = l.bore_y
-    top, split = b - 24, b - 125
+    top = b - l.mag_top_below_bore
+    split = top - l.mag_straight
     zf, zr = l.mag_center_z - 32, l.mag_center_z + 32
-    piv = (0, split, zr)
-    rot = (-MAG_ANGLE, 0, 0)
+    half = l.mag_arc / 2
+    a1 = math.radians(MAG_ANGLE / 2)
+    piv1 = (0, split, zr)
+    piv2 = (0, split - half * math.cos(a1), zr - half * math.sin(a1))   # 1 本目の下端後ろ角（回転後）
+    rot1, rot2 = (-MAG_ANGLE / 2, 0, 0), (-MAG_ANGLE, 0, 0)
+    p2y, p2z = piv2[1], piv2[2]
     return [
         box(-11, split, zf, 11, top, zr, M.MAG),
-        box(-11, split - 80, zf, 11, split, zr, M.MAG, rotation=rot, pivot=piv),
-        box(-13, split - 86, -121, 13, split - 78, -49, M.STEEL_DARK, rotation=rot, pivot=piv),  # フロアプレート
-        box(-11.6, split + 5, zf + 7, 11.6, split + 65, zr - 7, M.MAG),  # 側面のリブ（直線部）
+        box(-11, split - half, zf, 11, split, zr, M.MAG, rotation=rot1, pivot=piv1),
+        box(-11, p2y - half, p2z - 64, 11, p2y + 1, p2z, M.MAG, rotation=rot2, pivot=piv2),
+        box(-13, p2y - half - 6, p2z - 68, 13, p2y - half + 2, p2z + 4, M.STEEL_DARK, rotation=rot2, pivot=piv2),  # 底板
+        box(-11.6, split + 5, zf + 7, 11.6, top - 25, zr - 7, M.MAG),  # 側面のリブ（直線部）
     ]
 
 

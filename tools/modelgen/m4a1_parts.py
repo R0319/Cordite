@@ -51,22 +51,23 @@ def build(P=P) -> tuple[Model, dict]:
 
     mz = l.mag_center_z
     add("magazin", "root", (0, b - 95, mz), "magazine_stanag", P.magazine_stanag())
-    case, bullet = P.cartridge_556(z_tip=mz - 27, y=b - 29)
-    add("mag_ammo", "magazin", (0, b - 29, mz + 2), None, case + bullet)
+    ry = b - l.mag_top_below_bore - 5                   # 最上段の弾（送り出し口の下）
+    case, bullet = P.cartridge_556(z_tip=mz - 27, y=ry)
+    add("mag_ammo", "magazin", (0, ry, mz + 2), None, case + bullet)
 
     tip = l.bolt_face_z - 57.4                          # 薬室内の実包（排莢クリップの起点）
     case, bullet = P.cartridge_556(z_tip=tip, y=b)
     add("ammo", "root", (0, b, tip + 35), None, case)
     add("bullet", "ammo", (0, b, tip + 6), None, bullet)
 
-    add("stock", "root", (0, b, 180), "stock_m4", P.stock_m4())
+    add("stock", "root", (0, b, l.stock_front_z), "stock_m4", P.stock_m4())
 
     # グリップ中心（側面輪郭の重心）＝三人称で握る位置
     gz, gy = P.polygon_centroid(P.grip_outline())
     center = (0.0, gy, gz)
     add_locators(
         m,
-        muzzle=px((0, b, l.muzzle_z - 57)),
+        muzzle=px((0, b, l.muzzle_z - l.fh_len)),
         sight_line_y=(b + l.sight_h) * K,
         rear_sight_z=(l.upper_rear_z - 30 + 12) * K,   # アパーチャー板の位置（rear_sight の z+12）
         grip_center=px(tuple(center)),
