@@ -344,11 +344,15 @@ def trigger_outline(l=L):
         + front[::-1] + [(front[0][0], lb + 4)]
 
 
-def grip_outline(l=L, per_seg=3):
-    """A2 グリップの側面形状。"""
+def grip_outline(l=L, per_seg=3, extend_top=0.0):
+    """A2 グリップの側面形状。extend_top>0 で上面（と張り出しの上縁）をレシーバー内へ持ち上げる
+    （メッシュ版は縁を丸めるので、丸みをレシーバーの中に埋めて上面の密着を保つため）。"""
     from core import smooth
     lb = l.bore_y + l.lower_bottom
-    return [(z, lb + y) for z, y in smooth(A2_GRIP_CURVE, per_seg)[:-1]]
+    curve = A2_GRIP_CURVE
+    if extend_top:
+        curve = [(z, y + extend_top) if i in (0, 1, 2, len(curve) - 1) else (z, y) for i, (z, y) in enumerate(curve)]
+    return [(z, lb + y) for z, y in smooth(curve, per_seg)[:-1]]
 
 
 def grip_outline_engage(l=L):

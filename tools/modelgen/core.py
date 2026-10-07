@@ -229,6 +229,89 @@ def extrude_x_beveled(profile, x0, x1, bevel, mat, steps=2) -> MeshPart:
     return MeshPart(verts, faces, mat, None, charts, cuv, {0: "rows"}).finalize()
 
 
+def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> MeshPart:
+    """側面形状を左右に「膨らませた」立体（断面が楕円状）。グリップのような丸い樹脂部品用。
+    輪郭の各点で丸みの半径 r を変えられる: r = half_w なら縁は X=0 の稜線まで丸まり（前後のストラップ）、
+    小さい r なら縁に平らな帯が残る（底面など）。
+    width_fn(z, y, f) → 幅の倍率。f はその高さでの前後位置（0=前端, 1=後端）。
+    radius_fn(nz, ny) → 丸みの半径。(nz, ny) は輪郭のその点での外向き法線（側面図）。"""
+    pts = list(profile)
+    if _area2(pts) < 0:
+        pts.reverse()
+    n = len(pts)
+    H = half_w
+    ts = [math.pi / 2 * k / steps for k in range(steps + 1)]
+    full = [pts if k == 0 else _inset(pts, H * (1 - math.cos(t))) for k, t in enumerate(ts)]
+
+    radii = []
+    for i in range(n):
+        (z0, y0), (z1, y1), (z2, y2) = pts[i - 1], pts[i], pts[(i + 1) % n]
+        nz, ny = (y2 - y0), -(z2 - z0)            # 反時計回りの外向き法線（側面図）
+        ln = math.hypot(nz, ny) or 1.0
+        r = H if radius_fn is None else min(H, max(0.5, radius_fn(nz / ln, ny / ln)))
+        radii.append(r)
+
+    def span(y):
+        xs = []
+        for i in range(n):
+            (za, ya), (zb, yb) = pts[i], pts[(i + 1) % n]
+            if (ya <= y < yb) or (yb <= y < ya):
+                xs.append(za + (y - ya) * (zb - za) / (yb - ya))
+        return (min(xs), max(xs)) if len(xs) >= 2 else None
+
+    def scale(z, y):
+        if width_fn is None:
+            return 1.0
+        sp = span(y)
+        f = 0.5 if sp is None or sp[1] - sp[0] < 1e-6 else min(1.0, max(0.0, (z - sp[0]) / (sp[1] - sp[0])))
+        return width_fn(z, y, f)
+
+    verts, ring_idx = [], {}
+    for side in (-1, 1):
+        for k, t in enumerate(ts):
+            idx = []
+            for i in range(n):
+                r = radii[i]
+                bz, by = pts[i]
+                fz, fy = full[k][i]
+                kk = r / H
+                z, y = bz + (fz - bz) * kk, by + (fy - by) * kk   # その点の半径ぶんだけ内側へ
+                x = (H - r) + r * math.sin(t)
+                idx.append(len(verts))
+                verts.append((side * x * scale(bz, by), y, z))
+            ring_idx[(side, k)] = idx
+    perim = [0.0]
+    for i in range(n):
+        perim.append(perim[-1] + math.dist(pts[i], pts[(i + 1) % n]))
+    faces, charts, cuv = [], [], []
+    for side in (-1, 1):
+        t_acc = 0.0
+        for k in range(steps):
+            a, b = ring_idx[(side, k)], ring_idx[(side, k + 1)]
+            dt = H * (ts[k + 1] - ts[k])
+            for i in range(n):
+                j = (i + 1) % n
+                faces.append([a[i], a[j], b[j], b[i]] if side == 1 else [a[j], a[i], b[i], b[j]])
+                charts.append(0 if side == 1 else 1)
+                s0, s1 = (perim[i], perim[i + 1]) if side == 1 else (perim[i + 1], perim[i])
+                cuv.append([(s0, t_acc), (s1, t_acc), (s1, t_acc + dt), (s0, t_acc + dt)])
+            t_acc += dt
+        cap = ring_idx[(side, steps)]
+        for tri in _triangulate(pts):
+            faces.append([cap[t] for t in (tri if side == 1 else (tri[0], tri[2], tri[1]))])
+            charts.append(None)
+            cuv.append(None)
+    # 縁の帯（左右の稜線をつなぐ。半径 = half_w の点では幅 0）
+    a, b = ring_idx[(-1, 0)], ring_idx[(1, 0)]
+    for i in range(n):
+        j = (i + 1) % n
+        faces.append([a[i], a[j], b[j], b[i]])
+        charts.append(2)
+        w = 2 * (H - max(radii[i], radii[j]) * 0.999)
+        cuv.append([(perim[i], 0), (perim[i + 1], 0), (perim[i + 1], max(w, 0.01)), (perim[i], max(w, 0.01))])
+    return MeshPart(verts, faces, mat, None, charts, cuv, {0: False, 1: False, 2: False}).finalize()
+
+
 def _inset(pts, d):
     """反時計回り多角形を内側へ d だけ縮め、元の各頂点に対応する点を返す（頂点数は元と同じ）。
     shapely の buffer で正しく縮めた輪郭に、元の頂点を最近点で投影する。曲率のきつい角（半径 < d）でも

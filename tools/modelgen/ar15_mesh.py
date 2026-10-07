@@ -9,7 +9,7 @@ import math
 from ar15_parts import *  # noqa: F401,F403  角張った部品・Layout・寸法定数はそのまま使う
 from ar15_parts import (L, MAG_ANGLE, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
                         lower_common as _lower_common, lower_rear_outline, ref_zy, REF_LOWER_REAR, magwell_outline)
-from core import box, lathe, extrude_x, extrude_x_beveled
+from core import box, lathe, extrude_x, extrude_x_beveled, inflate_x
 import materials as M
 
 N_BIG = 16    # ハンドガード等の大径
@@ -80,7 +80,24 @@ def buffer_tube(l=L):
 
 
 def pistol_grip(l=L):
-    return [extrude_x_beveled(grip_outline(l), -14, 14, 5.5, M.POLYMER, steps=3)]
+    """A2 グリップ: 断面は前（指を掛ける側）が細く後ろが太い卵形。上端はレシーバー幅に合わせて絞る。"""
+    lb = l.bore_y + l.lower_bottom
+
+    def width(z, y, f):
+        fore = 0.68 + 0.32 * _smoothstep(0.0, 0.75, f)            # 前端 68% → 後ろ 100%
+        top = 0.86 + 0.14 * _smoothstep(lb + 2, lb - 14, y)       # 上端はレシーバー幅（±12）に収める
+        return fore * top
+
+    def radius(nz, ny):
+        # 前後のストラップ（法線が前後向き）は全周を丸める。底・上面（法線が上下向き）は角だけ 5mm で丸める
+        return 5.0 + 9.5 * (1 - _smoothstep(0.55, 0.9, abs(ny)))
+
+    return [inflate_x(grip_outline(l, extend_top=6.0), 14.5, M.POLYMER, steps=5, width_fn=width, radius_fn=radius)]
+
+
+def _smoothstep(a, b, x):
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3 - 2 * t)
 
 
 def trigger(l=L):
