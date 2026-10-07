@@ -27,3 +27,8 @@ python3 build.py m4a1_parts   # 1方式だけ
 `generated/<方式>/` の `m4a1.geo.json`・`m4a1.png`・`m4a1_modelshot.png` を作業フォルダへコピーして `runClient`
 （`syncGunAssets` が取り込む。gunpack の `m4a1.json` は既存）。同じ銃IDなので、2方式は入れ替えて1つずつ確認する。
 Blockbench で開く場合は `m4a1.geo.json` を「Bedrock Entity」として開き、`m4a1.png` をテクスチャに割り当てる。
+
+## 形の作り分け
+
+全部を丸くしない。樹脂の握る部品は丸く、金属の削り出し部品（レシーバー・弾倉・レール）は角張ったまま、
+という作り分けで実物らしさを出す → [07-model-assets.md「形の作り分け（メリハリ）」](../../docs/specs/07-model-assets.md#形の作り分けメリハリ-仮)
