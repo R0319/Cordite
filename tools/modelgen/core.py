@@ -29,6 +29,9 @@ class Material:
     noise: float = 0.0          # 1テクセルごとの明度ゆらぎ（0〜1）
     edge: float = 0.0           # 面の外周1テクセルを暗くする量（0〜1）。小さい面には掛からない
     edge_min: int = 4           # 外周を描く最小の面サイズ（テクセル）
+    stripe: int = 0             # >0 なら up 面に V 方向の縞（周期テクセル）。レールの刻みをテクスチャで表す
+    stripe_dark: float = 0.45
+    dots: int = 0               # >0 なら側面・上下面に周期 dots テクセルの暗い点（放熱孔など）
 
 
 # ---------------------------------------------------------------- 形状
@@ -133,7 +136,7 @@ def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
     uvs: dict[tuple[int, int, str], tuple[int, int, int, int]] = {}
     for (h, w, bi, ci, f), (u, v) in placed.items():
         mat = model.bones[bi].cubes[ci].mat
-        _paint(img, u, v, w, h, mat, rng)
+        _paint(img, u, v, w, h, mat, rng, f)
         uvs[(bi, ci, f)] = (u, v, w, h)
 
     geo_bones = []
@@ -176,7 +179,7 @@ def _shelf_pack(items, size):
     return out
 
 
-def _paint(img, u, v, w, h, mat: Material, rng: random.Random):
+def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
     base = np.array(mat.color, dtype=np.float32)
     for yy in range(h):
         for xx in range(w):
@@ -184,6 +187,12 @@ def _paint(img, u, v, w, h, mat: Material, rng: random.Random):
             if mat.edge and w >= mat.edge_min and h >= mat.edge_min and (
                     xx in (0, w - 1) or yy in (0, h - 1)):
                 k *= 1.0 - mat.edge
+            if mat.stripe and face == "up" and (yy % mat.stripe) < mat.stripe // 2:
+                k *= 1.0 - mat.stripe_dark
+            if mat.dots and face not in ("north", "south") and w >= mat.dots and h >= mat.dots \
+                    and xx % mat.dots == mat.dots // 2 and yy % mat.dots == mat.dots // 2 \
+                    and 0 < xx < w - 1 and 0 < yy < h - 1:
+                k *= 0.25
             c = np.clip(base * k, 0, 255)
             img[v + yy, u + xx] = (*c.astype(np.uint8), 255)
 

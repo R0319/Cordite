@@ -1,0 +1,179 @@
+{
+ "format_version": "1.21.0",
+ "minecraft:geometry": [
+  {
+   "description": {
+    "identifier": "geometry.gas_block",
+    "texture_width": 64,
+    "texture_height": 64,
+    "visible_bounds_width": 4,
+    "visible_bounds_height": 4,
+    "visible_bounds_offset": [
+     0,
+     1,
+     0
+    ]
+   },
+   "bones": [
+    {
+     "name": "gas_block",
+     "pivot": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -0.625,
+        5.3958,
+        -15.5
+       ],
+       "size": [
+        1.25,
+        0.875,
+        1.0833
+       ],
+       "uv": {
+        "north": {
+         "uv": [
+          7,
+          10
+         ],
+         "uv_size": [
+          10,
+          7
+         ]
+        },
+        "south": {
+         "uv": [
+          17,
+          10
+         ],
+         "uv_size": [
+          10,
+          7
+         ]
+        },
+        "west": {
+         "uv": [
+          27,
+          10
+         ],
+         "uv_size": [
+          9,
+          7
+         ]
+        },
+        "east": {
+         "uv": [
+          36,
+          10
+         ],
+         "uv_size": [
+          9,
+          7
+         ]
+        },
+        "up": {
+         "uv": [
+          32,
+          0
+         ],
+         "uv_size": [
+          10,
+          9
+         ]
+        },
+        "down": {
+         "uv": [
+          42,
+          0
+         ],
+         "uv_size": [
+          10,
+          9
+         ]
+        }
+       }
+      },
+      {
+       "origin": [
+        -0.4375,
+        5.2083,
+        -15.5
+       ],
+       "size": [
+        0.875,
+        1.25,
+        1.0833
+       ],
+       "uv": {
+        "north": {
+         "uv": [
+          18,
+          0
+         ],
+         "uv_size": [
+          7,
+          10
+         ]
+        },
+        "south": {
+         "uv": [
+          25,
+          0
+         ],
+         "uv_size": [
+          7,
+          10
+         ]
+        },
+        "west": {
+         "uv": [
+          0,
+          0
+         ],
+         "uv_size": [
+          9,
+          10
+         ]
+        },
+        "east": {
+         "uv": [
+          9,
+          0
+         ],
+         "uv_size": [
+          9,
+          10
+         ]
+        },
+        "up": {
+         "uv": [
+          52,
+          0
+         ],
+         "uv_size": [
+          7,
+          9
+         ]
+        },
+        "down": {
+         "uv": [
+          0,
+          10
+         ],
+         "uv_size": [
+          7,
+          9
+         ]
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -29,6 +29,7 @@ Minecraft **NeoForge 1.21.1** の銃PvP Mod「Cordite」。パッケージ `net.
    （構造的なバグ＝画面外に出る等に気付いたら、直さずに報告する）
 5. **アセットを作らない**: `.geo.json` / `.png` / `.animation.json` / `.ogg` は作者が制作する。
    生成・改変しないこと。読み込む側のコードだけを書く。
+   （モデル生成ツール `tools/modelgen/` とその出力も Claude と作者の担当。触らないこと）
 6. **勝手にコミットしない**: `git commit` / `git push` は実行しない。作業ツリーを変更するだけ。
 
 ## ビルド
