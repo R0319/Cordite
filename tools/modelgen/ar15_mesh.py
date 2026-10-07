@@ -78,7 +78,7 @@ def buffer_tube(l=L):
 
 
 def pistol_grip(l=L):
-    return [extrude_x_beveled(grip_outline(l), -14, 14, 4, M.POLYMER, steps=2)]
+    return [extrude_x_beveled(grip_outline(l), -14, 14, 5.5, M.POLYMER, steps=3)]
 
 
 def trigger(l=L):

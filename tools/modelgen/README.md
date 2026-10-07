@@ -8,7 +8,7 @@ python3 build.py              # 全方式を生成
 python3 build.py m4a1_parts   # 1方式だけ
 ```
 
-必要なもの: Python 3.10+、numpy、Pillow。
+必要なもの: Python 3.10+、numpy、Pillow、shapely（メッシュの角丸めで使用）。
 
 | ファイル | 役割 |
 |---------|------|

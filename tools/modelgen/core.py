@@ -218,8 +218,8 @@ def extrude_x_beveled(profile, x0, x1, bevel, mat, steps=2) -> MeshPart:
             cuv.append([(perim[i], t_acc[r]), (perim[i + 1], t_acc[r]),
                         (perim[i + 1], t_acc[r + 1]), (perim[i], t_acc[r + 1])])
     first, last = ring_idx[0], ring_idx[-1]
-    cap0 = _inset(pts, rings[0][1])
-    for tri in _triangulate(cap0):
+    # 端面の三角形分割は元の輪郭で行い、縮めた輪郭の頂点に当てはめる（縮めた輪郭は点が詰まって分割に失敗しやすい）
+    for tri in _triangulate(pts):
         faces.append([first[tri[0]], first[tri[2]], first[tri[1]]])
         charts.append(None)
         cuv.append(None)
@@ -230,7 +230,25 @@ def extrude_x_beveled(profile, x0, x1, bevel, mat, steps=2) -> MeshPart:
 
 
 def _inset(pts, d):
-    """反時計回り多角形を内側へ d だけ縮める（各辺を平行移動して隣の辺と交差させる）。"""
+    """反時計回り多角形を内側へ d だけ縮め、元の各頂点に対応する点を返す（頂点数は元と同じ）。
+    shapely の buffer で正しく縮めた輪郭に、元の頂点を最近点で投影する。曲率のきつい角（半径 < d）でも
+    輪郭が裏返らない。shapely が無ければ単純な辺の平行移動（きつい角で破綻しうる）にフォールバックする。"""
+    try:
+        from shapely.geometry import Point, Polygon
+    except ImportError:
+        return _inset_naive(pts, d)
+    poly = Polygon(pts).buffer(-d, join_style="round", quad_segs=8)
+    if poly.geom_type != "Polygon" or poly.is_empty:
+        poly = max(getattr(poly, "geoms", [poly]), key=lambda g: g.area)
+    ring = poly.exterior
+    out = []
+    for q in pts:
+        c = ring.interpolate(ring.project(Point(q)))
+        out.append((c.x, c.y))
+    return out
+
+
+def _inset_naive(pts, d):
     n = len(pts)
     out = []
     for i in range(n):
@@ -243,6 +261,31 @@ def _inset(pts, d):
         k = 1 + n1[0] * n2[0] + n1[1] * n2[1]
         k = max(k, 0.25)  # 鋭角の頂点で極端に飛び出さないよう制限
         out.append((p1[0] + d * (n1[0] + n2[0]) / k, p1[1] + d * (n1[1] + n2[1]) / k))
+    return out
+
+
+def smooth(points, per_seg=6):
+    """Catmull-Rom（centripetal）で点列をなめらかな曲線に補間する（端点を通る開いた曲線）。"""
+    pts = [points[0]] + list(points) + [points[-1]]
+    out = []
+    for i in range(1, len(pts) - 2):
+        p0, p1, p2, p3 = (np.array(pts[k], dtype=float) for k in (i - 1, i, i + 1, i + 2))
+        def tj(ti, a, b):
+            return ti + max(np.linalg.norm(b - a), 1e-6) ** 0.5
+        t0 = 0.0
+        t1 = tj(t0, p0, p1)
+        t2 = tj(t1, p1, p2)
+        t3 = tj(t2, p2, p3)
+        for k in range(per_seg):
+            t = t1 + (t2 - t1) * k / per_seg
+            a1 = (t1 - t) / (t1 - t0) * p0 + (t - t0) / (t1 - t0) * p1
+            a2 = (t2 - t) / (t2 - t1) * p1 + (t - t1) / (t2 - t1) * p2
+            a3 = (t3 - t) / (t3 - t2) * p2 + (t - t2) / (t3 - t2) * p3
+            b1 = (t2 - t) / (t2 - t0) * a1 + (t - t0) / (t2 - t0) * a2
+            b2 = (t3 - t) / (t3 - t1) * a2 + (t - t1) / (t3 - t1) * a3
+            c = (t2 - t) / (t2 - t1) * b1 + (t - t1) / (t2 - t1) * b2
+            out.append((float(c[0]), float(c[1])))
+    out.append(tuple(points[-1]))
     return out
 
 
