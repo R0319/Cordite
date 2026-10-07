@@ -7,7 +7,8 @@ AR-15 系パーツライブラリのメッシュ版（単位 mm）。ar15_parts 
 import math
 
 from ar15_parts import *  # noqa: F401,F403  角張った部品・Layout・寸法定数はそのまま使う
-from ar15_parts import L, MAG_ANGLE, grip_outline, guard_outline, trigger_outline, lower_body
+from ar15_parts import (L, MAG_ANGLE, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
+                        lower_common as _lower_common, lower_rear_outline, ref_zy, REF_LOWER_REAR, magwell_outline)
 from core import box, lathe, extrude_x, extrude_x_beveled
 import materials as M
 
@@ -70,10 +71,11 @@ def flash_hider_a2(l=L):
 
 def buffer_tube(l=L):
     c = l.bore_y - 4
+    z0 = l.lower_rear_z
     return [
-        lathe(0, c, [(62, 15), (l.buffer_end_z - 3, 15), (l.buffer_end_z, 13.5)], N_BIG, M.RECEIVER),
-        lathe(0, c, [(62, 17.5), (72, 17.5)], N_SMALL, M.STEEL_DARK),       # キャッスルナット（八角）
-        box(-16, c - 16, 63, 16, c + 16, 67, M.STEEL_DARK),                 # エンドプレート
+        lathe(0, c, [(z0, 15), (l.buffer_end_z - 3, 15), (l.buffer_end_z, 13.5)], N_BIG, M.RECEIVER),
+        lathe(0, c, [(z0, 17.5), (z0 + 10, 17.5)], N_SMALL, M.STEEL_DARK),  # キャッスルナット（八角）
+        box(-16, c - 16, z0 + 1, 16, c + 16, z0 + 5, M.STEEL_DARK),         # エンドプレート
     ]
 
 
@@ -86,7 +88,35 @@ def trigger(l=L):
 
 
 def trigger_guard(l=L):
-    return [extrude_x_beveled(guard_outline(l), -6, 6, 1.5, M.RECEIVER, steps=1)]
+    rear, front = ear_outlines(l)
+    return [
+        extrude_x_beveled(rear, -12, 12, 1.5, M.RECEIVER, steps=1),      # 後ろの耳（レシーバーの一部）
+        extrude_x_beveled(front, -12, 12, 1.5, M.RECEIVER, steps=1),     # 前の耳
+        extrude_x_beveled(guard_bar_outline(l), -6, 6, 1.0, M.RECEIVER, steps=1),  # ガード下辺
+    ]
+
+
+def lower_common(l=L):
+    return _lower_common(l, magwell)
+
+
+def lower_body(l=L):
+    b = l.bore_y
+    lb = b + l.lower_bottom
+    zg = ref_zy(l, [REF_LOWER_REAR[0]])[0][0]
+    return lower_common(l) + [
+        box(-12, lb, l.magwell_rear_z, 12, b + l.upper_bottom, zg, M.RECEIVER),        # トリガーメカ部
+        extrude_x(lower_rear_outline(l), -12.5, 12.5, M.RECEIVER),                     # 後部（下面が後ろへ反り上がる）
+    ]
+
+
+def magwell(l=L):
+    """マグウェル: 下端は前ほど高い斜めの切り口。下端に一回り太い縁（フレア）。"""
+    pts = magwell_outline(l)
+    (zr, _), (_, yr), (zf, yf), _ = pts
+    k = (yf - yr) / (zf - zr)
+    lip = [(zr + 2, yr - 0.5), (zf - 2, yf + (-2) * k - 0.5), (zf - 2, yf + (-2) * k + 6), (zr + 2, yr + 6)]
+    return [extrude_x(pts, -15, 15, M.RECEIVER), extrude_x_beveled(lip, -16.5, 16.5, 1.0, M.RECEIVER, steps=1)]
 
 
 def lower_receiver(l=L):
@@ -97,7 +127,7 @@ def magazine_stanag(l=L):
     """STANAG 30 発弾倉。上 100mm は直線、下 80mm を半径一定で前方へ曲げる（実物と同じ「バナナ」形）。"""
     b = l.bore_y
     top, split = b - 24, b - 125
-    zc, half = -85.0, 32.0
+    zc, half = l.mag_center_z, 32.0
     arc_len, steps = 80.0, 6
     radius = arc_len / math.radians(MAG_ANGLE)
     center = [(zc, top), (zc, split)]
@@ -119,7 +149,7 @@ def magazine_stanag(l=L):
     return [
         extrude_x(body, -11, 11, M.MAG),
         extrude_x(plate, -13, 13, M.STEEL_DARK),
-        box(-11.6, split + 5, -110, 11.6, split + 65, -60, M.MAG),       # 側面のリブ（直線部）
+        box(-11.6, split + 5, zc - 25, 11.6, split + 65, zc + 25, M.MAG),  # 側面のリブ（直線部）
     ]
 
 

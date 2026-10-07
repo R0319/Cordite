@@ -19,20 +19,24 @@ RAIL_W_MM = 1.0 * MM_PER_PX   # レール幅 = 1.0px（規約）
 
 class Layout:
     """部品どうしの取り合い寸法。銃ごとにここだけ変えれば同系統の別銃（M16/HK416 等）に流用できる。"""
-    bore_y = 140.0          # ボア軸高さ（グリップ底面基準）
-    bolt_face_z = -110.0    # ボルトフェイス（銃身の根元）
+    bore_y = 158.0          # ボア軸高さ（グリップ底面基準。写真のグリップはレシーバー下面から約104mm下まである）
+    bolt_face_z = -95.0     # ボルトフェイス（銃身の根元）。上部レシーバー前端から約30mm奥（バレルエクステンション分）
     barrel_len = 368.0      # 14.5in
-    upper_front_z = -155.0
-    upper_rear_z = 30.0
+    upper_front_z = -125.0  # 上部レシーバー前端（写真から）
+    upper_rear_z = 70.0     # 上部レシーバー後端（写真から。下部の後端より少し前）
     upper_top = 17.0        # ボア軸からの上面高さ
     upper_bottom = -20.0    # 上下レシーバー分割線
-    rail_slots = 14
+    rail_slots = 16         # 写真のレール長 約192mm ÷ 12mm（規約の 0.5px/スロット）
     rail_h = 9.0
     sight_h = 66.0          # ボア軸→照準線（AR 系 2.6in）
     gas_z = -346.0          # フロントサイトベース後端（カービン長ガス）
-    handguard_front_z = -340.0
-    handguard_rear_z = -172.0
-    lower_bottom = -58.0    # トリガーメカ部の下面（ボア軸基準）
+    handguard_front_z = -338.0
+    handguard_rear_z = -152.0   # 銃身ナット（上部レシーバー前端の 15mm 前）の前
+    magwell_front_z = -114.0    # マグウェル前面（写真から）
+    magwell_rear_z = -42.0      # マグウェル後面＝ガードの前の耳（写真から）
+    mag_center_z = -78.0        # 弾倉の前後中心
+    lower_bottom = -54.4    # トリガーメカ部の下面（ボア軸基準）。写真のレール上面→この面が 80.4mm になるよう合わせた
+    lower_rear_z = 88.0     # 下部レシーバーの後端（バッファチューブの付け根。写真から）
     buffer_end_z = 245.0
     butt_z = 304.0
 
@@ -56,12 +60,12 @@ def upper_receiver(l=L):
         # 銃身ナット部（上部レシーバー前端のリング）
         *round_rod(0, b, l.upper_front_z - 15, l.upper_front_z, 32, M.STEEL_DARK),
         # エジェクションポートカバー（右側面）
-        box(-14.8, b - 8, -100, -14, b + 6, -35, M.STEEL_DARK),
+        box(-14.8, b - 8, l.bolt_face_z + 5, -14, b + 6, l.bolt_face_z + 70, M.STEEL_DARK),
         # フォワードアシスト（右後方）＋ボタン
-        box(-21, b - 1, -12, -13, b + 13, 16, M.RECEIVER),
-        box(-24, b + 1, 8, -19, b + 11, 20, M.STEEL_DARK),
+        box(-21, b - 1, l.bolt_face_z + 90, -13, b + 13, l.bolt_face_z + 125, M.RECEIVER),
+        box(-24, b + 1, l.bolt_face_z + 118, -19, b + 11, l.bolt_face_z + 130, M.STEEL_DARK),
         # ブラスディフレクター
-        box(-19, b + 2, -36, -13, b + 14, -24, M.RECEIVER),
+        box(-19, b + 2, l.bolt_face_z + 73, -13, b + 14, l.bolt_face_z + 85, M.RECEIVER),
     ]
 
 
@@ -88,12 +92,13 @@ def charging_handle(l=L):
 def bolt_carrier(l=L):
     """エジェクションポート奥に見えるボルトキャリア（射撃アニメで前後させる部品）。"""
     b = l.bore_y
-    return [box(-13.6, b - 7, -98, -6, b + 5, -37, M.STEEL)]
+    return [box(-13.6, b - 7, l.bolt_face_z + 7, -6, b + 5, l.bolt_face_z + 68, M.STEEL)]
 
 
-def rear_sight(l=L, z=0.0):
+def rear_sight(l=L, z=None):
     """フリップアップ式リアサイト（アパーチャー中心＝照準線）。z はクランプ前端。"""
     rt, sl = l.rail_top_y, l.bore_y + l.sight_h
+    z = l.upper_rear_z - 30 if z is None else z
     return [
         box(-13, rt, z, 13, rt + 8, z + 26, M.STEEL_DARK),            # レールクランプ
         box(-10, rt + 8, z + 6, 10, sl - 16, z + 18, M.STEEL_DARK),   # 支柱
@@ -174,81 +179,185 @@ def flash_hider_a2(l=L):
 
 
 # ---------------------------------------------------------------- 下部
+# 下回り（レシーバー後部の下面・トリガーガード・トリガー・グリップ）の側面形状は、作者提供の写真
+# （M4 ロアレシーバー＋Engage 系グリップの真横写真）から抽出した輪郭を使う。
+#   縮尺: 上部レールの刻み（MIL-STD-1913、10mm 間隔）が写真上 25px → 2.5px/mm
+#   基準: 写真上 x=265 がトリガー（Z=0）、y=232 がトリガーメカ部のレシーバー下面（lb）
+#   写真は銃口が +x、下が +y。Z = (265 - x) / 2.5、Y = lb - (y - 232) / 2.5
+REF_PX_PER_MM = 2.5
+REF_TRIGGER_X = 265.0
+REF_LOWER_Y = 232.0
+
+REF_GRIP = [  # グリップの輪郭（写真の画素座標）。上面の前端から時計回り
+    (213, 232), (137, 232),                                     # 上面（レシーバー下面に接する）
+    (117, 207), (95, 193), (73, 185), (55, 190), (52, 196),     # 後ろ上端の張り出し（上縁はレシーバー後部の下面に沿う）
+    (73, 197), (89, 210), (99, 220), (104, 230), (107, 240),    # 張り出しの下（手の水かきが当たる凹み）
+    (109, 250), (108, 260), (105, 270), (100, 280), (95, 290),
+    (87, 300), (81, 310), (74, 320), (67, 330), (60, 340),      # 背面（滑り止めの刻みは輪郭から除いて平均化）
+    (54, 352), (49, 362), (43, 372), (39, 380), (33, 392),
+    (28, 404), (23, 416), (18, 428), (15, 440), (17, 446),
+    (30, 453), (50, 463), (70, 472), (90, 480), (110, 488), (120, 491),   # 底（前下がり）
+    (129, 488), (136, 476), (136, 460), (138, 452), (142, 444),          # 底→前面の角
+    (148, 436), (159, 428), (160, 416), (160, 404), (163, 396),          # 前面下部（小指）
+    (167, 388), (173, 380), (183, 372), (185, 368),                      # 指掛けの膨らみ（薬指の上）
+    (184, 360), (184, 352), (186, 344), (188, 340), (192, 330),          # 前面上部（中指・薬指）
+    (198, 320), (206, 315), (213, 300),                                  # 前面の上端（レシーバー後ろの耳に接する）
+]
+REF_LOWER_REAR = [  # レシーバー後部の下面（グリップ上面の後端から、張り出しの上縁に沿ってバッファチューブ受けまで）
+    (137, 232), (117, 207), (95, 193), (73, 185), (45, 182),
+]
+REF_OPENING_REAR = [  # トリガーガード内側の開口の後ろ側（上→下）
+    (253, 238), (247, 242), (243, 246), (240, 250), (238, 254), (237, 258), (236, 262), (235, 266),
+    (235, 270), (236, 274), (237, 278), (239, 282), (241, 286), (244, 290), (248, 294), (253, 298), (255, 302),
+]
+REF_OPENING_FRONT = [  # 開口の前側（上→下）
+    (341, 238), (347, 242), (351, 246), (354, 250), (356, 254), (357, 258), (358, 262), (359, 266),
+    (359, 270), (358, 274), (357, 278), (355, 282), (353, 286), (350, 290), (347, 294), (345, 298), (342, 302),
+]
+REF_GUARD_BOTTOM_Y = 311     # ガード下辺の下面
+REF_EAR_REAR_X = 213         # 後ろの耳の後端（＝グリップ前面）
+REF_EAR_BOTTOM_Y = 315       # 後ろの耳の下端
+REF_TRIGGER_REAR = [(266, 235), (264, 241), (262, 247), (261, 253), (260, 259), (260, 265), (261, 271),
+                    (262, 277), (264, 283), (267, 289), (272, 295), (274, 298)]   # トリガー後面（上→下）
+REF_TRIGGER_FRONT = [(286, 235), (279, 241), (274, 247), (271, 253), (269, 259), (268, 265), (268, 271),
+                     (268, 277), (270, 283), (272, 289), (276, 295), (276, 298)]  # トリガー前面（指を掛ける面）
+
+
+def ref_zy(l, pts):
+    lb = l.bore_y + l.lower_bottom
+    return [((REF_TRIGGER_X - x) / REF_PX_PER_MM, lb - (y - REF_LOWER_Y) / REF_PX_PER_MM) for x, y in pts]
+
+
 def lower_receiver(l=L):
     return lower_body(l) + trigger_guard(l)
 
 
+def lower_rear_outline(l=L):
+    """レシーバー後部（トリガーメカ部の後ろ〜バッファチューブ受け）の側面形状。下面は後ろへ反り上がる。"""
+    b = l.bore_y
+    under = ref_zy(l, REF_LOWER_REAR)
+    zr = under[-1][0]
+    return under + [(zr, b + 14), (l.upper_rear_z, b + 14), (l.upper_rear_z, b + l.upper_bottom),
+                    (under[0][0], b + l.upper_bottom)]
+
+
 def lower_body(l=L):
+    """キューブ版。メッシュ版は ar15_mesh.lower_body でレシーバー後部だけ輪郭の押し出しに置き換える。"""
     b = l.bore_y
     lb = b + l.lower_bottom
+    zg = ref_zy(l, [REF_LOWER_REAR[0]])[0][0]    # グリップ上面の後端
+    return lower_common(l) + [
+        box(-12, lb, l.magwell_rear_z, 12, b + l.upper_bottom, zg, M.RECEIVER),             # トリガーメカ部
+        box(-12.5, lb + 10, zg, 12.5, b + 14, l.lower_rear_z - 8, M.RECEIVER),           # 後部（下面の反り上がりを段で近似）
+        box(-12.5, lb + 18, l.lower_rear_z - 8, 12.5, b + 14, l.lower_rear_z, M.RECEIVER),
+        box(-12.5, b + l.upper_bottom, l.upper_rear_z, 12.5, b + 14, zg, M.RECEIVER),
+    ]
+
+
+def lower_common(l=L, magwell_fn=None):
+    """マグウェルとピン・レバー類。magwell_fn でマグウェルの作り方（キューブ/メッシュ）を差し替える。"""
+    b = l.bore_y
     return [
-        box(-15, b - 95, -122, 15, b + l.upper_bottom, -45, M.RECEIVER),     # マグウェル
-        box(-16.5, b - 95, -124, 16.5, b - 85, -43, M.RECEIVER),             # マグウェル下端のフレア
-        box(-12, lb, -45, 12, b + l.upper_bottom, 62, M.RECEIVER),           # トリガーメカ部
-        box(-13, b + l.upper_bottom, l.upper_rear_z, 13, b + 14, 62, M.RECEIVER),  # バッファチューブ受け
-        box(-15.8, b - 18, -115, 15.8, b - 12, -109, M.STEEL_DARK),          # 前ピン
-        box(-15, b - 18, 42, 15, b - 12, 48, M.STEEL_DARK),                  # 後ピン
+        *(magwell_fn or magwell)(l),
+        box(-15.8, b - 18, l.magwell_front_z + 6, 15.8, b - 12, l.magwell_front_z + 12, M.STEEL_DARK),  # 前ピン
+        box(-13.3, b - 18, 42, 13.3, b - 12, 48, M.STEEL_DARK),              # 後ピン
         box(-16, b - 45, -42, -12, b - 37, -34, M.STEEL_DARK),               # マガジンキャッチ（右）
         box(12, b - 30, -48, 15, b - 14, -38, M.STEEL_DARK),                 # ボルトキャッチ（左）
         box(12, b - 38, 18, 14.5, b - 32, 38, M.STEEL_DARK),                 # セレクター（左）
     ]
 
 
-# ---- 下回りの側面形状（z, y）。メッシュ版はこの輪郭をそのまま押し出し、キューブ版は箱で近似する
-def guard_outline(l=L):
-    """トリガーガード: 前端はマグウェル後面のピン、後端は上へ曲がってグリップ前面に入る。"""
+REF_MAGWELL_BOTTOM_REAR_Y = 307   # マグウェル下端（後ろ）。下端は前ほど高い斜めの切り口
+REF_MAGWELL_BOTTOM_FRONT_Y = 275  # マグウェル下端（前）
+
+
+def magwell_outline(l=L):
     lb = l.bore_y + l.lower_bottom
-    return [(-45, lb - 18), (-38, lb - 18), (-38, lb - 22), (14, lb - 22), (19, lb - 19), (21, lb - 12),
-            (27, lb - 12), (25, lb - 22), (20, lb - 27), (-45, lb - 27)]
+    yr = lb - (REF_MAGWELL_BOTTOM_REAR_Y - REF_LOWER_Y) / REF_PX_PER_MM
+    yf = lb - (REF_MAGWELL_BOTTOM_FRONT_Y - REF_LOWER_Y) / REF_PX_PER_MM
+    top = l.bore_y + l.upper_bottom
+    return [(l.magwell_rear_z, top), (l.magwell_rear_z, yr), (l.magwell_front_z, yf), (l.magwell_front_z, top)]
+
+
+def magwell(l=L):
+    """キューブ版: 斜めの下端を 3 段で近似。"""
+    (zr, top), (_, yr), (zf, yf), _ = magwell_outline(l)
+    out = []
+    for i in range(3):
+        z0 = zr + (zf - zr) * i / 3
+        z1 = zr + (zf - zr) * (i + 1) / 3
+        y = yr + (yf - yr) * (i + 0.5) / 3
+        out.append(box(-15, y, z0, 15, top, z1, M.RECEIVER))
+    return out
+
+
+# ---- 下回りの側面形状（z, y）。メッシュ版はこの輪郭をそのまま押し出し、キューブ版は箱で近似する
+def ear_outlines(l=L):
+    """トリガーガードの前後の耳（レシーバーの一部）。内側の縁がガード開口の輪郭。"""
+    lb = l.bore_y + l.lower_bottom
+    rear_in = ref_zy(l, REF_OPENING_REAR)
+    front_in = ref_zy(l, REF_OPENING_FRONT)
+    ear_z = (REF_TRIGGER_X - REF_EAR_REAR_X) / REF_PX_PER_MM
+    ear_y = lb - (REF_EAR_BOTTOM_Y - REF_LOWER_Y) / REF_PX_PER_MM
+    gy = lb - (REF_GUARD_BOTTOM_Y - REF_LOWER_Y) / REF_PX_PER_MM
+    rear = [(rear_in[0][0], lb)] + rear_in + [(rear_in[-1][0] + 2, gy), (ear_z, ear_y), (ear_z, lb)]
+    front = [(l.magwell_rear_z - 3, lb), (l.magwell_rear_z - 3, gy), (front_in[-1][0] - 2, gy)] + front_in[::-1] \
+        + [(front_in[0][0], lb)]
+    return rear, front
+
+
+def guard_bar_outline(l=L):
+    """ガードの下辺（薄い板）。両端は耳に埋まる。"""
+    lb = l.bore_y + l.lower_bottom
+    gy = lb - (REF_GUARD_BOTTOM_Y - REF_LOWER_Y) / REF_PX_PER_MM
+    rear_z = ref_zy(l, REF_OPENING_REAR)[-1][0] + 2
+    front_z = ref_zy(l, REF_OPENING_FRONT)[-1][0] - 2
+    return [(rear_z, gy), (rear_z, gy + 3.2), (front_z, gy + 3.2), (front_z, gy)]
 
 
 def trigger_outline(l=L):
-    """トリガー: 上端はレシーバー内、下へ行くほど前へ反り、先端が前を向く（指を掛ける前面が凹む）。"""
+    """トリガー: 前面（指を掛ける面）が凹み、先端が前を向く。写真の刃を 0.5mm ずつ太らせる（細すぎて見えないため）。"""
     lb = l.bore_y + l.lower_bottom
-    back = [(4, lb + 4), (4, lb - 2), (3.3, lb - 8), (1.3, lb - 13), (-1.5, lb - 17.5)]
-    tip = [(-3.5, lb - 18.2)]
-    front = [(-5.3, lb - 16.2), (-3.5, lb - 13.2), (-2.2, lb - 8), (-2, lb - 2), (-2, lb + 4)]
-    return back + tip + front
+    rear = [(z + 0.5, y) for z, y in ref_zy(l, REF_TRIGGER_REAR)]
+    front = [(z - 0.5, y) for z, y in ref_zy(l, REF_TRIGGER_FRONT)]
+    return [(rear[0][0], lb + 4)] + rear + [(sum(p[0] for p in (rear[-1], front[-1])) / 2, rear[-1][1] - 1)] \
+        + front[::-1] + [(front[0][0], lb + 4)]
 
 
-GRIP_CURVE = [  # A2 グリップの輪郭の通過点（z, ボア軸下のレシーバー下面からの y）。上面以外はこの点を曲線で結ぶ
-    (60, 0),                                   # 上面の後端
-    (66, -3), (67.5, -8.5),                    # 後ろ上端の張り出し（手の水かきが当たる）
-    (65, -16),                                 # 張り出しの下のくびれ
-    (69, -30), (73.5, -46), (78.5, -62),       # 背面（外へゆるく膨らむ）
-    (82, -73), (80, -81),                      # 背面→底の丸い角
-    (68, -84.5), (54, -83.5),                  # 底（わずかに傾く）
-    (46.5, -79), (43, -70),                    # 底→前面の丸い角
-    (40.5, -60), (37, -51.5),                  # 前面下部（薬指・小指）
-    (32, -45), (28.5, -40), (30, -34.5),       # 指掛けの膨らみ（中指と薬指の間）
-    (28.5, -27),                               # 中指の凹み
-    (24, -17), (19.5, -8), (16, 0),            # 上部（トリガーガード後端と合流）
-]
+def grip_outline(l=L):
+    return ref_zy(l, REF_GRIP)
 
 
-def grip_outline(l=L, per_seg=3):
-    """A2 グリップの側面形状: 上面はレシーバー下面と平行（水平な直線）、残りは曲線。"""
-    from core import smooth
-    lb = l.bore_y + l.lower_bottom
-    curve = smooth(GRIP_CURVE, per_seg)
-    return [(z, lb + y) for z, y in curve]
+def polygon_centroid(pts):
+    a = cx = cy = 0.0
+    for i in range(len(pts)):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % len(pts)]
+        c = x0 * y1 - x1 * y0
+        a += c
+        cx += (x0 + x1) * c
+        cy += (y0 + y1) * c
+    a *= 0.5
+    return cx / (6 * a), cy / (6 * a)
 
 
 def trigger_guard(l=L):
     lb = l.bore_y + l.lower_bottom
+    (r0, r1), (f0, f1) = [(min(p[0] for p in o), max(p[0] for p in o)) for o in ear_outlines(l)]
+    gy = guard_bar_outline(l)[0][1]
     return [
-        box(-6, lb - 27, -45, 6, lb - 18, -38, M.RECEIVER),     # 前端
-        box(-6, lb - 27, -38, 6, lb - 22, 20, M.RECEIVER),      # 下辺
-        box(-6, lb - 27, 19, 6, lb - 12, 26, M.RECEIVER),       # 後端（グリップへ）
+        box(-12, gy, r0 + 3, 12, lb, r1, M.RECEIVER),           # 後ろの耳
+        box(-12, gy, f0, 12, lb, f1 - 3, M.RECEIVER),           # 前の耳
+        box(-6, gy, f1 - 5, 6, gy + 3.2, r0 + 5, M.RECEIVER),   # 下辺
     ]
 
 
 def trigger(l=L):
     lb = l.bore_y + l.lower_bottom
     return [
-        box(-3, lb - 6, -2, 3, lb + 4, 4, M.STEEL_DARK),
-        box(-3, lb - 12, -3.5, 3, lb - 6, 2.5, M.STEEL_DARK),
-        box(-3, lb - 18, -5.5, 3, lb - 12, 0, M.STEEL_DARK),    # 先端は前へ
+        box(-3, lb - 6, -7, 3, lb + 4, 1, M.STEEL_DARK),
+        box(-3, lb - 18, -1.5, 3, lb - 6, 2.5, M.STEEL_DARK),
+        box(-3, lb - 26, -4.5, 3, lb - 18, 0.5, M.STEEL_DARK),  # 先端は前へ
     ]
 
 
@@ -256,26 +365,27 @@ GRIP_ANGLE = 22.0
 
 
 def grip_frame(l=L):
-    """A2 グリップの回転基準（上端前縁）と角度。"""
-    return (0.0, l.bore_y + l.lower_bottom, 14.0), (GRIP_ANGLE, 0.0, 0.0)
+    """キューブ版グリップの回転基準（上端前縁）と角度。"""
+    return (0.0, l.bore_y + l.lower_bottom, 21.0), (GRIP_ANGLE, 0.0, 0.0)
 
 
 def pistol_grip(l=L):
     (px, py, pz), rot = grip_frame(l)
     top = py
     return [
-        box(-14, top - 92, pz, 14, top, pz + 46, M.POLYMER, rotation=rot, pivot=(px, py, pz)),
-        box(-13, top - 52, pz - 7, 13, top - 38, pz, M.POLYMER, rotation=rot, pivot=(px, py, pz)),    # 指掛け
-        box(-12, top - 8, 50, 12, top, 66, M.POLYMER),     # 上端の張り出し（傾けない＝レシーバー下面に沿う）
+        box(-14, top - 112, pz, 14, top, pz + 40, M.POLYMER, rotation=rot, pivot=(px, py, pz)),
+        box(-13, top - 62, pz - 6, 13, top - 50, pz, M.POLYMER, rotation=rot, pivot=(px, py, pz)),    # 指掛け
+        box(-12, top + 6, 60, 12, top + 16, 84, M.POLYMER),     # 後ろ上端の張り出し
     ]
 
 
 def buffer_tube(l=L):
     c = l.bore_y - 4
+    z0 = l.lower_rear_z
     return [
-        *round_rod(0, c, 62, l.buffer_end_z, 30, M.RECEIVER),
-        *round_rod(0, c, 62, 72, 35, M.STEEL_DARK),                       # キャッスルナット
-        box(-16, c - 16, 63, 16, c + 16, 67, M.STEEL_DARK),               # エンドプレート
+        *round_rod(0, c, z0, l.buffer_end_z, 30, M.RECEIVER),
+        *round_rod(0, c, z0, z0 + 10, 35, M.STEEL_DARK),                  # キャッスルナット
+        box(-16, c - 16, z0 + 1, 16, c + 16, z0 + 5, M.STEEL_DARK),       # エンドプレート
     ]
 
 
@@ -303,13 +413,14 @@ def magazine_stanag(l=L):
     """STANAG 30 発弾倉。上半分は直線、下半分を前方へ曲げる（実物の湾曲を 2 分割で近似）。"""
     b = l.bore_y
     top, split = b - 24, b - 125
-    piv = (0, split, -53)
+    zf, zr = l.mag_center_z - 32, l.mag_center_z + 32
+    piv = (0, split, zr)
     rot = (-MAG_ANGLE, 0, 0)
     return [
-        box(-11, split, -117, 11, top, -53, M.MAG),
-        box(-11, split - 80, -117, 11, split, -53, M.MAG, rotation=rot, pivot=piv),
+        box(-11, split, zf, 11, top, zr, M.MAG),
+        box(-11, split - 80, zf, 11, split, zr, M.MAG, rotation=rot, pivot=piv),
         box(-13, split - 86, -121, 13, split - 78, -49, M.STEEL_DARK, rotation=rot, pivot=piv),  # フロアプレート
-        box(-11.6, split + 5, -110, 11.6, split + 65, -60, M.MAG),      # 側面のリブ（直線部）
+        box(-11.6, split + 5, zf + 7, 11.6, split + 65, zr - 7, M.MAG),  # 側面のリブ（直線部）
     ]
 
 

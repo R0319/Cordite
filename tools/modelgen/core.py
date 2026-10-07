@@ -557,8 +557,11 @@ _FACE_UV = [(0, 0), (1, 0), (1, 1), (0, 1)]
 
 
 def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 900,
-           ss: int = 2, background=(0, 0, 0, 0), skip_bones=("right_hand", "left_hand")) -> Image.Image:
-    """正射影で描画する。yaw=90 で左側面（+X 側から -X を見る）。背景は既定で透明。"""
+           ss: int = 2, background=(0, 0, 0, 0), skip_bones=("right_hand", "left_hand"),
+           fixed=None) -> Image.Image:
+    """正射影で描画する。yaw=90 で左側面（+X 側から -X を見る）。背景は既定で透明。
+    fixed=(倍率, x0, y0, 幅, 高さ) を渡すと自動の拡大縮小をやめ、画面座標 = (x*倍率 + x0, y0 - y*倍率) で描く
+    （写真との重ね合わせ用）。"""
     texa = np.asarray(tex.convert("RGBA"), dtype=np.float32)
     th, tw = texa.shape[:2]
     cy, sy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
@@ -608,13 +611,18 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
                 uvs = [((u0 + a * uw) / tw, (v0 + b * vh) / th) for a, b in _FACE_UV]
                 quads.append((np.array(pts), uvs))
 
-    allp = np.concatenate([q[0] for q in quads]) @ view.T
-    lo, hi = allp[:, :2].min(0), allp[:, :2].max(0)
-    span = hi - lo
-    W = width * ss
-    scale = (W * 0.94) / span[0]
-    H = int(span[1] * scale / 0.94) + 2 * ss
-    off = np.array([W * 0.03, H * 0.03]) - lo * scale * np.array([1, 1])
+    if fixed is not None:
+        fs, fx0, fy0, fw, fh = fixed
+        W, H, scale = fw * ss, fh * ss, fs * ss
+        off = np.array([fx0 * ss, H - fy0 * ss])
+    else:
+        allp = np.concatenate([q[0] for q in quads]) @ view.T
+        lo, hi = allp[:, :2].min(0), allp[:, :2].max(0)
+        span = hi - lo
+        W = width * ss
+        scale = (W * 0.94) / span[0]
+        H = int(span[1] * scale / 0.94) + 2 * ss
+        off = np.array([W * 0.03, H * 0.03]) - lo * scale * np.array([1, 1])
     color = np.zeros((H, W, 4), dtype=np.float32)
     color[:] = background
     depth = np.full((H, W), -1e9, dtype=np.float32)
