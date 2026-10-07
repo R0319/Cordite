@@ -6,6 +6,9 @@ Bedrock Edition 形式（.geo.json）の銃モデルをスクリプトから生�
 - テクスチャは面ごとに矩形を割り当てて自動で詰め込み（作者が後から塗り直せる配置になる）、
   材質（Material）の色で塗った PNG を同時に出力する
 - render() は BedrockGeometryLoader と同じ回転規則で描画するプレビュー（実機を見られない代わりの確認手段）
+- メッシュ（MeshPart）はボーンの poly_mesh として出力する。形式は Blockbench の Meshy プラグイン
+  （Shadowkitten47/Meshy）の書き出しに合わせる: positions は銃全体の共通座標（キューブの origin と同じ座標系）、
+  normalized_uvs=true、UV の V は下端基準（1 - v）、polys は 4 頂点（三角形は先頭頂点を 4 つ目に重ねる）
 """
 from __future__ import annotations
 
@@ -75,6 +78,144 @@ def round_rod(cx, cy, z0, z1, d, mat) -> list[Cube]:
 
 
 @dataclass
+class MeshPart:
+    """多角形メッシュ。faces は 3〜4 頂点（平面）。UV はチャート単位で矩形を割り当てる:
+    同じ chart 番号の面は 1 枚の矩形を共有し、chart_uv（px 単位の展開座標）で貼る。"""
+    verts: list
+    faces: list                     # [[i, j, k(, l)], ...]
+    mat: Material
+    normals: list | None = None     # 面ごと・頂点ごとの法線 [[n0, n1, ...], ...]。None なら面法線
+    charts: list | None = None      # 面ごとのチャート番号
+    chart_uv: list | None = None    # 面ごと・頂点ごとの展開座標 [(s, t), ...]（px）
+    chart_edge: dict = field(default_factory=dict)  # チャート番号 → 縁を暗くするか
+
+    def scaled(self, k: float) -> "MeshPart":
+        return MeshPart([tuple(c * k for c in v) for v in self.verts], self.faces, self.mat, self.normals,
+                        self.charts, None if self.chart_uv is None else
+                        [[(s * k, t * k) for s, t in f] for f in self.chart_uv], self.chart_edge)
+
+    def finalize(self):
+        """チャート未指定の面へ、平面投影のチャートを割り当てる。"""
+        if self.charts is None:
+            self.charts = [None] * len(self.faces)
+            self.chart_uv = [None] * len(self.faces)
+        nxt = max([c for c in self.charts if c is not None], default=-1) + 1
+        for fi, f in enumerate(self.faces):
+            if self.charts[fi] is not None:
+                continue
+            p = [np.array(self.verts[i], dtype=float) for i in f]
+            n = np.cross(p[1] - p[0], p[2] - p[0])
+            n /= np.linalg.norm(n) + 1e-12
+            u = p[1] - p[0]
+            u /= np.linalg.norm(u) + 1e-12
+            v = np.cross(n, u)
+            self.charts[fi] = nxt
+            self.chart_uv[fi] = [(float((q - p[0]) @ u), float((q - p[0]) @ v)) for q in p]
+            self.chart_edge.setdefault(nxt, len(f) == 4)
+            nxt += 1
+        return self
+
+
+def lathe(cx, cy, profile, n, mat, cap0=True, cap1=True) -> MeshPart:
+    """Z 軸まわりの回転体。profile=[(z, r), ...]（z 昇順）。側面は区間ごとに 1 本の帯へ展開する。"""
+    verts, faces, normals, charts, cuv = [], [], [], [], []
+    ring = []
+    for z, r in profile:
+        idx = []
+        for k in range(n):
+            a = 2 * math.pi * (k + 0.5) / n
+            idx.append(len(verts))
+            verts.append((cx + r * math.cos(a), cy + r * math.sin(a), z))
+        ring.append(idx)
+    edge = {}
+    for si in range(len(profile) - 1):
+        (z0, r0), (z1, r1) = profile[si], profile[si + 1]
+        circ = 2 * math.pi * max(r0, r1)
+        for k in range(n):
+            k2 = (k + 1) % n
+            a0, a1 = 2 * math.pi * (k + 0.5) / n, 2 * math.pi * (k + 1.5) / n
+            faces.append([ring[si][k], ring[si][k2], ring[si + 1][k2], ring[si + 1][k]])
+            normals.append([(math.cos(a0), math.sin(a0), 0), (math.cos(a1), math.sin(a1), 0),
+                            (math.cos(a1), math.sin(a1), 0), (math.cos(a0), math.sin(a0), 0)])
+            s0, s1 = circ * k / n, circ * (k + 1) / n
+            charts.append(si)
+            cuv.append([(s0, 0), (s1, 0), (s1, z1 - z0), (s0, z1 - z0)])
+        edge[si] = "rows"  # 帯の継ぎ目（周方向の端）は暗くしない
+    m = MeshPart(verts, faces, mat, normals, charts, cuv, edge)
+    for ri, cap, nz in ((0, cap0, -1), (len(profile) - 1, cap1, 1)):
+        if not cap or profile[ri][1] <= 0:
+            continue
+        c = len(m.verts)
+        m.verts.append((cx, cy, profile[ri][0]))
+        for k in range(n):
+            m.faces.append([c, ring[ri][k], ring[ri][(k + 1) % n]])
+            m.normals.append([(0, 0, nz)] * 3)
+            m.charts.append(None)
+            m.chart_uv.append(None)
+    return m.finalize()
+
+
+def extrude_x(profile, x0, x1, mat) -> MeshPart:
+    """側面形状 profile=[(z, y), ...]（単純多角形）を X 方向 x0〜x1 に押し出す。側面は 1 本の帯へ展開する。"""
+    pts = list(profile)
+    if _area2(pts) < 0:
+        pts.reverse()
+    n = len(pts)
+    verts = [(x0, y, z) for z, y in pts] + [(x1, y, z) for z, y in pts]
+    faces, charts, cuv = [], [], []
+    s = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        seg = math.dist(pts[i], pts[j])
+        faces.append([i, j, n + j, n + i])
+        charts.append(0)
+        cuv.append([(s, 0), (s + seg, 0), (s + seg, x1 - x0), (s, x1 - x0)])
+        s += seg
+    for tri in _triangulate(pts):
+        faces.append([tri[0], tri[2], tri[1]])
+        charts.append(None)
+        cuv.append(None)
+        faces.append([n + t for t in tri])
+        charts.append(None)
+        cuv.append(None)
+    return MeshPart(verts, faces, mat, None, charts, cuv, {0: "rows"}).finalize()
+
+
+def _area2(p):
+    return sum(p[i][0] * p[(i + 1) % len(p)][1] - p[(i + 1) % len(p)][0] * p[i][1] for i in range(len(p)))
+
+
+def _triangulate(p):
+    """耳切り法（反時計回りの単純多角形）。"""
+    idx = list(range(len(p)))
+    out = []
+    guard = 0
+    while len(idx) > 3 and guard < 10000:
+        guard += 1
+        for k in range(len(idx)):
+            a, b, c = idx[k - 1], idx[k], idx[(k + 1) % len(idx)]
+            ax, ay = p[a]; bx, by = p[b]; cx, cy = p[c]
+            if (bx - ax) * (cy - ay) - (by - ay) * (cx - ax) <= 1e-12:
+                continue
+            if any(_in_tri(p[o], p[a], p[b], p[c]) for o in idx if o not in (a, b, c)):
+                continue
+            out.append((a, b, c))
+            idx.pop(k)
+            break
+        else:
+            raise ValueError("三角形分割に失敗（自己交差した輪郭）")
+    out.append(tuple(idx))
+    return out
+
+
+def _in_tri(q, a, b, c):
+    def s(p1, p2, p3):
+        return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+    d1, d2, d3 = s(q, a, b), s(q, b, c), s(q, c, a)
+    return not ((d1 < 0 or d2 < 0 or d3 < 0) and (d1 > 0 or d2 > 0 or d3 > 0))
+
+
+@dataclass
 class Bone:
     name: str
     parent: str | None
@@ -100,7 +241,11 @@ class Model:
 
     @property
     def cube_count(self) -> int:
-        return sum(len(b.cubes) for b in self.bones)
+        return sum(1 for b in self.bones for c in b.cubes if isinstance(c, Cube))
+
+    @property
+    def mesh_face_count(self) -> int:
+        return sum(len(c.faces) for b in self.bones for c in b.cubes if isinstance(c, MeshPart))
 
 
 # ---------------------------------------------------------------- UV 展開＋テクスチャ
@@ -115,6 +260,14 @@ def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
     items = []  # (h, w, bone_idx, cube_idx, face)
     for bi, b in enumerate(model.bones):
         for ci, c in enumerate(b.cubes):
+            if isinstance(c, MeshPart):
+                for ch in sorted(set(c.charts)):
+                    pts = [q for fi, f in enumerate(c.faces) if c.charts[fi] == ch for q in c.chart_uv[fi]]
+                    s0, t0 = min(q[0] for q in pts), min(q[1] for q in pts)
+                    w = max(1, math.ceil((max(q[0] for q in pts) - s0) * density - 1e-6))
+                    h = max(1, math.ceil((max(q[1] for q in pts) - t0) * density - 1e-6))
+                    items.append((h, w, bi, ci, ("chart", ch, s0, t0)))
+                continue
             for f in c.faces:
                 fw, fh = _face_dims(c, f)
                 w = max(1, math.ceil(fw * density - 1e-6))
@@ -135,8 +288,13 @@ def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
     img = np.zeros((size, size, 4), dtype=np.uint8)
     uvs: dict[tuple[int, int, str], tuple[int, int, int, int]] = {}
     for (h, w, bi, ci, f), (u, v) in placed.items():
-        mat = model.bones[bi].cubes[ci].mat
-        _paint(img, u, v, w, h, mat, rng, f)
+        el = model.bones[bi].cubes[ci]
+        if isinstance(f, tuple):
+            mode = el.chart_edge.get(f[1])
+            _paint(img, u, v, w, h, el.mat, rng, "mesh_rows" if mode == "rows" else "mesh" if mode else "mesh_flat")
+            uvs[(bi, ci, f[1])] = (u, v, f[2], f[3])
+            continue
+        _paint(img, u, v, w, h, el.mat, rng, f)
         uvs[(bi, ci, f)] = (u, v, w, h)
 
     geo_bones = []
@@ -148,9 +306,14 @@ def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
         if b.parent:
             jb["parent"] = b.parent
         jb["pivot"] = [_r(v) for v in b.pivot]
-        if b.cubes:
+        meshes = [(ci, c) for ci, c in enumerate(b.cubes) if isinstance(c, MeshPart)]
+        if meshes:
+            jb["poly_mesh"] = _poly_mesh(meshes, bi, uvs, density, size)
+        if any(isinstance(c, Cube) for c in b.cubes):
             jb["cubes"] = []
             for ci, c in enumerate(b.cubes):
+                if isinstance(c, MeshPart):
+                    continue
                 jc: dict = {"origin": [_r(v) for v in c.origin], "size": [_r(v) for v in c.size]}
                 if c.rotation and any(abs(a) > 1e-9 for a in c.rotation):
                     jc["pivot"] = [_r(v) for v in (c.pivot or _center(c))]
@@ -160,6 +323,41 @@ def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
                 jb["cubes"].append(jc)
         geo_bones.append(jb)
     return geo_bones, Image.fromarray(img, "RGBA"), size
+
+
+def _poly_mesh(meshes, bi, uvs, density, size):
+    pm = {"normalized_uvs": True, "positions": [], "normals": [], "uvs": [], "polys": []}
+    nmap, umap = {}, {}
+
+    def idx(table, key, val):
+        if key not in table:
+            table[key] = len(pm[val[0]])
+            pm[val[0]].append(val[1])
+        return table[key]
+
+    for ci, m in meshes:
+        base = len(pm["positions"])
+        pm["positions"].extend([[_r(c) for c in v] for v in m.verts])
+        for fi, f in enumerate(m.faces):
+            if m.normals is not None:
+                ns = m.normals[fi]
+            else:
+                p = [np.array(m.verts[i]) for i in f]
+                n = np.cross(p[1] - p[0], p[2] - p[0])
+                n = n / (np.linalg.norm(n) + 1e-12)
+                ns = [tuple(n)] * len(f)
+            u0, v0, s0, t0 = uvs[(bi, ci, m.charts[fi])]
+            poly = []
+            for k, vi in enumerate(f):
+                nn = tuple(round(float(c), 4) + 0.0 for c in ns[k])
+                s, t = m.chart_uv[fi][k]
+                uv = (round((u0 + (s - s0) * density) / size, 5),
+                      round(1 - (v0 + (t - t0) * density) / size, 5))
+                poly.append([base + vi, idx(nmap, nn, ("normals", list(nn))), idx(umap, uv, ("uvs", list(uv)))])
+            while len(poly) < 4:
+                poly.append(poly[0])
+            pm["polys"].append(poly)
+    return pm
 
 
 def _shelf_pack(items, size):
@@ -184,12 +382,12 @@ def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
     for yy in range(h):
         for xx in range(w):
             k = 1.0 + (rng.uniform(-1, 1) * mat.noise if mat.noise else 0.0)
-            if mat.edge and w >= mat.edge_min and h >= mat.edge_min and (
-                    xx in (0, w - 1) or yy in (0, h - 1)):
+            if mat.edge and face != "mesh_flat" and w >= mat.edge_min and h >= mat.edge_min and (
+                    (xx in (0, w - 1) and face != "mesh_rows") or yy in (0, h - 1)):
                 k *= 1.0 - mat.edge
             if mat.stripe and face == "up" and (yy % mat.stripe) < mat.stripe // 2:
                 k *= 1.0 - mat.stripe_dark
-            if mat.dots and face not in ("north", "south") and w >= mat.dots and h >= mat.dots \
+            if mat.dots and face not in ("north", "south", "mesh_flat") and w >= mat.dots and h >= mat.dots \
                     and xx % mat.dots == mat.dots // 2 and yy % mat.dots == mat.dots // 2 \
                     and 0 < xx < w - 1 and 0 < yy < h - 1:
                 k *= 0.25
@@ -266,6 +464,22 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
     for jb in geo_bones:
         if jb["name"] in skip_bones:
             continue
+        pm = jb.get("poly_mesh")
+        if pm:
+            for poly in pm["polys"]:
+                uniq = []
+                for c in poly:
+                    if not uniq or c != uniq[-1]:
+                        uniq.append(c)
+                if len(uniq) > 1 and uniq[-1] == uniq[0]:
+                    uniq.pop()
+                pts = np.array([pm["positions"][c[0]] for c in uniq], dtype=float)
+                uvl = []
+                for c in uniq:
+                    u, v = pm["uvs"][c[2]]
+                    uvl.append((u, 1 - v) if pm.get("normalized_uvs") else (u / tw, 1 - v / th))
+                for k in range(1, len(uniq) - 1):
+                    quads.append((pts[[0, k, k + 1]], [uvl[0], uvl[k], uvl[k + 1]]))
         for jc in jb.get("cubes", []):
             uv = jc.get("uv")
             if not isinstance(uv, dict):
@@ -299,15 +513,15 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
 
     for pts, uvs in quads:
         vp = pts @ view.T
-        n = np.cross(pts[1] - pts[0], pts[3] - pts[0])
+        n = np.cross(pts[1] - pts[0], pts[-1] - pts[0])
         nn = np.linalg.norm(n)
         if nn < 1e-12:
             continue
         n /= nn
-        shade = 0.55 + 0.45 * max(0.0, float(n @ light))
+        shade = 0.55 + 0.45 * abs(float(n @ light))
         sx_ = vp[:, 0] * scale + off[0]
         sy_ = H - (vp[:, 1] * scale + off[1])
-        for tri in ((0, 1, 2), (0, 2, 3)):
+        for tri in (((0, 1, 2), (0, 2, 3)) if len(pts) == 4 else ((0, 1, 2),)):
             _raster(color, depth, texa, sx_[list(tri)], sy_[list(tri)], vp[list(tri), 2],
                     [uvs[i] for i in tri], shade, tw, th)
     img = Image.fromarray(np.clip(color, 0, 255).astype(np.uint8), "RGBA")

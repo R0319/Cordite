@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from core import Model, bake, render, write_geo
+import ar15_mesh
 import m4a1_parts
 import m4a1_pixel
 
@@ -16,6 +17,7 @@ VARIANTS = {
     # 名前: (組み立て関数, テクスチャ密度[テクセル/px])
     "m4a1_parts": (m4a1_parts.build, 8),
     "m4a1_pixel": (m4a1_pixel.build, 2),
+    "m4a1_mesh": (lambda: m4a1_parts.build(ar15_mesh), 8),
 }
 VIEWS = {"side_left": (90, 0), "side_right": (-90, 0), "three_quarter": (40, 22), "top": (90, 89.9),
          "front": (0, 8)}
@@ -37,7 +39,7 @@ def build_variant(name, fn, density):
         pg, ptex, psize = bake(pm, density)
         write_geo(d / "parts" / f"{pname}.geo.json", pg, psize)
         ptex.save(d / "parts" / f"{pname}.png")
-    stats = {"cubes": model.cube_count, "bones": len(model.bones), "texture": size,
+    stats = {"cubes": model.cube_count, "mesh_faces": model.mesh_face_count, "bones": len(model.bones), "texture": size,
              "texels_per_px": density, "parts": len(parts)}
     (d / "stats.json").write_text(json.dumps(stats, indent=1) + "\n")
     print(name, stats)

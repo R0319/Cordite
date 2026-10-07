@@ -1,6 +1,7 @@
 """
 M4A1（パーツ組立版）: ar15_parts の実寸パーツを、コードが参照するボーンへ割り当てて組み立てる。
 単位は部品側が mm、ここで px（÷24）へ変換する。
+build(P=ar15_mesh) とすると、丸・曲線の部品がメッシュ版に置き換わる（組み立ては共通）。
 """
 import numpy as np
 
@@ -15,7 +16,7 @@ def px(v):
     return tuple(c * K for c in v)
 
 
-def build() -> tuple[Model, dict]:
+def build(P=P) -> tuple[Model, dict]:
     l = P.L
     b = l.bore_y
     m = Model()
