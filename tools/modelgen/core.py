@@ -181,6 +181,71 @@ def extrude_x(profile, x0, x1, mat) -> MeshPart:
     return MeshPart(verts, faces, mat, None, charts, cuv, {0: "rows"}).finalize()
 
 
+def extrude_x_beveled(profile, x0, x1, bevel, mat, steps=2) -> MeshPart:
+    """extrude_x の角丸め版。X 方向の両端で輪郭を内側へ縮め（1/4 円を steps 段で近似）、
+    グリップ・ストックのような「角の丸い樹脂部品」を作る。"""
+    pts = list(profile)
+    if _area2(pts) < 0:
+        pts.reverse()
+    n = len(pts)
+    rings = []  # (x, inset)
+    for k in range(steps, -1, -1):
+        t = math.pi / 2 * k / steps
+        rings.append((x0 + bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
+    for k in range(0, steps + 1):
+        t = math.pi / 2 * k / steps
+        rings.append((x1 - bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
+    verts, ring_idx = [], []
+    for x, d in rings:
+        off = _inset(pts, d) if d > 1e-9 else pts
+        ring_idx.append(list(range(len(verts), len(verts) + n)))
+        verts.extend((x, y, z) for z, y in off)
+    perim = [0.0]
+    for i in range(n):
+        perim.append(perim[-1] + math.dist(pts[i], pts[(i + 1) % n]))
+    faces, charts, cuv = [], [], []
+    t_acc = [0.0]
+    for r in range(len(rings) - 1):
+        (xa, da), (xb, db) = rings[r], rings[r + 1]
+        t_acc.append(t_acc[-1] + math.hypot(xb - xa, db - da))
+    for r in range(len(rings) - 1):
+        if abs(rings[r + 1][0] - rings[r][0]) < 1e-9 and abs(rings[r + 1][1] - rings[r][1]) < 1e-9:
+            continue
+        for i in range(n):
+            j = (i + 1) % n
+            faces.append([ring_idx[r][i], ring_idx[r][j], ring_idx[r + 1][j], ring_idx[r + 1][i]])
+            charts.append(0)
+            cuv.append([(perim[i], t_acc[r]), (perim[i + 1], t_acc[r]),
+                        (perim[i + 1], t_acc[r + 1]), (perim[i], t_acc[r + 1])])
+    first, last = ring_idx[0], ring_idx[-1]
+    cap0 = _inset(pts, rings[0][1])
+    for tri in _triangulate(cap0):
+        faces.append([first[tri[0]], first[tri[2]], first[tri[1]]])
+        charts.append(None)
+        cuv.append(None)
+        faces.append([last[t] for t in tri])
+        charts.append(None)
+        cuv.append(None)
+    return MeshPart(verts, faces, mat, None, charts, cuv, {0: "rows"}).finalize()
+
+
+def _inset(pts, d):
+    """反時計回り多角形を内側へ d だけ縮める（各辺を平行移動して隣の辺と交差させる）。"""
+    n = len(pts)
+    out = []
+    for i in range(n):
+        p0, p1, p2 = pts[i - 1], pts[i], pts[(i + 1) % n]
+        e1 = (p1[0] - p0[0], p1[1] - p0[1])
+        e2 = (p2[0] - p1[0], p2[1] - p1[1])
+        l1, l2 = math.hypot(*e1), math.hypot(*e2)
+        n1 = (-e1[1] / l1, e1[0] / l1)
+        n2 = (-e2[1] / l2, e2[0] / l2)
+        k = 1 + n1[0] * n2[0] + n1[1] * n2[1]
+        k = max(k, 0.25)  # 鋭角の頂点で極端に飛び出さないよう制限
+        out.append((p1[0] + d * (n1[0] + n2[0]) / k, p1[1] + d * (n1[1] + n2[1]) / k))
+    return out
+
+
 def _area2(p):
     return sum(p[i][0] * p[(i + 1) % len(p)][1] - p[(i + 1) % len(p)][0] * p[i][1] for i in range(len(p)))
 

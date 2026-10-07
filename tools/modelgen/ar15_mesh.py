@@ -7,8 +7,8 @@ AR-15 系パーツライブラリのメッシュ版（単位 mm）。ar15_parts 
 import math
 
 from ar15_parts import *  # noqa: F401,F403  角張った部品・Layout・寸法定数はそのまま使う
-from ar15_parts import L, GRIP_ANGLE, MAG_ANGLE, grip_frame
-from core import box, lathe, extrude_x
+from ar15_parts import L, MAG_ANGLE, grip_outline, guard_outline, trigger_outline, lower_body
+from core import box, lathe, extrude_x, extrude_x_beveled
 import materials as M
 
 N_BIG = 16    # ハンドガード等の大径
@@ -77,23 +77,20 @@ def buffer_tube(l=L):
     ]
 
 
-def _grip_points(l=L):
-    """A2 グリップの側面形状（グリップ座標: 上端前縁が原点、下向き -、後ろ向き +）を傾けて銃座標へ。"""
-    local = [(0, 0), (46, 0), (54, -4), (52, -12), (48, -40), (46, -80), (42, -92), (6, -92),
-             (2, -80), (0, -60), (-7, -54), (-7, -44), (0, -38), (0, -8)]
-    (_, py, pz), _ = grip_frame(l)
-    a = math.radians(-GRIP_ANGLE)   # ローダーの回転規則でキューブ版と同じ向き（下端が後ろ）
-    return [(pz + y * math.sin(a) + z * math.cos(a), py + y * math.cos(a) - z * math.sin(a)) for z, y in local]
-
-
 def pistol_grip(l=L):
-    return [extrude_x(_grip_points(l), -14, 14, M.POLYMER)]
+    return [extrude_x_beveled(grip_outline(l), -14, 14, 4, M.POLYMER, steps=2)]
 
 
 def trigger(l=L):
-    lb = l.bore_y + l.lower_bottom
-    pts = [(-4, lb), (2, lb), (2, lb - 8), (4, lb - 15), (2, lb - 18), (0, lb - 16), (-2, lb - 10), (-4, lb - 4)]
-    return [extrude_x(pts, -3, 3, M.STEEL_DARK)]
+    return [extrude_x_beveled(trigger_outline(l), -3.2, 3.2, 1.2, M.STEEL_DARK, steps=1)]
+
+
+def trigger_guard(l=L):
+    return [extrude_x_beveled(guard_outline(l), -6, 6, 1.5, M.RECEIVER, steps=1)]
+
+
+def lower_receiver(l=L):
+    return lower_body(l) + trigger_guard(l)
 
 
 def magazine_stanag(l=L):
@@ -127,14 +124,17 @@ def magazine_stanag(l=L):
 
 
 def stock_m4(l=L):
+    """M4 ストック: 前端の筒（チューブを包む）から、下縁がつま先へ向かって斜めに下がる。角は丸める。"""
     b = l.bore_y
-    z1 = l.butt_z - 6
-    body = [(180, b + 16), (z1, b + 16), (z1, b - 80), (255, b - 80), (180, b - 22)]
-    butt = [(z1, b + 20), (l.butt_z, b + 18), (l.butt_z, b - 83), (z1, b - 85)]
+    z1 = l.butt_z - 8
+    sleeve = [(182, b + 18), (z1, b + 18), (z1, b - 24), (190, b - 24), (182, b - 18)]
+    fin = [(200, b - 20), (z1, b - 20), (z1, b - 86), (z1 - 18, b - 86), (208, b - 30)]
+    butt = [(z1, b + 20), (l.butt_z, b + 19), (l.butt_z + 1, b - 84), (z1, b - 88)]
     return [
-        extrude_x(body, -16.5, 16.5, M.POLYMER),
-        box(-5, b - 30, 185, 5, b - 22, 230, M.STEEL_DARK),     # 調整レバー
-        extrude_x(butt, -19, 19, M.RUBBER),
+        extrude_x_beveled(sleeve, -17, 17, 5, M.POLYMER, steps=2),   # 上: チューブを包む太い部分
+        extrude_x_beveled(fin, -12, 12, 3, M.POLYMER, steps=2),      # 下: 薄いひれ（実物も上より細い）
+        box(-5, b - 30, 186, 5, b - 22, 226, M.STEEL_DARK),     # 調整レバー
+        extrude_x_beveled(butt, -18, 18, 3, M.RUBBER, steps=2),
     ]
 
 

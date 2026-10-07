@@ -175,6 +175,10 @@ def flash_hider_a2(l=L):
 
 # ---------------------------------------------------------------- 下部
 def lower_receiver(l=L):
+    return lower_body(l) + trigger_guard(l)
+
+
+def lower_body(l=L):
     b = l.bore_y
     lb = b + l.lower_bottom
     return [
@@ -187,17 +191,49 @@ def lower_receiver(l=L):
         box(-16, b - 45, -42, -12, b - 37, -34, M.STEEL_DARK),               # マガジンキャッチ（右）
         box(12, b - 30, -48, 15, b - 14, -38, M.STEEL_DARK),                 # ボルトキャッチ（左）
         box(12, b - 38, 18, 14.5, b - 32, 38, M.STEEL_DARK),                 # セレクター（左）
-        # トリガーガード
-        box(-6, lb - 27, -42, 6, lb - 22, 18, M.RECEIVER),
-        box(-6, lb - 22, -45, 6, lb, -38, M.RECEIVER),
+    ]
+
+
+# ---- 下回りの側面形状（z, y）。メッシュ版はこの輪郭をそのまま押し出し、キューブ版は箱で近似する
+def guard_outline(l=L):
+    """トリガーガード: 前端はマグウェル後面のピン、後端は上へ曲がってグリップ前面に入る。"""
+    lb = l.bore_y + l.lower_bottom
+    return [(-45, lb - 18), (-38, lb - 18), (-38, lb - 22), (14, lb - 22), (19, lb - 19), (21, lb - 12),
+            (27, lb - 12), (25, lb - 22), (20, lb - 27), (-45, lb - 27)]
+
+
+def trigger_outline(l=L):
+    """トリガー: 上端はレシーバー内、下へ行くほど前へ反り、先端が前を向く（指を掛ける前面が凹む）。"""
+    lb = l.bore_y + l.lower_bottom
+    back = [(4, lb + 4), (4, lb - 2), (3.3, lb - 8), (1.3, lb - 13), (-1.5, lb - 17.5)]
+    tip = [(-3.5, lb - 18.2)]
+    front = [(-5.3, lb - 16.2), (-3.5, lb - 13.2), (-2.2, lb - 8), (-2, lb - 2), (-2, lb + 4)]
+    return back + tip + front
+
+
+def grip_outline(l=L):
+    """A2 グリップ: 上面はレシーバー下面と平行（水平）、前面に指掛けの膨らみ1つ、後ろ上端に張り出し。"""
+    lb = l.bore_y + l.lower_bottom
+    return [(16, lb), (64, lb), (66, lb - 5), (65, lb - 14), (70, lb - 33), (76, lb - 53), (82, lb - 73),
+            (83, lb - 79), (80, lb - 82), (52, lb - 82), (46, lb - 80), (41, lb - 68), (37.5, lb - 57),
+            (33, lb - 49), (29, lb - 43), (29, lb - 38), (31.5, lb - 33), (28, lb - 24), (22, lb - 12)]
+
+
+def trigger_guard(l=L):
+    lb = l.bore_y + l.lower_bottom
+    return [
+        box(-6, lb - 27, -45, 6, lb - 18, -38, M.RECEIVER),     # 前端
+        box(-6, lb - 27, -38, 6, lb - 22, 20, M.RECEIVER),      # 下辺
+        box(-6, lb - 27, 19, 6, lb - 12, 26, M.RECEIVER),       # 後端（グリップへ）
     ]
 
 
 def trigger(l=L):
     lb = l.bore_y + l.lower_bottom
     return [
-        box(-3, lb - 10, -5, 3, lb, 1, M.STEEL_DARK),
-        box(-3, lb - 18, -2, 3, lb - 10, 4, M.STEEL_DARK),
+        box(-3, lb - 6, -2, 3, lb + 4, 4, M.STEEL_DARK),
+        box(-3, lb - 12, -3.5, 3, lb - 6, 2.5, M.STEEL_DARK),
+        box(-3, lb - 18, -5.5, 3, lb - 12, 0, M.STEEL_DARK),    # 先端は前へ
     ]
 
 
@@ -215,7 +251,7 @@ def pistol_grip(l=L):
     return [
         box(-14, top - 92, pz, 14, top, pz + 46, M.POLYMER, rotation=rot, pivot=(px, py, pz)),
         box(-13, top - 52, pz - 7, 13, top - 38, pz, M.POLYMER, rotation=rot, pivot=(px, py, pz)),    # 指掛け
-        box(-12, top - 10, pz + 46, 12, top, pz + 54, M.POLYMER, rotation=rot, pivot=(px, py, pz)),   # 上端の張り出し
+        box(-12, top - 8, 50, 12, top, 66, M.POLYMER),     # 上端の張り出し（傾けない＝レシーバー下面に沿う）
     ]
 
 
