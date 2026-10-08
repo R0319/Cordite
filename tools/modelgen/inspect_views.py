@@ -23,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from core import render  # noqa: E402
 
 BG = (150, 160, 170, 255)
-VIEWS = [("side", 90, 0), ("front-left", 35, 12), ("rear-left", 145, 12),
-         ("front", 0, 5), ("rear", 180, 5), ("below-left", 60, -55)]
+VIEWS = [("side", 90, 0), ("rear-left", 35, 12), ("front-left", 145, 12),
+         ("rear", 0, 5), ("front", 180, 5), ("below-left", 60, -55)]
 
 
 def load(variant):

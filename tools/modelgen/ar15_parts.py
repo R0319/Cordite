@@ -146,6 +146,7 @@ def barrel(l=L):
     return [
         *round_rod(0, b, l.gas_z, l.bolt_face_z, 19, M.STEEL),        # ハンドガード内（太い）
         *round_rod(0, b, l.muzzle_z, l.gas_z, 15.7, M.STEEL),         # ガスブロック前（細い）
+        cbox(0, b, l.muzzle_z - 0.3, l.muzzle_z + 20, 5.6, 5.6, M.BORE),   # 銃口の穴（5.56mm）
     ]
 
 
@@ -158,25 +159,64 @@ def gas_block(l=L):
     return round_rod(0, l.bore_y, l.gas_z - 26, l.gas_z, 30, M.STEEL_DARK)
 
 
-def front_sight_base(l=L):
+# ---- A2 フロントサイトベース: 銃身の輪の上に一体の「台形のひれ」が立ち、上部に U 字の切り込み（中にポスト）。
+# 横から見ると後面はほぼ垂直・前面は斜め、耳の上端は丸い。前から見ると U 字（耳は厚く短い）。
+# 下側に着剣ラグ（前）とスリングスイベル（後ろ、吊り輪）。鍛造の鉄なので角張ったまま（耳の上だけ丸い）。
+FSB_TOWER_HALF = 7.5          # 切り込みより下の塔の半幅（X）
+FSB_EAR = (5.5, 10.0)         # 耳の内側・外側（X）。耳の間 11mm にポストが立つ
+FSB_SLOT_DEPTH = 17.0         # 照準線から切り込みの底までの深さ（耳は底から約 19mm）
+
+
+def fsb_profile(l=L):
+    """フロントサイトベース（輪より上）の側面形状 (z, y)。z は gas_z（後端）から前がマイナス。"""
     b, z = l.bore_y, l.gas_z
     sl = b + l.sight_h
+    return [(z, b + 12), (z - 3, sl - 2), (z - 4.5, sl + 1.2), (z - 6.5, sl + 2),
+            (z - 11.5, sl + 2), (z - 13.5, sl + 1.2), (z - 15, sl - 2), (z - 26, b + 12)]
+
+
+def fsb_post_z(l=L):
+    return l.gas_z - 9.0
+
+
+def front_sight_base(l=L):
+    """キューブ版（台形を段で近似）。"""
+    b, z = l.bore_y, l.gas_z
+    sl = b + l.sight_h
+    t, (e0, e1) = FSB_TOWER_HALF, FSB_EAR
+    floor = sl - FSB_SLOT_DEPTH
+    mid = (b + 12 + floor) / 2
     return [
-        box(-8, b + 12, z - 25, 8, b + 28, z - 2, M.STEEL_DARK),     # 塔（下段）
-        box(-6, b + 28, z - 21, 6, sl - 22, z - 8, M.STEEL_DARK),    # 塔（上段）
-        box(8, sl - 30, z - 20, 11, sl - 2, z - 9, M.STEEL_DARK),    # 保護耳（左）
-        box(-11, sl - 30, z - 20, -8, sl - 2, z - 9, M.STEEL_DARK),  # 保護耳（右）
-        box(-11, sl - 32, z - 20, 11, sl - 26, z - 9, M.STEEL_DARK), # 耳の連結
-        box(-4, b - 30, z - 24, 4, b - 14, z - 11, M.STEEL_DARK),    # 着剣ラグ
+        box(-t, b + 12, z - 24, t, mid, z - 1, M.STEEL_DARK),          # 塔（下段）
+        box(-t, mid, z - 20, t, floor, z - 2, M.STEEL_DARK),           # 塔（上段）
+        box(e0, floor - 4, z - 16, e1, sl + 2, z - 3, M.STEEL_DARK),   # 耳（左）
+        box(-e1, floor - 4, z - 16, -e0, sl + 2, z - 3, M.STEEL_DARK), # 耳（右）
+        *fsb_lower(l),
+    ]
+
+
+def fsb_lower(l=L):
+    """着剣ラグとスリングスイベル（輪の下）。"""
+    b, z = l.bore_y, l.gas_z
+    return [
+        box(-4, b - 24, z - 26, 4, b - 13, z - 13, M.STEEL_DARK),      # 着剣ラグ
+        box(-2.5, b - 24, z - 30, 2.5, b - 19, z - 26, M.STEEL_DARK),  # ラグの先端
+        box(-5, b - 21, z - 11, 5, b - 13, z - 2, M.STEEL_DARK),       # スイベルの台
+        # スイベルの吊り輪（銃身に直交する面の四角い輪）
+        box(-7, b - 37, z - 8, 7, b - 34.5, z - 5.5, M.STEEL_DARK),
+        box(-7, b - 37, z - 8, -4.8, b - 21, z - 5.5, M.STEEL_DARK),
+        box(4.8, b - 37, z - 8, 7, b - 21, z - 5.5, M.STEEL_DARK),
     ]
 
 
 def front_sight_post(l=L):
-    b, z = l.bore_y, l.gas_z
+    b = l.bore_y
     sl = b + l.sight_h
+    pz = fsb_post_z(l)
+    floor = sl - FSB_SLOT_DEPTH
     return [
-        box(-3, sl - 26, z - 17, 3, sl - 20, z - 12, M.STEEL_DARK),   # 台座
-        box(-1.6, sl - 20, z - 16, 1.6, sl, z - 13, M.STEEL_DARK),    # ポスト（先端＝照準線）
+        box(-3, floor, pz - 2.5, 3, floor + 4, pz + 2.5, M.STEEL_DARK),   # 台座（回して高さを調整する部分）
+        box(-0.9, floor + 4, pz - 0.9, 0.9, sl, pz + 0.9, M.STEEL_DARK),  # ポスト（1.8mm 角、先端＝照準線）
     ]
 
 
@@ -237,6 +277,7 @@ def flash_hider_a2(l=L):
     out = [
         *round_rod(0, b, z1 - 15, z1, 22, M.STEEL_DARK),      # 根元
         *round_rod(0, b, z0, z0 + 6, 22, M.STEEL_DARK),       # 先端リング
+        cbox(0, b, z0 - 0.3, z0 + 6, 8, 8, M.BORE),           # 先端の穴
         cbox(0, b, z0 + 6, z1 - 15, 12, 12, M.BORE),          # 内側（暗）
         box(-6, b - 11, z0 + 6, 6, b - 7, z1 - 15, M.STEEL_DARK),   # 下面の板
     ]

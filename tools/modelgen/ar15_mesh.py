@@ -7,7 +7,8 @@ AR-15 系パーツライブラリのメッシュ版（単位 mm）。ar15_parts 
 import math
 
 from ar15_parts import *  # noqa: F401,F403  角張った部品・Layout・寸法定数はそのまま使う
-from ar15_parts import (L, MAG_ANGLE, RAS_FLAT, _ras_rail, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
+from ar15_parts import (L, MAG_ANGLE, RAS_FLAT, _ras_rail, fsb_profile, fsb_lower, FSB_TOWER_HALF, FSB_EAR,
+                        FSB_SLOT_DEPTH, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
                         lower_common as _lower_common, lower_rear_outline, ref_zy, REF_LOWER_REAR, magwell_outline)
 from core import MeshPart, box, lathe, extrude_x, extrude_x_beveled, inflate_x
 import materials as M
@@ -38,8 +39,13 @@ def set_detail(level):
 
 def barrel(l=L):
     b = l.bore_y
-    return [lathe(0, b, [(l.muzzle_z, 7.85), (l.gas_z, 7.85), (l.gas_z, 9.5), (l.bolt_face_z, 9.5)],
-                  N_MID, M.STEEL)]
+    bore = 5.56 / 2
+    return [
+        # 銃口の端面は輪（中央に穴）。穴の中は暗い筒で、奥をふさぐ
+        lathe(0, b, [(l.muzzle_z, bore), (l.muzzle_z, 7.85), (l.gas_z, 7.85), (l.gas_z, 9.5), (l.bolt_face_z, 9.5)],
+              N_MID, M.STEEL, cap0=False),
+        lathe(0, b, [(l.muzzle_z, bore), (l.muzzle_z + 25, bore)], N_SMALL, M.BORE, cap0=False, cap1=True),
+    ]
 
 
 def barrel_extension(l=L):
@@ -50,17 +56,26 @@ def gas_block(l=L):
     return [lathe(0, l.bore_y, [(l.gas_z - 26, 15), (l.gas_z, 15)], N_MID, M.STEEL_DARK)]
 
 
+def _clip_y(poly, y0, y1):
+    """側面形状を高さ y0〜y1 で切り取る（shapely）。"""
+    from shapely.geometry import Polygon, box as sbox
+    g = Polygon(poly).intersection(sbox(-1e4, y0, 1e4, y1))
+    return list(g.exterior.coords)[:-1]
+
+
 def front_sight_base(l=L):
-    """A2 フロントサイトベース。塔は前後が斜めの台形、耳は上が丸い板。"""
-    b, z = l.bore_y, l.gas_z
-    sl = b + l.sight_h
-    ear = [(z - 20, sl - 32), (z - 9, sl - 32), (z - 9, sl - 6), (z - 11, sl - 2), (z - 18, sl - 2), (z - 20, sl - 6)]
+    """A2 フロントサイトベース: 一体の台形のひれ（切り込みより下は塔、上は左右の耳）。"""
+    sl = l.bore_y + l.sight_h
+    floor = sl - FSB_SLOT_DEPTH
+    prof = fsb_profile(l)
+    t, (e0, e1) = FSB_TOWER_HALF, FSB_EAR
+    tower = _clip_y(prof, -1e4, floor)
+    ear = _clip_y(prof, floor - 6, 1e4)
     return [
-        extrude_x([(z - 2, b + 10), (z - 25, b + 10), (z - 21, sl - 22), (z - 9, sl - 22)], -7, 7, M.STEEL_DARK),
-        extrude_x(ear, 8, 11, M.STEEL_DARK),
-        extrude_x(ear, -11, -8, M.STEEL_DARK),
-        box(-11, sl - 32, z - 20, 11, sl - 26, z - 9, M.STEEL_DARK),   # 耳の連結
-        box(-4, b - 30, z - 24, 4, b - 14, z - 11, M.STEEL_DARK),      # 着剣ラグ
+        extrude_x_beveled(tower, -t, t, 1.0, M.STEEL_DARK, steps=1),
+        extrude_x_beveled(ear, e0, e1, 0.8, M.STEEL_DARK, steps=1),     # 耳（左）
+        extrude_x_beveled(ear, -e1, -e0, 0.8, M.STEEL_DARK, steps=1),   # 耳（右）
+        *fsb_lower(l),
     ]
 
 
@@ -133,8 +148,8 @@ def flash_hider_a2(l=L):
     z0 = z1 - l.fh_len
     out = [
         lathe(0, b, [(z1 - 15, 11), (z1, 10)], N_MID, M.STEEL_DARK),          # 根元
-        lathe(0, b, [(z0, 10.5), (z0 + 6, 11)], N_MID, M.STEEL_DARK),         # 先端リング
-        lathe(0, b, [(z0 + 6, 6), (z1 - 15, 6)], N_MID, M.BORE, False, False),  # 内側（暗）
+        lathe(0, b, [(z0 + 6, 4), (z0, 4), (z0, 10.5), (z0 + 6, 11)], N_MID, M.STEEL_DARK, False, False),  # 先端リング（穴あき）
+        lathe(0, b, [(z0 + 6, 6), (z1 - 15, 6)], N_MID, M.BORE, True, True),   # 内側（暗）
         box(-6, b - 11, z0 + 6, 6, b - 7, z1 - 15, M.STEEL_DARK),             # 下面の板
     ]
     for ang in (-120, -60, 0, 60, 120):

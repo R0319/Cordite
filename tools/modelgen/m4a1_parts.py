@@ -45,7 +45,7 @@ def build(P=P) -> tuple[Model, dict]:
     add("chamber", "barrel", (0, b, l.bolt_face_z), "barrel_extension", P.barrel_extension())
     add("gas_block", "barrel", (0, b, l.gas_z), "gas_block", P.gas_block())
     add("front_sight_base", "barrel", (0, b, l.gas_z), "front_sight_base", P.front_sight_base())
-    add("front_sight_post", "front_sight_base", (0, b + l.sight_h, l.gas_z), "front_sight_post",
+    add("front_sight_post", "front_sight_base", (0, b + l.sight_h, P.fsb_post_z()), "front_sight_post",
         P.front_sight_post())
     add("muzzle", "root", (0, b, l.muzzle_z), "flash_hider_a2", P.flash_hider_a2())
 
