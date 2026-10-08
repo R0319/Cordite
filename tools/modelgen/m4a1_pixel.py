@@ -34,10 +34,17 @@ def build() -> tuple[Model, dict]:
         box(-0.25, 7.5, 0.25, 0.25, 8.5, 0.75, M.PX_DARK),
     ])
     m.bone("rail_top", "root", (0, 7, 1), [box(-0.5, 6.5, -6, 0.5, 7, 1, M.PX_RAIL)])  # 14 スロット・幅 1.0px
+    # KAC M4 RAS: 本体＋上下左右のレール（上面レールの天面は上部レシーバーのレールと同じ Y=7）
     m.bone("handguard", "root", (0, B, -7), [
-        box(-1, 5, -14, 1, 7, -7, M.PX_POLYMER),
+        box(-0.5, 5.5, -14, 0.5, 6.5, -7, M.PX_RECEIVER),
+        box(-0.5, 6.5, -13.5, 0.5, 7, -7.5, M.PX_RAIL),               # 上面レール
         box(-1.25, 4.75, -7, 1.25, 7.25, -6.5, M.PX_DARK),            # デルタリング
         box(-0.75, 5.25, -14.5, 0.75, 6.75, -14, M.PX_DARK),          # キャップ
+    ])
+    m.bone("rail_bottom", "root", (0, 5, -7.5), [box(-0.5, 5, -13.5, 0.5, 5.5, -7.5, M.PX_RAIL_DOWN)])
+    m.bone("rail_side", "root", (1, B, -7.5), [
+        box(0.5, 5.75, -13.5, 1, 6.25, -7.5, M.PX_RAIL_SIDE),
+        box(-1, 5.75, -13.5, -0.5, 6.25, -7.5, M.PX_RAIL_SIDE),
     ])
     m.bone("barrel", "root", (0, B, -4.5), [box(-0.25, 5.75, -20.5, 0.25, 6.25, -4.5, M.PX_STEEL)])
     m.bone("chamber", "barrel", (0, B, -4.5), [box(-0.5, 5.5, -6.5, 0.5, 6.5, -4.5, M.PX_DARK)])

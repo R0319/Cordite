@@ -22,7 +22,7 @@ RAIL_W_MM = 1.0 * MM_PER_PX   # レール幅 = 1.0px（規約）
 class Layout:
     """部品どうしの取り合い寸法。銃ごとにここだけ変えれば同系統の別銃（M16/HK416 等）に流用できる。"""
     bore_y = 155.4          # ボア軸高さ（グリップ底面基準。A2 グリップはレシーバー下面から約101mm下まである）
-    bolt_face_z = -88.0     # ボルトフェイス（銃身の根元）。全長 838/756mm（伸長/収縮）とストック位置から逆算
+    bolt_face_z = -106.0    # ボルトフェイス（銃身の根元）。上部レシーバー前面（-125）の約 19mm 奥（バレルエクステンション内）
     barrel_len = 368.0      # 14.5in
     upper_front_z = -125.0  # 上部レシーバー前端（写真から）
     upper_rear_z = 70.0     # 上部レシーバー後端（写真から。下部の後端より少し前）
@@ -31,9 +31,10 @@ class Layout:
     rail_slots = 16         # 写真のレール長 約192mm ÷ 12mm（規約の 0.5px/スロット）
     rail_h = 9.0
     sight_h = 66.0          # ボア軸→照準線（AR 系 2.6in）
-    gas_z = -346.0          # フロントサイトベース後端（カービン長ガス）
-    handguard_front_z = -338.0
-    handguard_rear_z = -152.0   # 銃身ナット（上部レシーバー前端の 15mm 前）の前
+    gas_port_from_bolt = 198.0  # ガスポート位置（M4 カービン長: ボルトフェイスから 7.8in）
+    fsb_len = 26.0          # フロントサイトベースの銃身クランプ部の長さ（ガスポートを中心に置く）
+    handguard_rear_z = -152.0   # デルタリング前面（上部レシーバー前端の約 27mm 前）
+    ras_slots = 10          # RAS 各面のレールのスロット数（規約の 0.5px=12mm/スロット）
     magwell_front_z = -114.0    # マグウェル前面（写真から）
     magwell_rear_z = -42.0      # マグウェル後面＝ガードの前の耳（写真から）
     mag_center_z = -78.0        # 弾倉の前後中心
@@ -53,6 +54,14 @@ class Layout:
     @property
     def muzzle_z(self):     # 銃身先端
         return self.bolt_face_z - self.barrel_len
+
+    @property
+    def gas_z(self):        # フロントサイトベース後端
+        return self.bolt_face_z - self.gas_port_from_bolt + self.fsb_len / 2
+
+    @property
+    def handguard_front_z(self):   # ハンドガードキャップ後端（キャップ 6mm はここから前、フロントサイトベースに接する）
+        return self.gas_z + 6
 
     @property
     def butt_z(self):       # 床尾（ストック位置で変わる）
@@ -171,13 +180,54 @@ def front_sight_post(l=L):
     ]
 
 
-def handguard(l=L):
+# ---- KAC M4 RAS（レール付きハンドガード）。純正ハンドガードと同じくデルタリングとキャップの間に収まる。
+# 本体は断面八角（向かい合う平面間 42mm）、上下左右に MIL-STD-1913 レール。レールは削り出しなので角張ったまま。
+# 上面レールの天面は上部レシーバーのレールと同じ高さ（アタッチメントの取付高さを揃える）。
+RAS_FLAT = 21.0     # ボア軸→本体の平面
+RAS_NECK = (16.0, 2.0)   # レールの首（幅, 高さ）
+RAS_HEAD = (24.0, 3.0)   # レールの頭（幅＝規約の 1.0px, 高さ）
+
+
+def ras_rail_span(l=L):
+    """RAS レールの前後端（中央寄せ、スロット数で長さが決まる）。戻り値は (前端 z, 後端 z)。"""
+    mid = (l.handguard_front_z + l.handguard_rear_z) / 2
+    half = l.ras_slots * SLOT_MM / 2
+    return mid - half, mid + half
+
+
+def _ras_rail(l, side, mat):
+    """side: 'top' / 'bottom' / 'left'(+X) / 'right'(-X)"""
     b = l.bore_y
+    z0, z1 = ras_rail_span(l)
+    (nw, nh), (hw, hh) = RAS_NECK, RAS_HEAD
+    r0, r1, r2 = RAS_FLAT, RAS_FLAT + nh, RAS_FLAT + nh + hh
+    if side in ("top", "bottom"):
+        s = 1 if side == "top" else -1
+        return [box(-nw / 2, b + s * r0, z0, nw / 2, b + s * r1, z1, mat),
+                box(-hw / 2, b + s * r1, z0, hw / 2, b + s * r2, z1, mat)]
+    s = 1 if side == "left" else -1
+    return [box(s * r0, b - nw / 2, z0, s * r1, b + nw / 2, z1, mat),
+            box(s * r1, b - hw / 2, z0, s * r2, b + hw / 2, z1, mat)]
+
+
+def handguard(l=L):
+    """RAS 本体（キューブ版は角柱）＋上面レール＋デルタリング＋キャップ。下面・側面レールは別ボーン。"""
+    b = l.bore_y
+    f, r = l.handguard_front_z, l.handguard_rear_z
     return [
-        *round_rod(0, b, l.handguard_front_z, l.handguard_rear_z, 52, M.HANDGUARD),
-        *round_rod(0, b, l.handguard_rear_z, l.handguard_rear_z + 12, 60, M.STEEL_DARK),     # デルタリング
-        *round_rod(0, b, l.handguard_front_z - 6, l.handguard_front_z, 46, M.STEEL_DARK),   # ハンドガードキャップ
+        cbox(0, b, f, r, RAS_FLAT * 2, RAS_FLAT * 2, M.RECEIVER),
+        *_ras_rail(l, "top", M.RAIL),
+        *round_rod(0, b, r, r + 12, 60, M.STEEL_DARK),     # デルタリング
+        *round_rod(0, b, f - 6, f, 46, M.STEEL_DARK),     # ハンドガードキャップ
     ]
+
+
+def ras_rail_bottom(l=L):
+    return _ras_rail(l, "bottom", M.RAIL_DOWN)
+
+
+def ras_rail_sides(l=L):
+    return _ras_rail(l, "left", M.RAIL_SIDE) + _ras_rail(l, "right", M.RAIL_SIDE)
 
 
 def flash_hider_a2(l=L):

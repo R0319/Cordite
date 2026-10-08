@@ -35,7 +35,11 @@ def build(P=P) -> tuple[Model, dict]:
     add("rear_sight", "receiver", (0, l.rail_top_y, l.upper_rear_z - 30), "rear_sight", P.rear_sight())
 
     add("rail_top", "root", (0, l.rail_top_y, l.upper_rear_z - 2), "rail", P.rail())
-    add("handguard", "root", (0, b, l.handguard_rear_z), "handguard", P.handguard())
+    add("handguard", "root", (0, b, l.handguard_rear_z), "handguard_ras", P.handguard())
+    rz = P.ras_rail_span()[1]                                  # RAS レールの後端（最後端スロット側）
+    rr = P.RAS_FLAT + sum(h for _, h in (P.RAS_NECK, P.RAS_HEAD))
+    add("rail_bottom", "root", (0, b - rr, rz), "ras_rail_bottom", P.ras_rail_bottom())
+    add("rail_side", "root", (rr, b, rz), "ras_rail_sides", P.ras_rail_sides())
 
     add("barrel", "root", (0, b, l.bolt_face_z), "barrel", P.barrel())
     add("chamber", "barrel", (0, b, l.bolt_face_z), "barrel_extension", P.barrel_extension())

@@ -16,6 +16,7 @@ python3 build.py m4a1_parts   # 1方式だけ
 | `materials.py` | 材質（下塗り色）。作者が PNG を塗り直す前提の仮色 |
 | `ar15_parts.py` | AR-15 系パーツライブラリ（単位 mm、実寸ベース）。`Layout` を変えれば同系統の別銃に流用できる |
 | `ar15_mesh.py` | 上のメッシュ版。丸・曲線の部品だけ `poly_mesh`（Meshy プラグイン互換）へ置き換え |
+| `inspect_views.py` | 確認用描画: 6 方向の一覧、真横写真への輪郭の重ね合わせ（写真と重ねた画像はリポジトリに入れない） |
 | `rig.py` | コードが参照するロケーター・腕プレースホルダ（見た目の値は glock から流用した仮置き） |
 | `m4a1_parts.py` | A: パーツ組立版 M4A1 |
 | `m4a1_pixel.py` | B: ピクセル版 M4A1 |

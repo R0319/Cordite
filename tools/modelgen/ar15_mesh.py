@@ -7,7 +7,7 @@ AR-15 系パーツライブラリのメッシュ版（単位 mm）。ar15_parts 
 import math
 
 from ar15_parts import *  # noqa: F401,F403  角張った部品・Layout・寸法定数はそのまま使う
-from ar15_parts import (L, MAG_ANGLE, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
+from ar15_parts import (L, MAG_ANGLE, RAS_FLAT, _ras_rail, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
                         lower_common as _lower_common, lower_rear_outline, ref_zy, REF_LOWER_REAR, magwell_outline)
 from core import box, lathe, extrude_x, extrude_x_beveled, inflate_x
 import materials as M
@@ -46,9 +46,12 @@ def front_sight_base(l=L):
 
 
 def handguard(l=L):
+    """KAC M4 RAS: 本体は断面八角（lathe の 8 分割＝平面が上下左右と斜めに来る）。上面レールは角張ったキューブ。"""
     b, f, r = l.bore_y, l.handguard_front_z, l.handguard_rear_z
+    rv = RAS_FLAT / math.cos(math.pi / 8)     # 平面までの距離 → 八角形の頂点半径
     return [
-        lathe(0, b, [(f, 25), (f + 6, 26), (r - 6, 26), (r, 27)], N_BIG, M.HANDGUARD),
+        lathe(0, b, [(f, rv - 1.5), (f + 3, rv), (r - 3, rv), (r, rv - 1.5)], 8, M.RECEIVER),
+        *_ras_rail(l, "top", M.RAIL),
         lathe(0, b, [(r, 27), (r + 4, 31), (r + 12, 31)], N_BIG, M.STEEL_DARK),             # デルタリング
         lathe(0, b, [(f - 6, 20), (f, 23)], N_BIG, M.STEEL_DARK),                         # キャップ
     ]

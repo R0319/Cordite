@@ -32,8 +32,9 @@ class Material:
     noise: float = 0.0          # 1テクセルごとの明度ゆらぎ（0〜1）
     edge: float = 0.0           # 面の外周1テクセルを暗くする量（0〜1）。小さい面には掛からない
     edge_min: int = 4           # 外周を描く最小の面サイズ（テクセル）
-    stripe: int = 0             # >0 なら up 面に V 方向の縞（周期テクセル）。レールの刻みをテクスチャで表す
+    stripe: int = 0             # >0 なら stripe_faces の面に、銃の前後方向の縞（周期テクセル）。レールの刻みをテクスチャで表す
     stripe_dark: float = 0.45
+    stripe_faces: tuple = ("up",)
     dots: int = 0               # >0 なら側面・上下面に周期 dots テクセルの暗い点（放熱孔など）
 
 
@@ -576,7 +577,8 @@ def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
             if mat.edge and face != "mesh_flat" and w >= mat.edge_min and h >= mat.edge_min and (
                     (xx in (0, w - 1) and face != "mesh_rows") or yy in (0, h - 1)):
                 k *= 1.0 - mat.edge
-            if mat.stripe and face == "up" and (yy % mat.stripe) < mat.stripe // 2:
+            if mat.stripe and face in mat.stripe_faces and \
+                    ((xx if face in ("east", "west") else yy) % mat.stripe) < mat.stripe // 2:
                 k *= 1.0 - mat.stripe_dark
             if mat.dots and face not in ("north", "south", "mesh_flat") and w >= mat.dots and h >= mat.dots \
                     and xx % mat.dots == mat.dots // 2 and yy % mat.dots == mat.dots // 2 \
