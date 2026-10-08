@@ -17,8 +17,17 @@ VARIANTS = {
     # 名前: (組み立て関数, テクスチャ密度[テクセル/px])
     "m4a1_parts": (m4a1_parts.build, 8),
     "m4a1_pixel": (m4a1_pixel.build, 2),
-    "m4a1_mesh": (lambda: m4a1_parts.build(ar15_mesh), 8),
+    "m4a1_mesh": (lambda: _with_detail("full"), 8),
+    "m4a1_mesh_lite": (lambda: _with_detail("lite"), 6),   # 敵 NPC 用などの簡略版（面を減らす）
 }
+def _with_detail(level):
+    ar15_mesh.set_detail(level)
+    try:
+        return m4a1_parts.build(ar15_mesh)
+    finally:
+        ar15_mesh.set_detail("full")
+
+
 VIEWS = {"side_left": (90, 0), "side_right": (-90, 0), "three_quarter": (40, 22), "top": (90, 89.9),
          "front": (0, 8)}
 

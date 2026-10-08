@@ -9,12 +9,31 @@ import math
 from ar15_parts import *  # noqa: F401,F403  角張った部品・Layout・寸法定数はそのまま使う
 from ar15_parts import (L, MAG_ANGLE, RAS_FLAT, _ras_rail, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
                         lower_common as _lower_common, lower_rear_outline, ref_zy, REF_LOWER_REAR, magwell_outline)
-from core import box, lathe, extrude_x, extrude_x_beveled, inflate_x
+from core import MeshPart, box, lathe, extrude_x, extrude_x_beveled, inflate_x
 import materials as M
 
+# ---- 細かさ（set_detail で切り替える。"lite" は敵 NPC 用などの面を減らした簡略版）
 N_BIG = 16    # ハンドガード等の大径
 N_MID = 12    # 銃身
 N_SMALL = 8   # 弾・小径
+GRIP_STEPS = 5      # グリップ断面の丸めの段数
+GRIP_SEG = 3        # グリップ輪郭の曲線の細かさ
+BEVEL_STEPS = 2     # ストック等の角丸めの段数
+MAG_STEPS = 8       # 弾倉の湾曲の分割数
+RAS_HOLES = True    # RAS の斜めの面に丸穴を実際に開ける
+RAS_HOLE_SEG = 16   # 丸穴 1 つの分割数
+
+_DETAIL = {
+    "full": dict(N_BIG=16, N_MID=12, N_SMALL=8, GRIP_STEPS=5, GRIP_SEG=3, BEVEL_STEPS=2, MAG_STEPS=8,
+                 RAS_HOLES=True, RAS_HOLE_SEG=16),
+    "lite": dict(N_BIG=8, N_MID=6, N_SMALL=6, GRIP_STEPS=2, GRIP_SEG=1, BEVEL_STEPS=1, MAG_STEPS=3,
+                 RAS_HOLES=False, RAS_HOLE_SEG=8),
+}
+
+
+def set_detail(level):
+    """細かさを切り替える（"full" / "lite"）。部品関数は呼ばれた時点の値を使う。"""
+    globals().update(_DETAIL[level])
 
 
 def barrel(l=L):
@@ -45,12 +64,64 @@ def front_sight_base(l=L):
     ]
 
 
-def handguard(l=L):
-    """KAC M4 RAS: 本体は断面八角（lathe の 8 分割＝平面が上下左右と斜めに来る）。上面レールは角張ったキューブ。"""
+RAS_HOLES_PER_FACE = 7    # 斜めの面 1 枚あたりの丸穴の数（参考写真）
+RAS_HOLE_RATIO = 0.74     # 丸穴の直径 / 斜めの面の幅
+
+
+def ras_body(l=L):
+    """KAC M4 RAS の本体: 断面八角の筒（中空。前後の端はデルタリングとキャップに隠れる）。
+    斜めの 4 面には丸穴を並べる（RAS_HOLES=True なら形状として穴を開け、穴から銃身が見える）。
+    穴のある面は「正方形のマス目の中に丸穴」を並べ、マスの縁と穴の縁を放射状の四角形でつなぐ。"""
     b, f, r = l.bore_y, l.handguard_front_z, l.handguard_rear_z
-    rv = RAS_FLAT / math.cos(math.pi / 8)     # 平面までの距離 → 八角形の頂点半径
+    w = 2 * RAS_FLAT * math.tan(math.pi / 8)    # 八角の 1 面の幅
+    verts, faces, charts, cuv = [], [], [], []
+
+    def to3d(theta, s, z):
+        nx, ny = math.cos(theta), math.sin(theta)
+        tx, ty = -ny, nx
+        return (RAS_FLAT * nx + s * tx, b + RAS_FLAT * ny + s * ty, z)
+
+    def quad(theta, chart, pts2d):
+        idx = []
+        for s, z in pts2d:
+            idx.append(len(verts))
+            verts.append(to3d(theta, s, z))
+        faces.append(idx)
+        charts.append(chart)
+        cuv.append([(s, z - r) for s, z in pts2d])
+
+    for k in range(8):
+        theta = math.pi / 4 * k
+        diagonal = k % 2 == 1
+        if not (diagonal and RAS_HOLES):
+            quad(theta, k, [(-w / 2, r), (w / 2, r), (w / 2, f), (-w / 2, f)])
+            continue
+        n = RAS_HOLES_PER_FACE
+        cell = w                                   # 正方形のマス
+        z_first = (f + r) / 2 + cell * n / 2       # 穴の列を前後中央に寄せる（z は前ほど小さい）
+        quad(theta, k, [(-w / 2, r), (w / 2, r), (w / 2, z_first), (-w / 2, z_first)])
+        quad(theta, k, [(-w / 2, z_first - cell * n), (w / 2, z_first - cell * n), (w / 2, f), (-w / 2, f)])
+        m = RAS_HOLE_SEG
+        rad = cell * RAS_HOLE_RATIO / 2
+        for h in range(n):
+            zc = z_first - cell * (h + 0.5)
+            ring = []
+            for j in range(m + 1):
+                a = 2 * math.pi * j / m
+                ca, sa = math.cos(a), math.sin(a)
+                k_sq = (cell / 2) / max(abs(ca), abs(sa))   # 同じ向きの、マスの縁までの距離
+                ring.append(((rad * ca, zc + rad * sa), (k_sq * ca, zc + k_sq * sa)))
+            for j in range(m):
+                (c0, e0), (c1, e1) = ring[j], ring[j + 1]
+                quad(theta, k, [c0, c1, e1, e0])
+    return MeshPart(verts, faces, M.RECEIVER, None, charts, cuv, {k: False for k in range(8)}).finalize()
+
+
+def handguard(l=L):
+    """KAC M4 RAS: 断面八角の本体（斜めの面に丸穴）＋上面レール（角張ったキューブ）＋デルタリング＋キャップ。"""
+    b, f, r = l.bore_y, l.handguard_front_z, l.handguard_rear_z
     return [
-        lathe(0, b, [(f, rv - 1.5), (f + 3, rv), (r - 3, rv), (r, rv - 1.5)], 8, M.RECEIVER),
+        ras_body(l),
         *_ras_rail(l, "top", M.RAIL),
         lathe(0, b, [(r, 27), (r + 4, 31), (r + 12, 31)], N_BIG, M.STEEL_DARK),             # デルタリング
         lathe(0, b, [(f - 6, 20), (f, 23)], N_BIG, M.STEEL_DARK),                         # キャップ
@@ -95,7 +166,8 @@ def pistol_grip(l=L):
         # 前後のストラップ（法線が前後向き）は全周を丸める。底・上面（法線が上下向き）は角だけ 5mm で丸める
         return 5.0 + 9.5 * (1 - _smoothstep(0.55, 0.9, abs(ny)))
 
-    return [inflate_x(grip_outline(l, extend_top=6.0), 14.5, M.POLYMER, steps=5, width_fn=width, radius_fn=radius)]
+    return [inflate_x(grip_outline(l, per_seg=GRIP_SEG, extend_top=6.0), 14.5, M.POLYMER, steps=GRIP_STEPS,
+                      width_fn=width, radius_fn=radius)]
 
 
 def _smoothstep(a, b, x):
@@ -149,7 +221,7 @@ def magazine_stanag(l=L):
     top = b - l.mag_top_below_bore
     split = top - l.mag_straight
     zc, half = l.mag_center_z, 32.0
-    arc_len, steps = l.mag_arc, 8
+    arc_len, steps = l.mag_arc, MAG_STEPS
     radius = arc_len / math.radians(MAG_ANGLE)
     center = [(zc, top), (zc, split)]
     tangents = [0.0, 0.0]
@@ -183,10 +255,10 @@ def stock_m4(l=L):
     fin = [(f + 18, b - 20), (z1, b - 20), (z1, b - 86), (z1 - 18, b - 86), (f + 26, b - 30)]
     butt = [(z1, b + 20), (l.butt_z, b + 19), (l.butt_z + 1, b - 84), (z1, b - 88)]
     return [
-        extrude_x_beveled(sleeve, -17, 17, 5, M.POLYMER, steps=2),   # 上: チューブを包む太い部分
-        extrude_x_beveled(fin, -12, 12, 3, M.POLYMER, steps=2),      # 下: 薄いひれ（実物も上より細い）
+        extrude_x_beveled(sleeve, -17, 17, 5, M.POLYMER, steps=BEVEL_STEPS),   # 上: チューブを包む太い部分
+        extrude_x_beveled(fin, -12, 12, 3, M.POLYMER, steps=BEVEL_STEPS),      # 下: 薄いひれ（実物も上より細い）
         box(-5, b - 30, f + 4, 5, b - 22, f + 44, M.STEEL_DARK),     # 調整レバー
-        extrude_x_beveled(butt, -18, 18, 3, M.RUBBER, steps=2),
+        extrude_x_beveled(butt, -18, 18, 3, M.RUBBER, steps=BEVEL_STEPS),
     ]
 
 
