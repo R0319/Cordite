@@ -54,10 +54,10 @@ class Layout:
     gas_front_z = -458.0
     fs_z = (-419.0, -442.0)  # フロントサイトの前後
     fs_top = 232.0          # フロントサイトの耳の上端
-    bipod_pivot = (-380.0, 122.0)   # 二脚の回転軸（z, y）
-    bipod_len = 232.0       # 回転軸→足先（縮めた状態）
-    bipod_ext = 30.0        # 脚の伸び（写真の展開状態は 約 260mm）
-    bipod_fold_deg = 7.4    # たたんだ脚の下向きの傾き（写真）
+    bipod_pivot = (-385.0, 99.0)    # 二脚の回転軸（z, y）。ガスシリンダーから下がる取付け金具の下端（写真）
+    bipod_len = 235.0       # 回転軸→足先。たたむと足板が受け部の前（Z≈-150）に来て、立てると足が Y≈-135（写真 2 枚）
+    bipod_ext = 30.0        # 脚の伸び（伸縮量は未確認）
+    bipod_fold_deg = 0.5    # たたんだ脚はハンドガードの下面に沿ってほぼ水平（写真）
     handle_pivot = (-170.0, 206.0)  # キャリングハンドルの回転軸（z, y）
     mag_tilt = 45.0         # STANAG 弾倉の傾き（左下へ。③ 写真の見かけの高さ 122mm と 45° が一致）
     mag_pivot = (14.0, 170.0)       # 弾倉上端の中心（X, y）。写真の弾倉下端に合わせた
@@ -369,7 +369,9 @@ def gas_system(l=L):
     """銃身下のガスシリンダー・ガスブロック・二脚の取付け（側面形は写真。断面は丸める）と、前端の調整ノブ（六角）。"""
     zs = [p[0] for p in O.GAS["outer"]]
     zf = min(zs)
-    return [extrude_x_beveled(O.GAS["outer"], -13, 13, 5.0, STEEL_BLACK, steps=2),
+    pz, py = l.bipod_pivot
+    return [box(-11, py - 4, pz - 8, 11, l.gas_y - 8, pz + 8, STEEL_BLACK),          # 二脚の取付け金具（下へ伸びる）
+            extrude_x_beveled(O.GAS["outer"], -13, 13, 5.0, STEEL_BLACK, steps=2),
             lathe(0, l.gas_y, [(zf, 12.5), (zf + 14, 12.5)], 6, STEEL_BLACK)]
 
 
@@ -381,8 +383,8 @@ def handguard(l=L):
         for s in (1, -1):
             out.append(box(s * l.hg_half, y, f + 30, s * (l.hg_half + 1.2), y + 4, r - 20, M.POLYMER))
     # 左側面の丸い金具（写真・拡大写真: 穴の開いた円盤）
-    out += [x_cyl(-307.0, 108.0, 6.0, l.hg_half - 1, l.hg_half + 3, STEEL_BLACK, n=12),
-            x_cyl(-307.0, 108.0, 2.5, l.hg_half + 2.9, l.hg_half + 3.2, M.BORE)]
+    out += [x_cyl(-314.0, 119.0, 7.0, l.hg_half - 1, l.hg_half + 3, STEEL_BLACK, n=12),
+            x_cyl(-314.0, 119.0, 3.0, l.hg_half + 2.9, l.hg_half + 3.2, M.BORE)]
     return out
 
 
@@ -437,7 +439,7 @@ def bipod_foot(l=L, side=1):
     end = pz + l.bipod_len
     foot = [extrude_x([(end - 40, py - 3.5), (end - 3, py - 3.5), (end - 3, py + 3.5), (end - 40, py + 3.5)],
                       x - 1.2, x + 1.2, STEEL_BLACK),
-            extrude_x([(end - 3, py - 6), (end, py - 6), (end, py + 14), (end - 3, py + 14)], x - 7, x + 7, STEEL_BLACK)]
+            extrude_x([(end - 4, py - 15), (end, py - 15), (end, py + 13), (end - 4, py + 13)], x - 8, x + 8, STEEL_BLACK)]
     return rotated(foot, "x", l.bipod_fold_deg, (0, py, pz))
 
 
