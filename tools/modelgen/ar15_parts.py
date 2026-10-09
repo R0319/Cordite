@@ -52,7 +52,7 @@ class Layout:
     stock_len = 155.0       # ストック本体の長さ（前端〜床尾。最短位置でレシーバーに当たらない長さ）
     mag_top_below_bore = 14.0   # 弾倉上端（送り出し口）のボア軸からの下がり
     mag_straight = 60.0     # 弾倉の直線部（上端〜マグウェル下あたり）
-    mag_arc = 112.0         # 弾倉の湾曲部（半径一定で前へ反る）
+    mag_arc = 98.0          # 弾倉の湾曲部（半径一定で前へ反る）。全体写真（USGI 型のアルミ弾倉）で下端を合わせ 112→98
 
     @property
     def muzzle_z(self):     # 銃身先端
@@ -582,7 +582,7 @@ def stock_m4(l=L):
     ]
 
 
-MAG_ANGLE = 20.0   # 湾曲部全体での反りの角度
+MAG_ANGLE = 17.5   # 湾曲部全体での反りの角度（反りの半径は約 320mm のまま、湾曲部を短くした分だけ小さい）
 
 
 def magazine_stanag(l=L):
