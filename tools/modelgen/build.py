@@ -11,14 +11,17 @@ from core import Model, bake, render, write_geo
 import ar15_mesh
 import m4a1_parts
 import m4a1_pixel
+import m249
 
 OUT = Path(__file__).parent / "generated"
 VARIANTS = {
-    # 名前: (組み立て関数, テクスチャ密度[テクセル/px])
-    "m4a1_parts": (m4a1_parts.build, 8),
-    "m4a1_pixel": (m4a1_pixel.build, 2),
-    "m4a1_mesh": (lambda: _with_detail("full"), 8),
-    "m4a1_mesh_lite": (lambda: _with_detail("lite"), 6),   # 敵 NPC 用などの簡略版（面を減らす）
+    # 名前: (組み立て関数, テクスチャ密度[テクセル/px], 出力ファイル名)
+    "m4a1_parts": (m4a1_parts.build, 8, "m4a1"),
+    "m4a1_pixel": (m4a1_pixel.build, 2, "m4a1"),
+    "m4a1_mesh": (lambda: _with_detail("full"), 8, "m4a1"),
+    "m4a1_mesh_lite": (lambda: _with_detail("lite"), 6, "m4a1"),   # 敵 NPC 用などの簡略版（面を減らす）
+    "m249_mesh": (lambda: m249.build("belt"), 8, "m249"),          # ボックス＋ベルト（標準）
+    "m249_stanag_mesh": (lambda: m249.build("stanag"), 8, "m249_stanag"),   # STANAG 弾倉
 }
 def _with_detail(level):
     ar15_mesh.set_detail(level)
@@ -32,16 +35,16 @@ VIEWS = {"side_left": (90, 0), "side_right": (-90, 0), "three_quarter": (40, 22)
          "front": (0, 8)}
 
 
-def build_variant(name, fn, density):
+def build_variant(name, fn, density, stem):
     model, parts = fn()
     geo, tex, size = bake(model, density)
     d = OUT / name
-    write_geo(d / "m4a1.geo.json", geo, size)
-    tex.save(d / "m4a1.png")
+    write_geo(d / f"{stem}.geo.json", geo, size)
+    tex.save(d / f"{stem}.png")
     for view, (yaw, pitch) in VIEWS.items():
         render(geo, tex, yaw, pitch, width=300 if view == "front" else 900,
                background=(150, 160, 170, 255)).save(d / f"preview_{view}.png")
-    render(geo, tex, 90, 0, width=512).save(d / "m4a1_modelshot.png")
+    render(geo, tex, 90, 0, width=512).save(d / f"{stem}_modelshot.png")
     for pname, cubes in parts.items():
         pm = Model()
         pm.bone(pname, None, (0, 0, 0), cubes)
@@ -56,6 +59,6 @@ def build_variant(name, fn, density):
 
 if __name__ == "__main__":
     only = sys.argv[1:]
-    for n, (f, dens) in VARIANTS.items():
+    for n, (f, dens, stem) in VARIANTS.items():
         if not only or n in only:
-            build_variant(n, f, dens)
+            build_variant(n, f, dens, stem)

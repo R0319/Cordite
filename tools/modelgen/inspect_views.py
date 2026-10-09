@@ -29,8 +29,9 @@ VIEWS = [("side", 90, 0), ("rear-left", 35, 12), ("front-left", 145, 12),
 
 def load(variant):
     d = Path(__file__).parent / "generated" / variant
-    geo = json.loads((d / "m4a1.geo.json").read_text(encoding="utf-8"))
-    return geo["minecraft:geometry"][0]["bones"], Image.open(d / "m4a1.png")
+    f = next(d.glob("*.geo.json"))
+    geo = json.loads(f.read_text(encoding="utf-8"))
+    return geo["minecraft:geometry"][0]["bones"], Image.open(f.with_name(f.name.replace(".geo.json", ".png")))
 
 
 def pick(bones, names):

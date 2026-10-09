@@ -13,6 +13,8 @@ RAIL_SIDE = Material("rail_side", (46, 47, 49), noise=0.05, edge=0.30, edge_min=
 RAIL_DOWN = Material("rail_down", (46, 47, 49), noise=0.05, edge=0.30, edge_min=6, stripe=4, stripe_faces=("down",))
 MAG = Material("mag", (74, 76, 68), noise=0.06, edge=0.30, edge_min=6)
 RUBBER = Material("rubber", (24, 24, 24), noise=0.10)
+CANVAS = Material("canvas", (150, 126, 82), noise=0.10, edge=0.20, edge_min=6)   # 弾薬ボックスの布（タン）
+BOX_LID = Material("box_lid", (30, 30, 32), noise=0.05, edge=0.25, edge_min=6)
 BRASS = Material("brass", (184, 142, 62), noise=0.05)
 COPPER = Material("copper", (176, 102, 62), noise=0.05)
 

@@ -20,6 +20,7 @@ python3 build.py m4a1_parts   # 1方式だけ
 | `rig.py` | コードが参照するロケーター・腕プレースホルダ（見た目の値は glock から流用した仮置き） |
 | `m4a1_parts.py` | A: パーツ組立版 M4A1 |
 | `m4a1_pixel.py` | B: ピクセル版 M4A1 |
+| `m249.py` | M249（メッシュ版）。`m249`（ボックス＋ベルト）と `m249_stanag`（STANAG 弾倉）の 2 つを出す。二脚・キャリングハンドル・フィードカバーは回転できるボーン |
 | （`build.py` 内） | C: パーツ組立＋メッシュ版 M4A1（`m4a1_parts.build(ar15_mesh)`）。メッシュ対応ローダーが必要。`m4a1_mesh_lite` はその簡略版（`ar15_mesh.set_detail("lite")`、敵 NPC 用など） |
 | `generated/` | 出力。`<方式>/m4a1.geo.json`・`m4a1.png`・`m4a1_modelshot.png`・`preview_*.png`、A は `parts/` に部品単体も |
 
