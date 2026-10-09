@@ -10,7 +10,7 @@ from ar15_parts import *  # noqa: F401,F403  角張った部品・Layout・寸�
 from ar15_parts import (L, MAG_ANGLE, RAS_FLAT, _ras_rail, fsb_profile, fsb_frame_lower, FSB_TOWER_HALF, FSB_EAR,
                         FSB_RING_R, FSB_RINGS,
                         FSB_SLOT_DEPTH, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
-                        lower_common as _lower_common, lower_rear_outline, ref_zy, REF_LOWER_REAR, magwell_outline)
+                        lower_common as _lower_common, lower_rear_outline, ref_zy, LOWER_REAR_UNDER, magwell_outline)
 from core import MeshPart, box, lathe, extrude_x, extrude_x_beveled, inflate_x
 import materials as M
 
@@ -213,7 +213,7 @@ def lower_common(l=L):
 def lower_body(l=L):
     b = l.bore_y
     lb = b + l.lower_bottom
-    zg = ref_zy(l, [REF_LOWER_REAR[0]])[0][0]
+    zg = LOWER_REAR_UNDER[0][0]
     return lower_common(l) + [
         box(-12, lb, l.magwell_rear_z, 12, b + l.upper_bottom, zg, M.RECEIVER),        # トリガーメカ部
         extrude_x(lower_rear_outline(l), -12.5, 12.5, M.RECEIVER),                     # 後部（下面が後ろへ反り上がる）
