@@ -656,10 +656,29 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
     light = np.array([0.35, 0.85, 0.4])
     light /= np.linalg.norm(light)
 
+    # ボーンの回転（アニメーションの姿勢確認用）: 親から順に「回転軸まわりの回転」を重ねる。回転の規則はキューブと同じ
+    by_name = {jb["name"]: jb for jb in geo_bones}
+    world = {}
+
+    def bone_world(name):
+        if name in world:
+            return world[name]
+        jb = by_name[name]
+        m = np.eye(4)
+        if jb.get("rotation") and any(abs(a) > 1e-9 for a in jb["rotation"]):
+            pv = np.array(jb.get("pivot", [0, 0, 0]), dtype=float)
+            m[:3, :3] = _rot_raw(jb["rotation"])
+            m[:3, 3] = pv - m[:3, :3] @ pv
+        parent = jb.get("parent")
+        world[name] = (bone_world(parent) @ m) if parent in by_name else m
+        return world[name]
+
     quads = []
     for jb in geo_bones:
         if jb["name"] in skip_bones:
             continue
+        Wm = bone_world(jb["name"])
+        place = (lambda q: q) if np.allclose(Wm, np.eye(4)) else (lambda q, Wm=Wm: q @ Wm[:3, :3].T + Wm[:3, 3])
         pm = jb.get("poly_mesh")
         if pm:
             for poly in pm["polys"]:
@@ -674,6 +693,7 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
                 for c in uniq:
                     u, v = pm["uvs"][c[2]]
                     uvl.append((u, 1 - v) if pm.get("normalized_uvs") else (u / tw, 1 - v / th))
+                pts = place(pts)
                 for k in range(1, len(uniq) - 1):
                     quads.append((pts[[0, k, k + 1]], [uvl[0], uvl[k], uvl[k + 1]]))
         for jc in jb.get("cubes", []):
@@ -694,7 +714,7 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
                 u0, v0 = fd["uv"]
                 uw, vh = fd["uv_size"]
                 uvs = [((u0 + a * uw) / tw, (v0 + b * vh) / th) for a, b in _FACE_UV]
-                quads.append((np.array(pts), uvs))
+                quads.append((place(np.array(pts)), uvs))
 
     if fixed is not None:
         fs, fx0, fy0, fw, fh = fixed

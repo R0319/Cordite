@@ -34,7 +34,8 @@ class Layout:
     rcv_front_z = -151.0    # 受け部の前端
     rcv_half = 27.0         # 受け部の半幅（③ 未確認）
     rcv_bottom = 110.0      # 受け部の下面
-    cover_split = 184.7     # 受け部本体とフィードカバーの境目
+    cover_split = 197.0     # 受け部本体とフィードカバーの境目（写真の横線）
+    cover_hinge = (-128.0, 205.0)   # フィードカバーの蝶番（z, y）。前端で回り、後ろが持ち上がる（写真のカバー前端の形から）
     cover_top = 211.0       # フィードカバーの上面（レールの土台）
     cover_front_z = -131.0  # フィードカバーの前端（フィードトレイの前）
     rail_slots = 15         # フィードカバーのレール（写真 約 176mm ÷ 規約 12mm/スロット）
@@ -90,6 +91,28 @@ def rotated(parts, axis, deg, pivot):
     return out
 
 
+def x_cyl(z, y, r, x0, x1, mat, n=None):
+    """X 方向の円柱（ピン・リベット・蝶番の軸）。Z 方向の回転体を作って軸を入れ替える。"""
+    m = lathe(0, y, [(x0, r), (x1, r)], n or ar15_mesh.N_SMALL, mat)
+    swap = lambda v: (v[2], v[1], v[0])
+    n_ = None if m.normals is None else [[swap(v) for v in f] for f in m.normals]
+    return MeshPart([(v[2], v[1], v[0] + z) for v in m.verts], m.faces, m.mat, n_, m.charts, m.chart_uv, m.chart_edge)
+
+
+def y_cyl(x, z, r, y0, y1, mat, n=None):
+    """Y 方向の円柱（下向きのつまみ等）。"""
+    m = lathe(x, z, [(y0, r), (y1, r)], n or ar15_mesh.N_SMALL, mat)
+    swap = lambda v: (v[0], v[2], v[1])
+    n_ = None if m.normals is None else [[swap(v) for v in f] for f in m.normals]
+    return MeshPart([swap(v) for v in m.verts], m.faces, m.mat, n_, m.charts, m.chart_uv, m.chart_edge)
+
+
+def ring_z(y, z0, z1, r_in, r_out, mat, cx=0.0, n=None):
+    """Z 方向を軸にした輪（フロントサイトのフード等）。"""
+    return lathe(cx, y, [(z0, r_in), (z0, r_out), (z1, r_out), (z1, r_in), (z0, r_in)], n or ar15_mesh.N_MID, mat,
+                 cap0=False, cap1=False)
+
+
 def outline_parts(o, x0, x1, mat, bevel=0.0, steps=1):
     """トレースした側面形 {'outer', 'holes'} を X 方向に押し出す。穴があれば、穴の中心を通る縦線で
     穴の無い片に切り分けてから押し出す（角丸めは切り口に溝が出るので、穴のある部品では使わない）。"""
@@ -118,17 +141,57 @@ def clip_y(o, y0, y1):
 
 
 # ---------------------------------------------------------------- 受け部
+# 左側面の留め具（写真から。z, y, 半径）。右側面も同じ位置に置く（右側面の写真は無い）
+RIVETS = [(98.0, 172.0, 2.0), (30.0, 172.0, 2.0), (-37.0, 172.0, 2.0), (50.0, 141.0, 2.0), (-27.0, 141.0, 2.0)]
+PINS = [(118.0, 178.0, 5.0), (106.0, 170.0, 3.5), (110.0, 145.0, 3.5), (90.0, 152.0, 3.5), (115.0, 122.0, 4.5),
+        (30.0, 122.0, 2.5), (-8.0, 121.0, 2.5), (-118.0, 175.0, 3.0)]
+
+
 def receiver(l=L):
     h, b = l.rcv_half, l.bore_y
-    return [
+    out = [
         *outline_parts(O.RECEIVER, -h, h, M.RECEIVER),                         # 本体（鋼板のプレス。角張ったまま）
-        box(h, 150, l.rcv_front_z + 6, h + 1.2, 160, l.rcv_rear_z - 6, M.RECEIVER),    # 側面の補強の帯（左）
-        box(-h - 1.2, 150, l.rcv_front_z + 6, -h, 160, l.rcv_rear_z - 6, M.RECEIVER),  # 〃（右）
-        # 左側のフィードトレイ（ベルトの入口）とその下の弾倉口
-        box(h, 170.5, l.feed_z[0], h + 8, 209.5, l.feed_z[1], M.RECEIVER),
-        # 右側のコッキングハンドル（③ 位置は写真の下側の突起から推定）
-        box(-h - 18, 158, -152, -h, 166, -140, STEEL_BLACK),
+        # 側面の段（写真の横の筋）: 中ほどの張り出しと、上下の細い溝
+        box(h, 157, -50, h + 1.5, 161, l.rcv_rear_z - 4, M.RECEIVER),
+        box(-h - 1.5, 157, -50, -h, 161, l.rcv_rear_z - 4, M.RECEIVER),
+        *[box(h, y, -48, h + 0.3, y + 1.0, l.rcv_rear_z - 8, STEEL_BLACK) for y in (127.0, 180.0, 189.0)],
+        *[box(-h - 0.3, y, -48, -h, y + 1.0, l.rcv_rear_z - 8, STEEL_BLACK) for y in (127.0, 180.0, 189.0)],
         lathe(0, b, [(l.rcv_front_z - 6, 20), (l.rcv_front_z + 2, 20)], ar15_mesh.N_MID, STEEL_BLACK),   # 銃身受け
+    ]
+    for s_ in (1, -1):      # 留め具（両側面）
+        x0, x1 = (h - 0.5, h + 1.4) if s_ > 0 else (-h - 1.4, -h + 0.5)
+        out += [x_cyl(z, y, r, x0, x1, STEEL_BLACK) for z, y, r in RIVETS]
+        x0, x1 = (h - 0.5, h + 2.0) if s_ > 0 else (-h - 2.0, -h + 0.5)
+        out += [x_cyl(z, y, r, x0, x1, STEEL_BLACK) for z, y, r in PINS]
+    out.append(x_cyl(-35.0, 118.0, 4.0, h - 0.5, h + 1.0, M.BORE))           # 側面の丸穴（写真の明るい輪）
+    out += left_feed(l) + right_side(l)
+    out.append(box(-12, l.cover_split - 0.4, -54, 12, l.cover_split + 0.2, 110, M.BORE))   # 上面の開口（ボルトの通り道）
+    return out
+
+
+def left_feed(l=L):
+    """左側面の給弾口: ベルトが入るフィードトレイの張り出し（入口は暗い溝）と、その下の弾倉口の受け。"""
+    h = l.rcv_half
+    z0, z1 = l.feed_z
+    return [
+        box(h, 160, z0 + 2, h + 8, 205, z1, M.RECEIVER),
+        box(h + 8, 186, z0 + 6, h + 8.3, 196, z1 - 4, M.BORE),               # ベルトの入口
+        box(h + 8, 153, z0 + 14, h + 10, 157, z1 - 10, STEEL_BLACK),         # 弾倉止めの横棒（写真）
+    ]
+
+
+def right_side(l=L):
+    """右側面: コッキングハンドルのガイドレールと取っ手、リンク排出口、薬莢の排莢口（ばね式のダストカバー付き）。
+    FM 3-22.68: コッキングハンドルは右側面のガイドレールを動く。薬莢は右側面の下部から、リンクはフィードトレイの右から出る。"""
+    h = l.rcv_half
+    return [
+        box(-h - 3, 160, -150, -h, 168, 20, M.RECEIVER),                       # ガイドレール
+        box(-h - 6, 158, -150, -h - 3, 170, -136, STEEL_BLACK),                # 取っ手の付け根
+        box(-h - 18, 161, -147, -h - 6, 167, -139, STEEL_BLACK),               # 取っ手の腕（横へ出る）
+        y_cyl(-h - 15, -143, 5.0, 128, 166, M.POLYMER),                       # つまみ（下を向く。拡大写真）
+        box(-h - 0.3, 186, -122, -h, 196, -66, M.BORE),                        # リンク排出口
+        box(-h - 1.5, 116, -124, -h, 140, -62, M.RECEIVER),                    # 排莢口のダストカバー（閉）
+        lathe(-h - 1.5, 116, [(-124, 1.8), (-62, 1.8)], ar15_mesh.N_SMALL, STEEL_BLACK),   # ダストカバーの軸
     ]
 
 
@@ -141,8 +204,37 @@ def magwell(l=L):
 
 
 def feed_cover(l=L):
-    """フィードカバー（上面にレール、後ろにリアサイト）。後ろの蝶番で上へ開く（ボーン feed_cover）。"""
-    return [extrude_x_beveled(O.FEED_COVER["outer"], -l.rcv_half + 1, l.rcv_half - 1, 2.0, M.RECEIVER, steps=1)]
+    """フィードカバー: 前端の蝶番で回り、後ろが持ち上がる（ボーン feed_cover。開けると支えなしで開いたまま）。
+    後ろの左右に押して外すラッチ。裏にはベルトを送るフィードレバーとフィードポール（開けたときに見える）。"""
+    h = l.rcv_half
+    hz, hy = l.cover_hinge
+    top = clip_y(O.FEED_COVER, l.cover_top - 4, 1e4)
+    zr = max(p[0] for p in O.FEED_COVER["outer"])
+    return [
+        *outline_parts(top, -h + 0.5, h - 0.5, M.RECEIVER),                  # 天板
+        *outline_parts(O.FEED_COVER, h - 2.0, h, M.RECEIVER),                # 側面の板（左）
+        *outline_parts(O.FEED_COVER, -h, -h + 2.0, M.RECEIVER),              # 〃（右）
+        box(-h, l.cover_split, zr - 5, h, l.cover_top, zr, M.RECEIVER),       # 後ろの板
+        x_cyl(hz, hy, 5.0, -h + 3, h - 3, STEEL_BLACK),                       # 蝶番
+        box(h, 199, zr - 16, h + 3, 207, zr - 6, STEEL_BLACK),                # ラッチ（左）
+        box(-h - 3, 199, zr - 16, -h, 207, zr - 6, STEEL_BLACK),              # ラッチ（右）
+        box(-3, l.cover_top - 9, -112, 3, l.cover_top - 4, 40, STEEL_BLACK),  # フィードレバー（天板の裏）
+        box(4, l.cover_split + 1, -104, 11, l.cover_top - 4, -88, STEEL_BLACK),   # フィードポール（左）
+        box(-11, l.cover_split + 1, -104, -4, l.cover_top - 4, -88, STEEL_BLACK),  # 〃（右）
+    ]
+
+
+def feed_tray(l=L):
+    """フィードトレイ（カバーの下。ベルトを左から右へ送る溝と、弾を止める縁）。トレイも前を軸に持ち上がる。"""
+    h = l.rcv_half
+    y = l.cover_split
+    z0, z1 = -128.0, -54.0
+    return [
+        box(-h + 1, y - 3, z0, h + 8, y, z1, M.RECEIVER),
+        box(-h + 1, y, -97, h + 8, y + 3, -93, M.RECEIVER),                  # 弾を導く縁（前）
+        box(-h + 1, y, -66, h + 8, y + 3, -62, M.RECEIVER),                  # 〃（後ろ）
+        box(-6, y, z0, 6, y + 4, z0 + 8, STEEL_BLACK),                       # 弾止め
+    ]
 
 
 def rail_top(l=L):
@@ -167,16 +259,32 @@ def rear_sight(l=L):
         box(-5, sy + 1.5, z - 1, 5, sy + 6, z + 1, STEEL_BLACK),
         box(1.5, sy - 1.5, z - 1, 5, sy + 1.5, z + 1, STEEL_BLACK),
         box(-5, sy - 1.5, z - 1, -1.5, sy + 1.5, z + 1, STEEL_BLACK),
-        lathe(-13, y0 + 12, [(z - 6, 5), (z + 6, 5)], ar15_mesh.N_SMALL, STEEL_BLACK),   # 高さ調整のドラム（右）
+        # 左右の調整つまみ（拡大写真: 丸穴の板の外側にローレットのつまみ。右側は距離の数字入りのドラム）
+        x_cyl(z + 15, sy + 2, 6.0, 11, 18, STEEL_BLACK, n=12),
+        x_cyl(z - 12, y0 + 7, 6.0, 11, 18, STEEL_BLACK, n=12),
+        x_cyl(z - 6, y0 + 9, 7.0, -18, -11, STEEL_BLACK, n=12),
     ]
 
 
 # ---------------------------------------------------------------- 下回り
 def pistol_grip(l=L):
-    """樹脂のグリップ。断面は丸め、上端は受け部の下面（Y=108）に接する。"""
+    """樹脂のグリップ。断面は丸め、上端は受け部の下面（Y=108）に接する。側面に横溝（拡大写真）。"""
+    from shapely.geometry import LineString, Polygon
     def radius(nz, ny):
         return 4.0 + 8.0 * (1 - ar15_mesh._smoothstep(0.55, 0.9, abs(ny)))
-    return [inflate_x(O.GRIP["outer"], 14.0, M.POLYMER, steps=ar15_mesh.GRIP_STEPS, radius_fn=radius)]
+    out = [inflate_x(O.GRIP["outer"], 14.0, M.POLYMER, steps=ar15_mesh.GRIP_STEPS, radius_fn=radius)]
+    g = Polygon(O.GRIP["outer"])
+    for y in range(26, 92, 7):
+        seg = g.intersection(LineString([(-1e3, y), (1e3, y)]))
+        zs = [c[0] for c in seg.coords] if seg.geom_type == "LineString" else []
+        if len(zs) < 2:
+            continue
+        za, zb = min(zs) + 8, max(zs) - 8
+        if zb - za < 8:
+            continue
+        for x0, x1 in ((13.6, 14.3), (-14.3, -13.6)):
+            out.append(box(x0, y, za, x1, y + 2.2, zb, M.RUBBER))
+    return out
 
 
 def trigger_guard(l=L):
@@ -234,17 +342,21 @@ def flash_hider(l=L):
 
 
 def front_sight(l=L):
-    """フロントサイト: 銃身を抱く台、塔、上で左右の耳（フード）がポストを守る。側面形は写真。"""
+    """フロントサイト: 銃身を抱く台から塔が立ち、上に輪のフード（中にポスト）。塔の側面に止めねじの穴。
+    側面形は写真、輪のフードは拡大写真（前から見ると丸い輪）。"""
     b = l.bore_y
-    z0, z1 = min(p[0] for p in O.FRONT_SIGHT["outer"]), max(p[0] for p in O.FRONT_SIGHT["outer"])
-    split_y = l.sight_y - 12
-    tower = clip_y(O.FRONT_SIGHT, -1e4, split_y + 1)
-    ears = clip_y(O.FRONT_SIGHT, split_y, 1e4)
+    zs = [p[0] for p in O.FRONT_SIGHT["outer"]]
+    z0, z1 = min(zs), max(zs)
+    top = max(p[1] for p in O.FRONT_SIGHT["outer"])
+    r_out = 10.5
+    cy = top - r_out                                    # 輪の中心（照準線のすぐ上）
+    zc = (z0 + z1) / 2
+    tower = clip_y(O.FRONT_SIGHT, -1e4, cy - r_out + 3)
     return [
         lathe(0, b, [(z0 + 4, 14), (z1 - 4, 14)], ar15_mesh.N_MID, STEEL_BLACK),
         *outline_parts(tower, -6, 6, STEEL_BLACK),
-        *outline_parts(ears, 3.5, 6.5, STEEL_BLACK),
-        *outline_parts(ears, -6.5, -3.5, STEEL_BLACK),
+        ring_z(cy, zc - 3, zc + 3, 8.0, r_out, STEEL_BLACK, n=16),
+        x_cyl(zc, b + 30, 2.5, 5.8, 6.4, M.BORE), x_cyl(zc, b + 30, 2.5, -6.4, -5.8, M.BORE),   # 止めねじの穴
     ]
 
 
@@ -254,8 +366,11 @@ def front_sight_post(l=L):
 
 
 def gas_system(l=L):
-    """銃身下のガスシリンダー・ガスブロック・前端の調整ノブ・二脚の取付け（側面形は写真。断面は丸める）。"""
-    return [extrude_x_beveled(O.GAS["outer"], -13, 13, 5.0, STEEL_BLACK, steps=2)]
+    """銃身下のガスシリンダー・ガスブロック・二脚の取付け（側面形は写真。断面は丸める）と、前端の調整ノブ（六角）。"""
+    zs = [p[0] for p in O.GAS["outer"]]
+    zf = min(zs)
+    return [extrude_x_beveled(O.GAS["outer"], -13, 13, 5.0, STEEL_BLACK, steps=2),
+            lathe(0, l.gas_y, [(zf, 12.5), (zf + 14, 12.5)], 6, STEEL_BLACK)]
 
 
 def handguard(l=L):
@@ -265,6 +380,9 @@ def handguard(l=L):
     for y in (118.0, 140.0, 158.0):     # 側面の横溝の間の帯（写真の 3 本の筋）
         for s in (1, -1):
             out.append(box(s * l.hg_half, y, f + 30, s * (l.hg_half + 1.2), y + 4, r - 20, M.POLYMER))
+    # 左側面の丸い金具（写真・拡大写真: 穴の開いた円盤）
+    out += [x_cyl(-307.0, 108.0, 6.0, l.hg_half - 1, l.hg_half + 3, STEEL_BLACK, n=12),
+            x_cyl(-307.0, 108.0, 2.5, l.hg_half + 2.9, l.hg_half + 3.2, M.BORE)]
     return out
 
 
@@ -273,7 +391,9 @@ def rail_handguard(l=L):
     zs = [p[0] for p in O.SHIELD["outer"]]
     zf, zr = min(zs), max(zs)
     y1 = max(p[1] for p in O.SHIELD["outer"])
-    return [
+    holes = [x_cyl(z, 188.0, 3.0, sx, sx + 0.3, M.BORE)            # 側面の丸穴の列（放熱。拡大写真）
+             for z in [zr - 16 - 19 * i for i in range(int((zr - zf - 20) // 19))] for sx in (13.9, -14.2)]
+    return holes + [
         extrude_x_beveled(O.SHIELD["outer"], -14, 14, 1.5, M.RECEIVER, steps=1),
         box(-8, y1, zf + 2, 8, y1 + 3, zr - 2, M.RAIL),
         box(-RAIL_W / 2, y1 + 3, zf + 2, RAIL_W / 2, y1 + 7.6, zr - 2, M.RAIL),
@@ -296,19 +416,28 @@ def carry_handle(l=L):
 
 
 def bipod_leg(l=L, side=1):
-    """二脚の片脚（たたんだ状態: 後ろへ倒れ、ハンドガードの下に沿う）。side=+1 左 / -1 右。"""
+    """二脚の片脚（たたんだ状態: 後ろへ倒れ、ハンドガードの下に沿う）。拡大写真: 脚は溝の入った平たい板で、
+    中に細い脚が入る伸縮式。side=+1 左 / -1 右。"""
     pz, py = l.bipod_pivot
     x = side * 9
-    leg = [lathe(x, py, [(pz, 6), (pz + l.bipod_len - 20, 6)], ar15_mesh.N_SMALL, STEEL_BLACK)]
+    end = pz + l.bipod_len - 20
+    leg = [
+        x_cyl(pz, py, 6.0, x - 3.5, x + 3.5, STEEL_BLACK, n=10),                                  # 付け根の軸
+        extrude_x([(pz, py - 6), (end, py - 5), (end, py + 5), (pz, py + 6)], x - 1.8, x + 1.8, STEEL_BLACK),
+        extrude_x([(pz + 30, py - 1.5), (end - 20, py - 1.5), (end - 20, py + 1.5), (pz + 30, py + 1.5)],
+                  min(x + side * 1.8, x + side * 2.1), max(x + side * 1.8, x + side * 2.1), M.BORE),  # 外側の溝
+    ]
     return rotated(leg, "x", l.bipod_fold_deg, (0, py, pz))
 
 
 def bipod_foot(l=L, side=1):
+    """伸縮する中の脚と足板（立てたとき地面に平らに当たる板）。"""
     pz, py = l.bipod_pivot
     x = side * 9
     end = pz + l.bipod_len
-    foot = [lathe(x, py, [(end - 30, 4.5), (end - 4, 4.5)], ar15_mesh.N_SMALL, STEEL_BLACK),
-            extrude_x([(end - 4, py - 3), (end, py - 3), (end, py + 9), (end - 4, py + 9)], x - 6, x + 6, STEEL_BLACK)]
+    foot = [extrude_x([(end - 40, py - 3.5), (end - 3, py - 3.5), (end - 3, py + 3.5), (end - 40, py + 3.5)],
+                      x - 1.2, x + 1.2, STEEL_BLACK),
+            extrude_x([(end - 3, py - 6), (end, py - 6), (end, py + 14), (end - 3, py + 14)], x - 7, x + 7, STEEL_BLACK)]
     return rotated(foot, "x", l.bipod_fold_deg, (0, py, pz))
 
 
@@ -369,7 +498,8 @@ def build(feed="belt"):
 
     m.bone("root", None, (0, 0, 0))
     add("receiver", "root", (0, b, 0), "receiver", receiver() + magwell())
-    add("feed_cover", "receiver", (0, l.cover_top, l.rcv_rear_z - 6), "feed_cover", feed_cover())
+    add("feed_cover", "receiver", (0, l.cover_hinge[1], l.cover_hinge[0]), "feed_cover", feed_cover())
+    add("feed_tray", "receiver", (0, l.cover_split, -128.0), "feed_tray", feed_tray())
     add("rail_top", "feed_cover", (0, l.cover_top + l.rail_h, l.rail_rear_z), "rail_top", rail_top())
     add("rear_sight", "feed_cover", (0, l.cover_top, l.rear_sight_z), "rear_sight", rear_sight())
     add("pistol_grip", "receiver", (0, 108, 40), "pistol_grip", pistol_grip())
