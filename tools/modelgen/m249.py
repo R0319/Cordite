@@ -142,6 +142,7 @@ def clip_y(o, y0, y1):
 
 # ---------------------------------------------------------------- 受け部
 # 左側面の留め具（写真から。z, y, 半径）。右側面も同じ位置に置く（右側面の写真は無い）
+POCKET = (-128.0, -54.0, 150.0, 7.0)   # 給弾部の下の空間（前端 z, 後端 z, 底の高さ, 左右の壁の厚さ）
 RIVETS = [(98.0, 172.0, 2.0), (30.0, 172.0, 2.0), (-37.0, 172.0, 2.0), (50.0, 141.0, 2.0), (-27.0, 141.0, 2.0)]
 PINS = [(118.0, 178.0, 5.0), (106.0, 170.0, 3.5), (110.0, 145.0, 3.5), (90.0, 152.0, 3.5), (115.0, 122.0, 4.5),
         (30.0, 122.0, 2.5), (-8.0, 121.0, 2.5), (-118.0, 175.0, 3.0)]
@@ -149,8 +150,19 @@ PINS = [(118.0, 178.0, 5.0), (106.0, 170.0, 3.5), (110.0, 145.0, 3.5), (90.0, 15
 
 def receiver(l=L):
     h, b = l.rcv_half, l.bore_y
+    # 給弾部の下の空間（フィードトレイを上げると見える）: 中央部だけ側面形から切り欠き、左右の壁は全形のまま
+    from shapely.geometry import Polygon, box as sbox
+    pz0, pz1, pfloor, wall = POCKET
+    inner = Polygon(O.RECEIVER["outer"]).difference(sbox(pz0, pfloor, pz1, 400))
+    inner = inner if inner.geom_type == "Polygon" else max(inner.geoms, key=lambda q: q.area)
     out = [
-        *outline_parts(O.RECEIVER, -h, h, M.RECEIVER),                         # 本体（鋼板のプレス。角張ったまま）
+        *outline_parts(O.RECEIVER, h - wall, h, M.RECEIVER),                   # 本体の左右の壁（鋼板のプレス）
+        *outline_parts(O.RECEIVER, -h, -h + wall, M.RECEIVER),
+        extrude_x(list(inner.exterior.coords)[:-1], -h + wall, h - wall, M.RECEIVER),   # 中央部（給弾部を切り欠く）
+        box(-h + wall, pfloor, pz0, h - wall, pfloor + 0.4, pz1, M.BORE),          # 空間の底（暗い）
+        ring_z(b, pz0 - 0.5, pz0 + 0.5, 3.6, 12.0, M.STEEL),                    # 前の壁: 薬室の口
+        lathe(0, b, [(pz0 - 0.4, 3.6), (pz0 + 0.6, 3.6)], ar15_mesh.N_SMALL, M.BORE),
+        box(-9, b - 10, pz1 - 0.6, 9, b + 10, pz1, M.STEEL),                   # 後ろの壁: ボルトの面
         # 側面の段（写真の横の筋）: 中ほどの張り出しと、上下の細い溝
         box(h, 157, -50, h + 1.5, 161, l.rcv_rear_z - 4, M.RECEIVER),
         box(-h - 1.5, 157, -50, -h, 161, l.rcv_rear_z - 4, M.RECEIVER),
@@ -165,7 +177,7 @@ def receiver(l=L):
         out += [x_cyl(z, y, r, x0, x1, STEEL_BLACK) for z, y, r in PINS]
     out.append(x_cyl(-35.0, 118.0, 4.0, h - 0.5, h + 1.0, M.BORE))           # 側面の丸穴（写真の明るい輪）
     out += left_feed(l) + right_side(l)
-    out.append(box(-12, l.cover_split - 0.4, -54, 12, l.cover_split + 0.2, 110, M.BORE))   # 上面の開口（ボルトの通り道）
+    out.append(box(-4, l.cover_split - 0.4, -54, 4, l.cover_split + 0.2, 100, M.BORE))   # 上面のコッキングの溝（カバー裏の溝カバーが閉じる）
     return out
 
 
@@ -219,6 +231,8 @@ def feed_cover(l=L):
         box(h, 199, zr - 16, h + 3, 207, zr - 6, STEEL_BLACK),                # ラッチ（左）
         box(-h - 3, 199, zr - 16, -h, 207, zr - 6, STEEL_BLACK),              # ラッチ（右）
         box(-3, l.cover_top - 9, -112, 3, l.cover_top - 4, 40, STEEL_BLACK),  # フィードレバー（天板の裏）
+        box(-12, l.cover_split + 2, hz + 8, 12, l.cover_top - 4, hz + 16, STEEL_BLACK),   # 前の弾ガイド（蝶番の後ろ）
+        box(-12, l.cover_split + 2, -66, 12, l.cover_top - 4, -60, STEEL_BLACK),          # 後ろの弾ガイド
         box(4, l.cover_split + 1, -104, 11, l.cover_top - 4, -88, STEEL_BLACK),   # フィードポール（左）
         box(-11, l.cover_split + 1, -104, -4, l.cover_top - 4, -88, STEEL_BLACK),  # 〃（右）
     ]
