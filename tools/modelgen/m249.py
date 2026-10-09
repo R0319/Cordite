@@ -58,7 +58,8 @@ class Layout:
     bipod_len = 235.0       # 回転軸→足先。たたむと足板が受け部の前（Z≈-150）に来て、立てると足が Y≈-135（写真 2 枚）
     bipod_ext = 30.0        # 脚の伸び（伸縮量は未確認）
     bipod_fold_deg = 0.5    # たたんだ脚はハンドガードの下面に沿ってほぼ水平（写真）
-    handle_pivot = (-170.0, 206.0)  # キャリングハンドルの回転軸（z, y）
+    handle_pivot = (-200.0, 206.0)  # キャリングハンドルの回転軸（z, y）。軸は銃身と平行（前後方向）で、左へ倒れる
+    handle_fold_deg = 72.0  # たたんだ角度（写真 1 枚目: 握りの高さと傾きが起こした状態の cos72°≒0.3 倍）
     mag_tilt = 45.0         # STANAG 弾倉の傾き（左下へ。③ 写真の見かけの高さ 122mm と 45° が一致）
     mag_pivot = (14.0, 170.0)       # 弾倉上端の中心（X, y）。写真の弾倉下端に合わせた
     mag_center_z = -84.0
@@ -130,6 +131,16 @@ def outline_parts(o, x0, x1, mat, bevel=0.0, steps=1):
     return [extrude_x(list(q.exterior.coords)[:-1], x0, x1, mat) for q in pieces if q.area > 0.5]
 
 
+def clip_z(o, z0, z1):
+    """側面形を前後 z0〜z1 で切る。"""
+    from shapely.geometry import Polygon, box as sbox
+    g = Polygon(o["outer"], o["holes"]).intersection(sbox(z0, -1e4, z1, 1e4))
+    if g.geom_type != "Polygon":
+        g = max(g.geoms, key=lambda q: q.area)
+    r = lambda ring: list(ring.coords)[:-1]
+    return {"outer": r(g.exterior), "holes": [r(h) for h in g.interiors]}
+
+
 def clip_y(o, y0, y1):
     """側面形を高さ y0〜y1 で切る（穴も含めて）。"""
     from shapely.geometry import Polygon, box as sbox
@@ -182,12 +193,15 @@ def receiver(l=L):
 
 
 def left_feed(l=L):
-    """左側面の給弾口: ベルトが入るフィードトレイの張り出し（入口は暗い溝）と、その下の弾倉口の受け。"""
+    """左側面の給弾口: ベルトが入るフィードトレイの張り出し（上下の枠の間を弾帯が通る）と、その下の弾倉口の受け。"""
     h = l.rcv_half
     z0, z1 = l.feed_z
+    y0 = l.cover_split
     return [
-        box(h, 160, z0 + 2, h + 8, 205, z1, M.RECEIVER),
-        box(h + 8, 186, z0 + 6, h + 8.3, 196, z1 - 4, M.BORE),               # ベルトの入口
+        box(h, 160, z0 + 2, h + 8, y0 - 1, z1, M.RECEIVER),                  # 入口の下の枠
+        box(h, y0 + 11, z0 + 2, h + 8, y0 + 13, z1, M.RECEIVER),             # 入口の上の枠（カバーの縁）
+        box(h, y0 - 1, z0 + 2, h + 8, y0 + 13, z0 + 6, M.RECEIVER),          # 入口の前の柱
+        box(h, y0 - 1, z1 - 4, h + 8, y0 + 13, z1, M.RECEIVER),              # 入口の後ろの柱
         box(h + 8, 153, z0 + 14, h + 10, 157, z1 - 10, STEEL_BLACK),         # 弾倉止めの横棒（写真）
     ]
 
@@ -224,7 +238,7 @@ def feed_cover(l=L):
     zr = max(p[0] for p in O.FEED_COVER["outer"])
     return [
         *outline_parts(top, -h + 0.5, h - 0.5, M.RECEIVER),                  # 天板
-        *outline_parts(O.FEED_COVER, h - 2.0, h, M.RECEIVER),                # 側面の板（左）
+        *outline_parts(clip_z(O.FEED_COVER, l.feed_z[1], 1e4), h - 2.0, h, M.RECEIVER),   # 側面の板（左。給弾口の後ろ）
         *outline_parts(O.FEED_COVER, -h, -h + 2.0, M.RECEIVER),              # 〃（右）
         box(-h, l.cover_split, zr - 5, h, l.cover_top, zr, M.RECEIVER),       # 後ろの板
         x_cyl(hz, hy, 5.0, -h + 3, h - 3, STEEL_BLACK),                       # 蝶番
@@ -417,18 +431,23 @@ def rail_handguard(l=L):
 
 
 def carry_handle(l=L):
-    """キャリングハンドル（たたんだ状態: 握りが銃身の上で前を向く）。側面形は写真。台と腕は細く、握りは丸める。"""
-    mount = clip_y(O.CARRY_HANDLE, -1e4, 1e4)
-    from shapely.geometry import Polygon, box as sbox
-    g = Polygon(mount["outer"], mount["holes"])
-    grip = g.intersection(sbox(-1e4, -1e4, -180.0, 1e4))
-    arm = g.intersection(sbox(-181.0, -1e4, 1e4, 1e4))
-    pick = lambda q: q if q.geom_type == "Polygon" else max(q.geoms, key=lambda x: x.area)
-    grip, arm = pick(grip), pick(arm)
-    return [
-        extrude_x_beveled(list(grip.exterior.coords)[:-1], -11, 11, 5.0, M.POLYMER, steps=2),
-        extrude_x(list(arm.exterior.coords)[:-1], -7, 7, STEEL_BLACK),
-    ]
+    """キャリングハンドル（銃身交換用の取っ手。銃身組立品の後部に付き、使わないときは倒す）。
+    写真 2 枚の比較から: 銃身の上の台から前へ伸びる棒が回転軸（銃身と平行）で、その前端から腕が上へ立ち、
+    握りは腕の上端から後ろへ斜め上に伸びる「C」字形。左へ倒すとたたんだ状態（写真 1 枚目）。
+    ここでは起こした形を作り、handle_fold_deg だけ左へ倒して既定の姿勢にする。"""
+    _, py = l.handle_pivot
+    zb, zf = -160.0, -245.0                    # 台の後端・軸棒の前端
+    gz0, gy0, gz1, gy1 = -250.0, 247.0, -166.0, 269.0   # 握りの前端（腕の上端）・後端（写真 2 枚目）
+    tilt = math.degrees(math.atan2(gy1 - gy0, gz1 - gz0))
+    glen = math.hypot(gz1 - gz0, gy1 - gy0)
+    # 握り: 指の凹凸のある回転体（Z 方向に作ってから傾ける）。後端は少し太いつば
+    prof = [(gz0, 9.0), (gz0 + 6, 10.5), (gz0 + 16, 9.5), (gz0 + 28, 11.0), (gz0 + 40, 9.5), (gz0 + 52, 11.0),
+            (gz0 + 64, 9.8), (gz0 + glen - 10, 10.8), (gz0 + glen - 6, 12.5), (gz0 + glen, 12.5)]
+    grip = rotated([lathe(0, gy0, prof, ar15_mesh.N_MID, M.POLYMER)], "x", -tilt, (0, gy0, gz0))
+    arm = [extrude_x([(zf - 4, py - 3), (zf + 3, py - 3), (gz0 + 3, gy0), (gz0 - 4, gy0)], -3, 3, STEEL_BLACK)]
+    parts = grip + arm + [lathe(0, py, [(zf - 4, 3.2), (zb - 20, 3.2)], ar15_mesh.N_SMALL, STEEL_BLACK)]  # 軸棒
+    parts = rotated(parts, "z", -l.handle_fold_deg, (0, py, 0))     # 左（+X）へ倒す
+    return parts + [box(-9, l.shield[3] + 2, zb - 22, 9, py + 6, zb, STEEL_BLACK)]   # 台（銃身側。動かない部分）
 
 
 def bipod_leg(l=L, side=1):
@@ -484,18 +503,34 @@ def ammo_box(l=L):
         extrude_x_beveled(O.BOX_BODY["outer"], x0, x1, 4.0, M.CANVAS, steps=2),
         extrude_x_beveled(O.BOX_LID["outer"], x0 - 1, x1 + 1, 2.0, M.BOX_LID, steps=1),
         box(x1 - 0.5, 20, zc - 2, x1 + 1.5, 80, zc + 2, M.BOX_LID),     # ファスナー（左面。側面写真で見える面）
+        box(40, l.box[3] - 0.2, z0 + 12, 60, l.box[3] + 0.3, z1 - 12, M.BORE),   # ふたの上の弾帯の出口
     ]
 
 
-def belt(l=L, n=8):
-    """ボックスから左側のフィードトレイへ上がる弾帯（弾は前向きに縦に並ぶ）。"""
+def belt(l=L, pitch=9.5):
+    """弾帯: フィードトレイの上に横に並び（弾は前向き）、左側面の入口を出て外で下へ曲がり、ボックスの上に入る。
+    弾ごとにリンク（薬莢を抱く輪）を付け、隣の弾のリンクと前後にずらして噛み合わせる。"""
+    y_tray = l.cover_split + 5.0                          # トレイ上の弾の中心
+    xs_tray = [-6.0, 3.5, 13.0, 22.5, 32.0]               # トレイ上（最初の弾は弾止めに当たる）〜入口
+    cx, cy, r = 38.0, y_tray - 12.0, 12.0                 # 外で下へ曲がる部分（円弧）
+    pts = [(x, y_tray) for x in xs_tray]
+    for a in (60.0, 25.0):
+        t = math.radians(a)
+        pts.append((cx + r * math.cos(t), cy + r * math.sin(t)))
+    x_down = cx + r
+    y = cy - 4.0
+    while y > l.box[3] + 2:
+        pts.append((x_down, y))
+        y -= pitch
     out = []
-    x = l.rcv_half + 6
-    for i in range(n):
-        y = l.box[3] + 6 + i * 9.0
+    for i, (x, y) in enumerate(pts):
         case, bullet = ar15_parts.cartridge_556(z_tip=-119.4, y=y)
         out += [c.moved(x, 0, 0) for c in case + bullet]
-        out.append(box(x - 5.5, y - 4.5, -100, x + 5.5, y + 4.5, -92, STEEL_BLACK))   # リンク
+        zl = -88.0 if i % 2 == 0 else -96.0              # リンク（隣どうしで前後にずらす）
+        out.append(ring_z(y, zl - 3.5, zl + 3.5, 4.6, 5.6, STEEL_BLACK, cx=x, n=8))
+        if i + 1 < len(pts):                               # 隣の弾へ渡るリンクの舌
+            nx, ny = pts[i + 1]
+            out.append(box(min(x, nx) - 1, min(y, ny) - 1, -92.5, max(x, nx) + 1, max(y, ny) + 1, -91.5, STEEL_BLACK))
     return out
 
 
@@ -535,13 +570,13 @@ def build(feed="belt"):
     add("chamber", "barrel", (0, b, l.breech_z), None, [])
     add("front_sight_base", "barrel", (0, b, l.fs_z[0]), "front_sight", front_sight())
     add("front_sight_post", "front_sight_base", (0, l.sight_y, sum(l.fs_z) / 2), None, front_sight_post())
-    add("carry_handle", "barrel", (0, l.handle_pivot[1], l.handle_pivot[0]), "carry_handle", carry_handle())
+    add("carry_handle", "barrel", (0, l.handle_pivot[1], l.handle_pivot[0]), "carry_handle", carry_handle())  # Z 軸まわりに回す
     add("muzzle", "root", (0, b, l.barrel_end_z), "flash_hider", flash_hider())
     add("bolt", "root", (0, b, l.breech_z + 40), None, [])
 
     if feed == "belt":
         add("magazin", "root", (sum(l.box_x) / 2, l.box[3], sum(l.box[:2]) / 2), "ammo_box", ammo_box())
-        add("mag_ammo", "magazin", (l.rcv_half + 6, l.box[3], -100), "belt", belt())
+        add("mag_ammo", "magazin", (50.0, l.box[3], -100), "belt", belt())
     else:
         add("magazin", "root", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), "magazine_stanag", stanag_mag())
         add("mag_ammo", "magazin", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), None, [])
