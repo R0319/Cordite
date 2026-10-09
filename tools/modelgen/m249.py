@@ -44,6 +44,9 @@ class Layout:
     sight_y = 222.0         # 照準線の高さ（リアサイトの穴の中心。写真から）
     rear_sight_z = 87.4     # リアサイトの穴の位置
     feed_z = (-131.0, -52.0)   # フィードトレイ（左側のベルト入口）と弾倉口の前後範囲
+    feed_y = 183.0          # トレイ上の弾の中心の高さ（ボア軸の約 14mm 上。写真で弾帯が受け部に入る高さ）
+    feed_gap = (176.0, 192.0)   # 左側面の弾帯の入口（上下）
+    link_pitch = 10.5       # 弾帯の弾の間隔（推定: 薬莢径 9.6mm＋リンクの板。公表値は見つからず）
     hg_rear_z = -151.0      # ハンドガード
     hg_front_z = -362.0
     hg_top = 178.0
@@ -114,6 +117,33 @@ def ring_z(y, z0, z1, r_in, r_out, mat, cx=0.0, n=None):
                  cap0=False, cap1=False)
 
 
+def arc_ring(cx, cy, z0, z1, r_in, r_out, a0, a1, mat, n=10):
+    """Z 方向を軸にした部分的な輪（角度 a0〜a1 [度]。リンクの「開いた輪」用）。"""
+    verts, faces = [], []
+    angs = [math.radians(a0 + (a1 - a0) * i / n) for i in range(n + 1)]
+    idx = {}
+    for i, a in enumerate(angs):
+        for j, (r, z) in enumerate(((r_out, z0), (r_out, z1), (r_in, z1), (r_in, z0))):
+            idx[i, j] = len(verts)
+            verts.append((cx + r * math.cos(a), cy + r * math.sin(a), z))
+    for i in range(n):
+        for j in range(4):
+            faces.append([idx[i, j], idx[i + 1, j], idx[i + 1, (j + 1) % 4], idx[i, (j + 1) % 4]])
+    faces.append([idx[0, 0], idx[0, 1], idx[0, 2], idx[0, 3]])
+    faces.append([idx[n, 3], idx[n, 2], idx[n, 1], idx[n, 0]])
+    return MeshPart(verts, faces, mat).finalize()
+
+
+def cartridge(x, y, z_tip):
+    """5.56×45mm 実包（回転体）: 縁・抽筒溝・テーパーの胴・肩・首、弾頭は先細り。全長 57.4mm、薬莢 44.7mm。"""
+    b = z_tip + 57.4                                    # 薬莢の底（+Z 側）
+    case = [(b, 4.8), (b - 1.1, 4.8), (b - 1.3, 4.2), (b - 2.2, 4.2), (b - 2.6, 4.75), (b - 36.5, 4.55),
+            (b - 39.6, 3.15), (b - 44.7, 3.1)]
+    bullet = [(b - 44.7, 2.85), (b - 49.0, 2.8), (b - 53.5, 2.1), (b - 56.5, 0.9), (z_tip, 0.3)]
+    return [lathe(x, y, case, ar15_mesh.N_SMALL, M.BRASS, cap0=True, cap1=False),
+            lathe(x, y, bullet, ar15_mesh.N_SMALL, M.COPPER, cap0=False, cap1=True)]
+
+
 def outline_parts(o, x0, x1, mat, bevel=0.0, steps=1):
     """トレースした側面形 {'outer', 'holes'} を X 方向に押し出す。穴があれば、穴の中心を通る縦線で
     穴の無い片に切り分けてから押し出す（角丸めは切り口に溝が出るので、穴のある部品では使わない）。"""
@@ -159,6 +189,11 @@ PINS = [(118.0, 178.0, 5.0), (106.0, 170.0, 3.5), (110.0, 145.0, 3.5), (90.0, 15
         (30.0, 122.0, 2.5), (-8.0, 121.0, 2.5), (-118.0, 175.0, 3.0)]
 
 
+def _with_notch(o, z0, z1, y0, y1):
+    """側面形に長方形の窓を開ける（穴として）。"""
+    return {"outer": o["outer"], "holes": o["holes"] + [[(z0, y0), (z1, y0), (z1, y1), (z0, y1)]]}
+
+
 def receiver(l=L):
     h, b = l.rcv_half, l.bore_y
     # 給弾部の下の空間（フィードトレイを上げると見える）: 中央部だけ側面形から切り欠き、左右の壁は全形のまま
@@ -167,7 +202,8 @@ def receiver(l=L):
     inner = Polygon(O.RECEIVER["outer"]).difference(sbox(pz0, pfloor, pz1, 400))
     inner = inner if inner.geom_type == "Polygon" else max(inner.geoms, key=lambda q: q.area)
     out = [
-        *outline_parts(O.RECEIVER, h - wall, h, M.RECEIVER),                   # 本体の左右の壁（鋼板のプレス）
+        *outline_parts(_with_notch(O.RECEIVER, l.feed_z[0] + 3, l.feed_z[1] - 2, *l.feed_gap), h - wall, h,
+                       M.RECEIVER),                                             # 左の壁（弾帯の入口を開ける）
         *outline_parts(O.RECEIVER, -h, -h + wall, M.RECEIVER),
         extrude_x(list(inner.exterior.coords)[:-1], -h + wall, h - wall, M.RECEIVER),   # 中央部（給弾部を切り欠く）
         box(-h + wall, pfloor, pz0, h - wall, pfloor + 0.4, pz1, M.BORE),          # 空間の底（暗い）
@@ -193,15 +229,15 @@ def receiver(l=L):
 
 
 def left_feed(l=L):
-    """左側面の給弾口: ベルトが入るフィードトレイの張り出し（上下の枠の間を弾帯が通る）と、その下の弾倉口の受け。"""
+    """左側面の給弾口: 弾帯が入る張り出し（上下の枠の間を弾帯が通る）と、その下の弾倉口の受け。"""
     h = l.rcv_half
     z0, z1 = l.feed_z
-    y0 = l.cover_split
+    g0, g1 = l.feed_gap
     return [
-        box(h, 160, z0 + 2, h + 8, y0 - 1, z1, M.RECEIVER),                  # 入口の下の枠
-        box(h, y0 + 11, z0 + 2, h + 8, y0 + 13, z1, M.RECEIVER),             # 入口の上の枠（カバーの縁）
-        box(h, y0 - 1, z0 + 2, h + 8, y0 + 13, z0 + 6, M.RECEIVER),          # 入口の前の柱
-        box(h, y0 - 1, z1 - 4, h + 8, y0 + 13, z1, M.RECEIVER),              # 入口の後ろの柱
+        box(h, 160, z0 + 2, h + 8, g0, z1, M.RECEIVER),                      # 入口の下の枠
+        box(h, g1, z0 + 2, h + 8, l.cover_split + 13, z1, M.RECEIVER),       # 入口の上の枠
+        box(h, g0, z0 + 2, h + 8, g1, z0 + 5, M.RECEIVER),                   # 入口の前の柱
+        box(h, g0, z1 - 2, h + 8, g1, z1, M.RECEIVER),                       # 入口の後ろの柱
         box(h + 8, 153, z0 + 14, h + 10, 157, z1 - 10, STEEL_BLACK),         # 弾倉止めの横棒（写真）
     ]
 
@@ -238,30 +274,31 @@ def feed_cover(l=L):
     zr = max(p[0] for p in O.FEED_COVER["outer"])
     return [
         *outline_parts(top, -h + 0.5, h - 0.5, M.RECEIVER),                  # 天板
-        *outline_parts(clip_z(O.FEED_COVER, l.feed_z[1], 1e4), h - 2.0, h, M.RECEIVER),   # 側面の板（左。給弾口の後ろ）
+        *outline_parts(O.FEED_COVER, h - 2.0, h, M.RECEIVER),                # 側面の板（左）
         *outline_parts(O.FEED_COVER, -h, -h + 2.0, M.RECEIVER),              # 〃（右）
         box(-h, l.cover_split, zr - 5, h, l.cover_top, zr, M.RECEIVER),       # 後ろの板
         x_cyl(hz, hy, 5.0, -h + 3, h - 3, STEEL_BLACK),                       # 蝶番
         box(h, 199, zr - 16, h + 3, 207, zr - 6, STEEL_BLACK),                # ラッチ（左）
         box(-h - 3, 199, zr - 16, -h, 207, zr - 6, STEEL_BLACK),              # ラッチ（右）
         box(-3, l.cover_top - 9, -112, 3, l.cover_top - 4, 40, STEEL_BLACK),  # フィードレバー（天板の裏）
-        box(-12, l.cover_split + 2, hz + 8, 12, l.cover_top - 4, hz + 16, STEEL_BLACK),   # 前の弾ガイド（蝶番の後ろ）
-        box(-12, l.cover_split + 2, -66, 12, l.cover_top - 4, -60, STEEL_BLACK),          # 後ろの弾ガイド
-        box(4, l.cover_split + 1, -104, 11, l.cover_top - 4, -88, STEEL_BLACK),   # フィードポール（左）
-        box(-11, l.cover_split + 1, -104, -4, l.cover_top - 4, -88, STEEL_BLACK),  # 〃（右）
+        box(-12, l.feed_y + 6, hz + 8, 12, l.cover_top - 4, hz + 16, STEEL_BLACK),   # 前の弾ガイド（蝶番の後ろ）
+        box(-12, l.feed_y + 6, -66, 12, l.cover_top - 4, -60, STEEL_BLACK),          # 後ろの弾ガイド
+        box(4, l.feed_y + 5, -104, 11, l.cover_top - 4, -88, STEEL_BLACK),   # フィードポール（左）
+        box(-11, l.feed_y + 5, -104, -4, l.cover_top - 4, -88, STEEL_BLACK),  # 〃（右）
     ]
 
 
 def feed_tray(l=L):
-    """フィードトレイ（カバーの下。ベルトを左から右へ送る溝と、弾を止める縁）。トレイも前を軸に持ち上がる。"""
+    """フィードトレイ: 弾帯を左から受け、先頭の弾を弾止めに当てて薬室の上（ボア軸の少し上）に位置決めする。
+    リンクの開いた側を下にして平らに置く（FM 3-22.68）。前を軸に持ち上がる（ボーン feed_tray）。"""
     h = l.rcv_half
-    y = l.cover_split
+    y = l.feed_y - 5.0                      # トレイの上面（弾の下）
     z0, z1 = -128.0, -54.0
     return [
-        box(-h + 1, y - 3, z0, h + 8, y, z1, M.RECEIVER),
-        box(-h + 1, y, -97, h + 8, y + 3, -93, M.RECEIVER),                  # 弾を導く縁（前）
-        box(-h + 1, y, -66, h + 8, y + 3, -62, M.RECEIVER),                  # 〃（後ろ）
-        box(-6, y, z0, 6, y + 4, z0 + 8, STEEL_BLACK),                       # 弾止め
+        box(-19, y - 3, z0, h + 8, y, z1, M.RECEIVER),
+        box(-19, y, -98, h + 8, y + 2, -95, M.RECEIVER),                     # 弾を導く溝の縁（前）
+        box(-19, y, -66, h + 8, y + 2, -63, M.RECEIVER),                     # 〃（後ろ）
+        box(-11, y, z0, -6, l.feed_y + 4, z1, STEEL_BLACK),                  # 弾止め（先頭の弾の右）
     ]
 
 
@@ -507,31 +544,52 @@ def ammo_box(l=L):
     ]
 
 
-def belt(l=L, pitch=9.5):
-    """弾帯: フィードトレイの上に横に並び（弾は前向き）、左側面の入口を出て外で下へ曲がり、ボックスの上に入る。
-    弾ごとにリンク（薬莢を抱く輪）を付け、隣の弾のリンクと前後にずらして噛み合わせる。"""
-    y_tray = l.cover_split + 5.0                          # トレイ上の弾の中心
-    xs_tray = [-6.0, 3.5, 13.0, 22.5, 32.0]               # トレイ上（最初の弾は弾止めに当たる）〜入口
-    cx, cy, r = 38.0, y_tray - 12.0, 12.0                 # 外で下へ曲がる部分（円弧）
-    pts = [(x, y_tray) for x in xs_tray]
-    for a in (60.0, 25.0):
+def belt(l=L):
+    """弾帯（M27 リンク）。トレイの上に平らに並び（リンクの開いた側が下、先頭の弾は弾止めに当たる。FM 3-22.68）、
+    左側面の入口を出て外で下へ曲がり、ボックスのふたの出口に入る。外へ出ると開いた側は受け部の方を向く。
+    リンク（Wikipedia: M27/M13）: 1 枚の板を曲げた部分的な輪。各リンクは 1 つの輪で自分の弾の薬莢（肩の下）を抱き、
+    反対側の 2 つの輪で隣の弾を抱く（隣のリンクの輪と互い違い）。小さな舌が薬莢の抽筒溝に掛かる。"""
+    pitch, fy = l.link_pitch, l.feed_y
+    pts = []                                              # (x, y, 開いた側の向き[度])
+    x = 0.0
+    while x < l.rcv_half + 8:                             # トレイの上（先頭は X=0、薬室の上）〜入口
+        pts.append((x, fy, -90.0))
+        x += pitch
+    r = 10.0
+    cx, cy = x - pitch * 0.4, fy - r                      # 外で下へ曲がる円弧の中心
+    for a in (60.0, 20.0):
         t = math.radians(a)
-        pts.append((cx + r * math.cos(t), cy + r * math.sin(t)))
-    x_down = cx + r
-    y = cy - 4.0
-    while y > l.box[3] + 2:
-        pts.append((x_down, y))
+        pts.append((cx + r * math.cos(t), cy + r * math.sin(t), a + 180.0))   # 開いた側は円弧の中心（内側）を向く
+    xd = cx + r
+    y = cy - pitch * 0.6
+    while y > l.box[3] + 3:
+        pts.append((xd, y, 180.0))
         y -= pitch
     out = []
-    for i, (x, y) in enumerate(pts):
-        case, bullet = ar15_parts.cartridge_556(z_tip=-119.4, y=y)
-        out += [c.moved(x, 0, 0) for c in case + bullet]
-        zl = -88.0 if i % 2 == 0 else -96.0              # リンク（隣どうしで前後にずらす）
-        out.append(ring_z(y, zl - 3.5, zl + 3.5, 4.6, 5.6, STEEL_BLACK, cx=x, n=8))
-        if i + 1 < len(pts):                               # 隣の弾へ渡るリンクの舌
-            nx, ny = pts[i + 1]
-            out.append(box(min(x, nx) - 1, min(y, ny) - 1, -92.5, max(x, nx) + 1, max(y, ny) + 1, -91.5, STEEL_BLACK))
+    zt = -119.4                                           # 弾頭の先（写真）
+    zb = zt + 57.4                                        # 薬莢の底
+    for i, (x, y, nd) in enumerate(pts):
+        out += cartridge(x, y, zt)
+        gap = 70.0                                        # 輪の開き（開いた側の向きを中心に）
+        a0, a1 = nd + gap / 2, nd + 360 - gap / 2
+        out.append(arc_ring(x, y, zb - 26, zb - 18, 4.85, 5.5, a0, a1, STEEL_BLACK))        # 自分のリンクの輪
+        if i > 0:                                                                        # 前の弾のリンクの 2 つの輪
+            out.append(arc_ring(x, y, zb - 15, zb - 10, 4.85, 5.5, a0, a1, STEEL_BLACK))
+            out.append(arc_ring(x, y, zb - 34, zb - 29, 4.85, 5.5, a0, a1, STEEL_BLACK))
+            px, py, _ = pts[i - 1]                                                       # 2 つの弾をつなぐ背の板
+            n = math.radians(nd + 180.0)                                                 # 閉じた側
+            ox, oy = 5.3 * math.cos(n), 5.3 * math.sin(n)
+            for za, zc in ((zb - 34, zb - 29), (zb - 15, zb - 10)):      # 2 つの輪の幅だけの細い帯でつなぐ
+                out.append(_plate((px + ox, py + oy), (x + ox, y + oy), za, zc))
+        out.append(arc_ring(x, y, zb - 3.2, zb - 1.6, 4.0, 4.6, nd + 120, nd + 240, STEEL_BLACK, n=4))  # 抽筒溝の舌
     return out
+
+
+def _plate(p0, p1, z0, z1, mat=None):
+    """2 点 p0→p1（X, Y）を結ぶ、Z 方向 z0〜z1 の薄い板（両面描画なので 1 枚の四角形）。"""
+    (x0, y0), (x1, y1) = p0, p1
+    return MeshPart([(x0, y0, z0), (x1, y1, z0), (x1, y1, z1), (x0, y0, z1)], [[0, 1, 2, 3]],
+                    mat or STEEL_BLACK).finalize()
 
 
 # ---------------------------------------------------------------- 組み立て
@@ -576,7 +634,7 @@ def build(feed="belt"):
 
     if feed == "belt":
         add("magazin", "root", (sum(l.box_x) / 2, l.box[3], sum(l.box[:2]) / 2), "ammo_box", ammo_box())
-        add("mag_ammo", "magazin", (50.0, l.box[3], -100), "belt", belt())
+        add("mag_ammo", "magazin", (0.0, l.feed_y, -90), "belt", belt())
     else:
         add("magazin", "root", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), "magazine_stanag", stanag_mag())
         add("mag_ammo", "magazin", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), None, [])
