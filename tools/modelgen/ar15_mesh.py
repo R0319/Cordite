@@ -42,7 +42,8 @@ def barrel(l=L):
     bore = 5.56 / 2
     return [
         # 銃口の端面は輪（中央に穴）。穴の中は暗い筒で、奥をふさぐ
-        lathe(0, b, [(l.muzzle_z, bore), (l.muzzle_z, 7.85), (l.gas_z, 7.85), (l.gas_z, 9.5), (l.bolt_face_z, 9.5)],
+        lathe(0, b, [(l.muzzle_z, bore), (l.muzzle_z, l.barrel_od_front / 2), (l.gas_z, l.barrel_od_front / 2),
+                     (l.gas_z, l.barrel_od / 2), (l.bolt_face_z, l.barrel_od / 2)],
               N_MID, M.STEEL, cap0=False),
         lathe(0, b, [(l.muzzle_z, bore), (l.muzzle_z + 25, bore)], N_SMALL, M.BORE, cap0=False, cap1=True),
     ]
@@ -53,7 +54,7 @@ def barrel_extension(l=L):
 
 
 def gas_block(l=L):
-    return [lathe(0, l.bore_y, [(l.gas_z - 26, 15), (l.gas_z, 15)], N_MID, M.STEEL_DARK)]
+    return [lathe(0, l.bore_y, [(l.gas_z - l.fsb_len, 15), (l.gas_z, 15)], N_MID, M.STEEL_DARK)]
 
 
 def _clip_y(poly, y0, y1):

@@ -32,7 +32,10 @@ class Layout:
     rail_h = 9.0
     sight_h = 66.0          # ボア軸→照準線（AR 系 2.6in）
     gas_port_from_bolt = 198.0  # ガスポート位置（M4 カービン長: ボルトフェイスから 7.8in）
-    fsb_len = 26.0          # フロントサイトベースの銃身クランプ部の長さ（ガスポートを中心に置く）
+    fsb_len = 41.3          # A2 フロントサイトベースの銃身クランプ部の長さ（1.625in。着剣ラグの先端までだと約 1.87in）
+    gas_port_from_fsb_rear = 6.0   # ガスポート中心 → フロントサイトベース後端（銃身の段 0.295in からキャップのつば分を引く）
+    barrel_od = 19.05       # 銃身外径: ハンドガード内〜ガスブロックの軸受け（.750in）
+    barrel_od_front = 18.4  # 銃身外径: フロントサイトベースより前（.725in）
     handguard_rear_z = -152.0   # デルタリング前面（上部レシーバー前端の約 27mm 前）
     ras_slots = 10          # RAS 各面のレールのスロット数（規約の 0.5px=12mm/スロット）
     magwell_front_z = -114.0    # マグウェル前面（写真から）
@@ -56,8 +59,8 @@ class Layout:
         return self.bolt_face_z - self.barrel_len
 
     @property
-    def gas_z(self):        # フロントサイトベース後端
-        return self.bolt_face_z - self.gas_port_from_bolt + self.fsb_len / 2
+    def gas_z(self):        # フロントサイトベース後端（ガスポートはここから gas_port_from_fsb_rear 前）
+        return self.bolt_face_z - self.gas_port_from_bolt + self.gas_port_from_fsb_rear
 
     @property
     def handguard_front_z(self):   # ハンドガードキャップ後端（キャップ 6mm はここから前、フロントサイトベースに接する）
@@ -144,8 +147,8 @@ def rear_sight(l=L, z=None):
 def barrel(l=L):
     b = l.bore_y
     return [
-        *round_rod(0, b, l.gas_z, l.bolt_face_z, 19, M.STEEL),        # ハンドガード内（太い）
-        *round_rod(0, b, l.muzzle_z, l.gas_z, 15.7, M.STEEL),         # ガスブロック前（細い）
+        *round_rod(0, b, l.gas_z, l.bolt_face_z, l.barrel_od, M.STEEL),           # ハンドガード内
+        *round_rod(0, b, l.muzzle_z, l.gas_z, l.barrel_od_front, M.STEEL),        # ガスブロック前（少し細い）
         cbox(0, b, l.muzzle_z - 0.3, l.muzzle_z + 20, 5.6, 5.6, M.BORE),   # 銃口の穴（5.56mm）
     ]
 
@@ -156,7 +159,7 @@ def barrel_extension(l=L):
 
 def gas_block(l=L):
     """フロントサイトベースの銃身クランプ部（＝ガスブロック）。"""
-    return round_rod(0, l.bore_y, l.gas_z - 26, l.gas_z, 30, M.STEEL_DARK)
+    return round_rod(0, l.bore_y, l.gas_z - l.fsb_len, l.gas_z, 30, M.STEEL_DARK)
 
 
 # ---- A2 フロントサイトベース: 銃身の輪の上に一体の「台形のひれ」が立ち、上部に U 字の切り込み（中にポスト）。
@@ -171,12 +174,13 @@ def fsb_profile(l=L):
     """フロントサイトベース（輪より上）の側面形状 (z, y)。z は gas_z（後端）から前がマイナス。"""
     b, z = l.bore_y, l.gas_z
     sl = b + l.sight_h
+    # 塔は後ろ寄り（後面はほぼ垂直、耳の上は 13mm）。前面の斜めは前のテーパーピンの手前で輪に降りる
     return [(z, b + 12), (z - 3, sl - 2), (z - 4.5, sl + 1.2), (z - 6.5, sl + 2),
-            (z - 11.5, sl + 2), (z - 13.5, sl + 1.2), (z - 15, sl - 2), (z - 26, b + 12)]
+            (z - 12.5, sl + 2), (z - 14.5, sl + 1.2), (z - 16, sl - 2), (z - l.fsb_len + 5, b + 12)]
 
 
 def fsb_post_z(l=L):
-    return l.gas_z - 9.0
+    return l.gas_z - 9.5
 
 
 def front_sight_base(l=L):
@@ -187,10 +191,10 @@ def front_sight_base(l=L):
     floor = sl - FSB_SLOT_DEPTH
     mid = (b + 12 + floor) / 2
     return [
-        box(-t, b + 12, z - 24, t, mid, z - 1, M.STEEL_DARK),          # 塔（下段）
-        box(-t, mid, z - 20, t, floor, z - 2, M.STEEL_DARK),           # 塔（上段）
-        box(e0, floor - 4, z - 16, e1, sl + 2, z - 3, M.STEEL_DARK),   # 耳（左）
-        box(-e1, floor - 4, z - 16, -e0, sl + 2, z - 3, M.STEEL_DARK), # 耳（右）
+        box(-t, b + 12, z - l.fsb_len + 10, t, mid, z - 1, M.STEEL_DARK),   # 塔（下段）
+        box(-t, mid, z - 24, t, floor, z - 2, M.STEEL_DARK),                # 塔（上段）
+        box(e0, floor - 4, z - 16, e1, sl + 2, z - 3, M.STEEL_DARK),        # 耳（左）
+        box(-e1, floor - 4, z - 16, -e0, sl + 2, z - 3, M.STEEL_DARK),      # 耳（右）
         *fsb_lower(l),
     ]
 
@@ -198,9 +202,10 @@ def front_sight_base(l=L):
 def fsb_lower(l=L):
     """着剣ラグとスリングスイベル（輪の下）。"""
     b, z = l.bore_y, l.gas_z
+    f = z - l.fsb_len                                               # 前端
     return [
-        box(-4, b - 24, z - 26, 4, b - 13, z - 13, M.STEEL_DARK),      # 着剣ラグ
-        box(-2.5, b - 24, z - 30, 2.5, b - 19, z - 26, M.STEEL_DARK),  # ラグの先端
+        box(-4, b - 24, f, 4, b - 13, f + 14, M.STEEL_DARK),          # 着剣ラグ（前寄り）
+        box(-2.5, b - 24, f - 6.3, 2.5, b - 19, f, M.STEEL_DARK),     # ラグの先端（前へ約 0.25in 出る）
         box(-5, b - 21, z - 11, 5, b - 13, z - 2, M.STEEL_DARK),       # スイベルの台
         # スイベルの吊り輪（銃身に直交する面の四角い輪）
         box(-7, b - 37, z - 8, 7, b - 34.5, z - 5.5, M.STEEL_DARK),
