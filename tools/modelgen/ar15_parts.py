@@ -32,7 +32,7 @@ class Layout:
     rail_h = 9.0
     sight_h = 66.0          # ボア軸→照準線（AR 系 2.6in）
     gas_port_from_bolt = 198.0  # ガスポート位置（M4 カービン長: ボルトフェイスから 7.8in）
-    fsb_len = 41.3          # A2 フロントサイトベースの銃身クランプ部の長さ（1.625in。着剣ラグの先端までだと約 1.87in）
+    fsb_len = 46.0          # A2 フロントサイトベースの前後長（後ろの輪の後端〜前の柱の前面。写真から 1.81in。ラグはさらに 8mm 前へ出る）
     gas_port_from_fsb_rear = 6.0   # ガスポート中心 → フロントサイトベース後端（銃身の段 0.295in からキャップのつば分を引く）
     barrel_od = 19.05       # 銃身外径: ハンドガード内〜ガスブロックの軸受け（.750in）
     barrel_od_front = 18.4  # 銃身外径: フロントサイトベースより前（.725in）
@@ -158,59 +158,85 @@ def barrel_extension(l=L):
 
 
 def gas_block(l=L):
-    """フロントサイトベースの銃身クランプ部（＝ガスブロック）。"""
-    return round_rod(0, l.bore_y, l.gas_z - l.fsb_len, l.gas_z, 30, M.STEEL_DARK)
+    """フロントサイトベースの銃身を抱く前後 2 つの輪（間は空いていて、横から銃身が見える）。"""
+    b, z = l.bore_y, l.gas_z
+    return [c for d0, d1 in FSB_RINGS for c in round_rod(0, b, z - d1, z - d0, FSB_RING_R * 2, M.STEEL_DARK)]
 
 
-# ---- A2 フロントサイトベース: 銃身の輪の上に一体の「台形のひれ」が立ち、上部に U 字の切り込み（中にポスト）。
-# 横から見ると後面はほぼ垂直・前面は斜め、耳の上端は丸い。前から見ると U 字（耳は厚く短い）。
-# 下側に着剣ラグ（前）とスリングスイベル（後ろ、吊り輪）。鍛造の鉄なので角張ったまま（耳の上だけ丸い）。
-FSB_TOWER_HALF = 7.5          # 切り込みより下の塔の半幅（X）
+# ---- A2 フロントサイトベース（M4 用「F」刻印）。横から見ると「A」の字の枠:
+#   前後 2 つの輪で銃身を抱き、輪の上を横棒（中にガスチューブ）でつなぐ。前は垂直の柱、後ろは斜めの支柱で、
+#   その間（横棒の上）は大きな三角の窓、横棒の下も前後の輪の間が空いている。柱と支柱が上で合わさり、
+#   そこに U 字の切り込み（左右の耳）とポストがある。前の輪の下に着剣ラグ（前へ突き出す）、後ろの輪の下にスイベル。
+# 寸法は作者提供の側面写真から（縮尺 8.15px/mm）。縮尺は「銃身上面からサイトの上端まで 2.25in」と
+# 「着剣ラグの上面が銃身の下面に接する」の 2 条件から決めた（全長は 46mm＝1.81in になり、販売店の 1.8in と合う）。
+# 座標は (d, h): d＝後端から前へ [mm]、h＝ボア軸から上 [mm]。鍛造品なので角張ったまま（上端だけ丸い）。
+FSB_TOWER_HALF = 7.5          # 横棒・柱・支柱の半幅（X）
 FSB_EAR = (5.5, 10.0)         # 耳の内側・外側（X）。耳の間 11mm にポストが立つ
-FSB_SLOT_DEPTH = 17.0         # 照準線から切り込みの底までの深さ（耳は底から約 19mm）
+FSB_SLOT_DEPTH = 17.0         # 照準線から切り込みの底までの深さ（底は窓の上端のすぐ上）
+FSB_RING_R = 11.0             # 輪の外半径（銃身 .750in を約 1.5mm の肉厚で抱く）
+FSB_RINGS = ((0.0, 11.7), (33.7, 46.0))   # 後ろの輪・前の輪の前後範囲 (d0, d1)
+FSB_BAR = (14.0, 22.0)        # 横棒の下面・上面の高さ h
+FSB_POST_D = 36.7             # ポストの位置 d（窓の右上の出っ張り＝ポストのねじ受け）
+# 柱＋上部（窓の上と前）。窓の右上の出っ張りまで含む
+FSB_TOP = [(46.0, 14.0), (46.0, 59.4), (45.4, 61.8), (43.9, 64.3), (42.3, 65.8), (40.5, 66.7), (38.2, 67.1),
+           (35.8, 66.7), (33.7, 65.8), (31.9, 64.3), (29.7, 61.8), (17.8, 47.1), (33.5, 47.1), (33.5, 41.6),
+           (39.9, 41.6), (39.9, 14.0)]
+# 斜めの支柱（後端の下部は垂直。窓側の辺は外側の辺と平行）
+FSB_STRUT = [(0.0, 14.0), (0.0, 24.9), (29.6, 61.8), (36.0, 61.8), (24.0, 47.1), (4.0, 22.0), (4.0, 14.0)]
+
+
+def _fsb_zy(l, pts):
+    return [(l.gas_z - d, l.bore_y + h) for d, h in pts]
 
 
 def fsb_profile(l=L):
-    """フロントサイトベース（輪より上）の側面形状 (z, y)。z は gas_z（後端）から前がマイナス。"""
-    b, z = l.bore_y, l.gas_z
-    sl = b + l.sight_h
-    # 塔は後ろ寄り（後面はほぼ垂直、耳の上は 13mm）。前面の斜めは前のテーパーピンの手前で輪に降りる
-    return [(z, b + 12), (z - 3, sl - 2), (z - 4.5, sl + 1.2), (z - 6.5, sl + 2),
-            (z - 12.5, sl + 2), (z - 14.5, sl + 1.2), (z - 16, sl - 2), (z - l.fsb_len + 5, b + 12)]
+    """柱＋支柱＋上部の側面形状 (z, y)（窓の下の横棒は含まない。下が開いているので穴のない 1 枚の輪郭になる）。"""
+    from shapely.geometry import Polygon
+    g = Polygon(_fsb_zy(l, FSB_TOP)).union(Polygon(_fsb_zy(l, FSB_STRUT)))
+    return list(g.exterior.coords)[:-1]
 
 
 def fsb_post_z(l=L):
-    return l.gas_z - 9.5
+    return l.gas_z - FSB_POST_D
+
+
+def _fsb_box(l, d0, d1, h0, h1, x0, x1):
+    b, z = l.bore_y, l.gas_z
+    return box(x0, b + h0, z - d1, x1, b + h1, z - d0, M.STEEL_DARK)
 
 
 def front_sight_base(l=L):
-    """キューブ版（台形を段で近似）。"""
-    b, z = l.bore_y, l.gas_z
-    sl = b + l.sight_h
+    """キューブ版（斜めの支柱は段で近似）。"""
     t, (e0, e1) = FSB_TOWER_HALF, FSB_EAR
-    floor = sl - FSB_SLOT_DEPTH
-    mid = (b + 12 + floor) / 2
+    floor = l.sight_h - FSB_SLOT_DEPTH
     return [
-        box(-t, b + 12, z - l.fsb_len + 10, t, mid, z - 1, M.STEEL_DARK),   # 塔（下段）
-        box(-t, mid, z - 24, t, floor, z - 2, M.STEEL_DARK),                # 塔（上段）
-        box(e0, floor - 4, z - 16, e1, sl + 2, z - 3, M.STEEL_DARK),        # 耳（左）
-        box(-e1, floor - 4, z - 16, -e0, sl + 2, z - 3, M.STEEL_DARK),      # 耳（右）
-        *fsb_lower(l),
+        *fsb_frame_lower(l),
+        _fsb_box(l, 39.9, 46.0, FSB_BAR[1], floor, -t, t),          # 前の柱
+        _fsb_box(l, 33.5, 39.9, 41.6, floor, -t, t),                # ポストのねじ受け
+        _fsb_box(l, 17.8, 39.9, 47.1, floor, -t, t),               # 窓の上
+        *[_fsb_box(l, max(0.0, (h - 24.9) / 1.247), 4.0 + (h + 5.0 - 22.0) / 1.255, h, h + 5.0, -t, t)
+          for h in (22.0, 27.0, 32.0, 37.0, 42.0)],                 # 斜めの支柱（5mm ごとの段）
+        *[_fsb_box(l, d0, 46.0, floor - 4, top, x0, x1)             # 耳（左右。上の丸みは 2 段で近似）
+          for x0, x1 in ((e0, e1), (-e1, -e0)) for d0, top in ((20.0, 57.0), (28.0, l.sight_h + 1))],
     ]
 
 
-def fsb_lower(l=L):
-    """着剣ラグとスリングスイベル（輪の下）。"""
-    b, z = l.bore_y, l.gas_z
-    f = z - l.fsb_len                                               # 前端
+def fsb_frame_lower(l=L):
+    """横棒・輪の上の脚・着剣ラグ・スイベル（キューブ。メッシュ版と共通）。"""
+    t = FSB_TOWER_HALF
+    (r0, r1), (f0, f1) = FSB_RINGS
     return [
-        box(-4, b - 24, f, 4, b - 13, f + 14, M.STEEL_DARK),          # 着剣ラグ（前寄り）
-        box(-2.5, b - 24, f - 6.3, 2.5, b - 19, f, M.STEEL_DARK),     # ラグの先端（前へ約 0.25in 出る）
-        box(-5, b - 21, z - 11, 5, b - 13, z - 2, M.STEEL_DARK),       # スイベルの台
-        # スイベルの吊り輪（銃身に直交する面の四角い輪）
-        box(-7, b - 37, z - 8, 7, b - 34.5, z - 5.5, M.STEEL_DARK),
-        box(-7, b - 37, z - 8, -4.8, b - 21, z - 5.5, M.STEEL_DARK),
-        box(4.8, b - 37, z - 8, 7, b - 21, z - 5.5, M.STEEL_DARK),
+        _fsb_box(l, 0.0, 46.0, FSB_BAR[0], FSB_BAR[1], -t, t),           # 横棒（中にガスチューブ）
+        _fsb_box(l, r0, r1, 0.0, FSB_BAR[0], -FSB_RING_R, FSB_RING_R),    # 後ろの脚（輪の上半分〜横棒）
+        _fsb_box(l, f0, f1, 0.0, FSB_BAR[0], -FSB_RING_R, FSB_RING_R),    # 前の脚
+        _fsb_box(l, 36.2, 53.9, -17.9, -9.9, -4, 4),                      # 着剣ラグ（前の輪の下から前へ突き出す）
+        _fsb_box(l, 36.2, 44.2, -22.2, -17.9, -4, 4),                     # ラグの下の段
+        _fsb_box(l, 2.2, 9.0, -23.0, -9.0, -3, 3),                        # スイベルの台（後ろの輪の下、ピンは h=-16.7）
+        # スイベルの吊り輪（ピンは左右方向。輪は銃身と同じ縦の面にあり、横から見ると四角い輪が見える）
+        _fsb_box(l, -1.0, 10.8, -18.7, -16.7, -1.5, 1.5),
+        _fsb_box(l, -1.0, 10.8, -30.8, -28.8, -1.5, 1.5),
+        _fsb_box(l, -1.0, 1.0, -30.8, -16.7, -1.5, 1.5),
+        _fsb_box(l, 8.8, 10.8, -30.8, -16.7, -1.5, 1.5),
     ]
 
 

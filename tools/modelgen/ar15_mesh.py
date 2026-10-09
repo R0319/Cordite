@@ -7,7 +7,8 @@ AR-15 系パーツライブラリのメッシュ版（単位 mm）。ar15_parts 
 import math
 
 from ar15_parts import *  # noqa: F401,F403  角張った部品・Layout・寸法定数はそのまま使う
-from ar15_parts import (L, MAG_ANGLE, RAS_FLAT, _ras_rail, fsb_profile, fsb_lower, FSB_TOWER_HALF, FSB_EAR,
+from ar15_parts import (L, MAG_ANGLE, RAS_FLAT, _ras_rail, fsb_profile, fsb_frame_lower, FSB_TOWER_HALF, FSB_EAR,
+                        FSB_RING_R, FSB_RINGS,
                         FSB_SLOT_DEPTH, grip_outline, ear_outlines, guard_bar_outline, trigger_outline,
                         lower_common as _lower_common, lower_rear_outline, ref_zy, REF_LOWER_REAR, magwell_outline)
 from core import MeshPart, box, lathe, extrude_x, extrude_x_beveled, inflate_x
@@ -54,7 +55,8 @@ def barrel_extension(l=L):
 
 
 def gas_block(l=L):
-    return [lathe(0, l.bore_y, [(l.gas_z - l.fsb_len, 15), (l.gas_z, 15)], N_MID, M.STEEL_DARK)]
+    return [lathe(0, l.bore_y, [(l.gas_z - d1, FSB_RING_R), (l.gas_z - d0, FSB_RING_R)], N_MID, M.STEEL_DARK)
+            for d0, d1 in FSB_RINGS]
 
 
 def _clip_y(poly, y0, y1):
@@ -65,7 +67,7 @@ def _clip_y(poly, y0, y1):
 
 
 def front_sight_base(l=L):
-    """A2 フロントサイトベース: 一体の台形のひれ（切り込みより下は塔、上は左右の耳）。"""
+    """A2 フロントサイトベース: 「A」の字の枠（窓は形として抜けている）。切り込みより下は塔、上は左右の耳。"""
     sl = l.bore_y + l.sight_h
     floor = sl - FSB_SLOT_DEPTH
     prof = fsb_profile(l)
@@ -73,10 +75,10 @@ def front_sight_base(l=L):
     tower = _clip_y(prof, -1e4, floor)
     ear = _clip_y(prof, floor - 6, 1e4)
     return [
-        extrude_x_beveled(tower, -t, t, 1.0, M.STEEL_DARK, steps=1),
+        extrude_x_beveled(tower, -t, t, 0.8, M.STEEL_DARK, steps=1),
         extrude_x_beveled(ear, e0, e1, 0.8, M.STEEL_DARK, steps=1),     # 耳（左）
         extrude_x_beveled(ear, -e1, -e0, 0.8, M.STEEL_DARK, steps=1),   # 耳（右）
-        *fsb_lower(l),
+        *fsb_frame_lower(l),
     ]
 
 
