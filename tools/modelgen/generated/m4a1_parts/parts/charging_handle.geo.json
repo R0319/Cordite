@@ -1,0 +1,179 @@
+{
+ "format_version": "1.21.0",
+ "minecraft:geometry": [
+  {
+   "description": {
+    "identifier": "geometry.charging_handle",
+    "texture_width": 32,
+    "texture_height": 32,
+    "visible_bounds_width": 4,
+    "visible_bounds_height": 4,
+    "visible_bounds_offset": [
+     0,
+     1,
+     0
+    ]
+   },
+   "bones": [
+    {
+     "name": "charging_handle",
+     "pivot": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -0.875,
+        6.8083,
+        2.9167
+       ],
+       "size": [
+        1.75,
+        0.3333,
+        0.375
+       ],
+       "uv": {
+        "north": {
+         "uv": [
+          8,
+          0
+         ],
+         "uv_size": [
+          14,
+          3
+         ]
+        },
+        "south": {
+         "uv": [
+          0,
+          4
+         ],
+         "uv_size": [
+          14,
+          3
+         ]
+        },
+        "west": {
+         "uv": [
+          0,
+          10
+         ],
+         "uv_size": [
+          3,
+          3
+         ]
+        },
+        "east": {
+         "uv": [
+          3,
+          10
+         ],
+         "uv_size": [
+          3,
+          3
+         ]
+        },
+        "up": {
+         "uv": [
+          14,
+          4
+         ],
+         "uv_size": [
+          14,
+          3
+         ]
+        },
+        "down": {
+         "uv": [
+          0,
+          7
+         ],
+         "uv_size": [
+          14,
+          3
+         ]
+        }
+       }
+      },
+      {
+       "origin": [
+        0.5417,
+        6.8083,
+        3.0
+       ],
+       "size": [
+        0.5,
+        0.3333,
+        0.5
+       ],
+       "uv": {
+        "north": {
+         "uv": [
+          14,
+          7
+         ],
+         "uv_size": [
+          4,
+          3
+         ]
+        },
+        "south": {
+         "uv": [
+          18,
+          7
+         ],
+         "uv_size": [
+          4,
+          3
+         ]
+        },
+        "west": {
+         "uv": [
+          22,
+          7
+         ],
+         "uv_size": [
+          4,
+          3
+         ]
+        },
+        "east": {
+         "uv": [
+          26,
+          7
+         ],
+         "uv_size": [
+          4,
+          3
+         ]
+        },
+        "up": {
+         "uv": [
+          0,
+          0
+         ],
+         "uv_size": [
+          4,
+          4
+         ]
+        },
+        "down": {
+         "uv": [
+          4,
+          0
+         ],
+         "uv_size": [
+          4,
+          4
+         ]
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
