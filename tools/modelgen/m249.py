@@ -361,11 +361,20 @@ def trigger(l=L):
 
 
 def stock(l=L):
-    """固定ストック（樹脂）と床尾板（肩当て付き）。側面形は写真。"""
-    return [
-        extrude_x_beveled(O.STOCK["outer"], -19, 19, 5.0, M.POLYMER, steps=ar15_mesh.BEVEL_STEPS),
-        *outline_parts(O.BUTTPLATE, -21, 21, M.RUBBER, bevel=3.0),
+    """固定ストック（PIP の樹脂ストック。M240 のストックを手本にした形で、中に油圧バッファ）。側面形は写真、
+    幅は部品の寸法表記の 2in（51mm）。床尾板は初期型のアルミ板（縦の溝）で、上に肩当ての鉤。下に負い紐の輪。"""
+    hw = 25.5
+    zb = max(p[0] for p in O.BUTTPLATE["outer"])
+    out = [
+        extrude_x_beveled(O.STOCK["outer"], -hw, hw, 8.0, M.POLYMER, steps=3),
+        *outline_parts(O.BUTTPLATE, -hw - 1.5, hw + 1.5, STEEL_BLACK, bevel=2.0),
     ]
+    out += [box(x - 1.0, 74.0, zb - 0.2, x + 1.0, 192.0, zb + 0.4, M.BORE) for x in range(-20, 21, 5)]   # 床尾板の溝
+    # 負い紐の輪（ストック下の段の前。写真の小さな鉤）: Y-Z 面の輪
+    ring = ring_z(0.0, -1.5, 1.5, 4.0, 7.0, STEEL_BLACK, n=12)
+    out.append(MeshPart([(v[2], v[1] + 82.0, v[0] + 247.0) for v in ring.verts], ring.faces, ring.mat,
+                        None, ring.charts, ring.chart_uv, ring.chart_edge))
+    return out
 
 
 # ---------------------------------------------------------------- 銃身まわり
@@ -441,27 +450,38 @@ def gas_system(l=L):
 
 
 def handguard(l=L):
-    """ハンドガード（樹脂、ガスシリンダーと銃身の下半分を覆う）。側面形は二脚を立てた写真（下に脚が無い方）。"""
+    """ハンドガード（黒い樹脂。手を熱・寒さから守り、中に清掃用具を収める。FM 3-22.68）。側面形は二脚を立てた写真。
+    断面は下側を大きく丸めた箱形。右から左へ押す止めピンで留まる（海兵隊教材）＝側面の丸い金具。"""
     f, r = l.hg_front_z, l.hg_rear_z
-    out = [extrude_x_beveled(O.HANDGUARD["outer"], -l.hg_half, l.hg_half, 4.0, M.POLYMER, steps=ar15_mesh.BEVEL_STEPS)]
+
+    def radius(nz, ny):
+        return 12.0 if ny < -0.5 else 4.0          # 下面の縁は大きく丸め、上面・前後は小さく
+    out = [inflate_x(O.HANDGUARD["outer"], l.hg_half, M.POLYMER, steps=4, radius_fn=radius)]
     for y in (118.0, 140.0, 158.0):     # 側面の横溝の間の帯（写真の 3 本の筋）
         for s in (1, -1):
-            out.append(box(s * l.hg_half, y, f + 30, s * (l.hg_half + 1.2), y + 4, r - 20, M.POLYMER))
-    # 左側面の丸い金具（写真・拡大写真: 穴の開いた円盤）
+            out.append(box(s * (l.hg_half - 0.5), y, f + 30, s * (l.hg_half + 0.8), y + 4, r - 20, M.POLYMER))
+    # 止めピン（左右を貫く。左に穴あきの端、右に頭）
     out += [x_cyl(-314.0, 119.0, 7.0, l.hg_half - 1, l.hg_half + 3, STEEL_BLACK, n=12),
-            x_cyl(-314.0, 119.0, 3.0, l.hg_half + 2.9, l.hg_half + 3.2, M.BORE)]
+            x_cyl(-314.0, 119.0, 3.0, l.hg_half + 2.9, l.hg_half + 3.2, M.BORE),
+            x_cyl(-314.0, 119.0, 5.0, -l.hg_half - 3, -l.hg_half + 1, STEEL_BLACK, n=12)]
     return out
 
 
 def rail_handguard(l=L):
-    """銃身の上のレール台（ヒートシールドを兼ねる。側面形は写真）とレール。"""
+    """ヒートシールド（銃身の上の放熱板。キャリングハンドルのすぐ前から持ち上げて外す。部品の寸法表記 幅 2in）。
+    側面形は写真。下は銃身を覆う幅広の部分（側面に放熱の丸穴の列）、上は細くなってレールを載せる。"""
     zs = [p[0] for p in O.SHIELD["outer"]]
     zf, zr = min(zs), max(zs)
     y1 = max(p[1] for p in O.SHIELD["outer"])
-    holes = [x_cyl(z, 188.0, 3.0, sx, sx + 0.3, M.BORE)            # 側面の丸穴の列（放熱。拡大写真）
-             for z in [zr - 16 - 19 * i for i in range(int((zr - zf - 20) // 19))] for sx in (13.9, -14.2)]
+    yb = min(p[1] for p in O.SHIELD["outer"])
+    ym = yb + 10.0                                  # 幅広の部分の上端
+    lower = clip_y(O.SHIELD, -1e4, ym)
+    upper = clip_y(O.SHIELD, ym - 0.5, 1e4)
+    holes = [x_cyl(z, yb + 5.0, 3.0, sx, sx + 0.3, M.BORE)
+             for z in [zr - 16 - 19 * i for i in range(int((zr - zf - 20) // 19))] for sx in (24.4, -24.7)]
     return holes + [
-        extrude_x_beveled(O.SHIELD["outer"], -14, 14, 1.5, M.RECEIVER, steps=1),
+        extrude_x_beveled(lower["outer"], -24.5, 24.5, 3.0, M.RECEIVER, steps=2),
+        extrude_x_beveled(upper["outer"], -15, 15, 2.0, M.RECEIVER, steps=1),
         box(-8, y1, zf + 2, 8, y1 + 3, zr - 2, M.RAIL),
         box(-RAIL_W / 2, y1 + 3, zf + 2, RAIL_W / 2, y1 + 7.6, zr - 2, M.RAIL),
     ]
