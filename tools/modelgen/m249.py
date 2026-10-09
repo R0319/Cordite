@@ -18,6 +18,7 @@ import ar15_parts
 import materials as M
 from core import MeshPart, Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe
 from rig import add_locators
+import m249_outline as O
 
 K = 1.0 / ar15_parts.MM_PER_PX
 SLOT_MM = ar15_parts.SLOT_MM
@@ -60,8 +61,8 @@ class Layout:
     mag_tilt = 45.0         # STANAG 弾倉の傾き（左下へ。③ 写真の見かけの高さ 122mm と 45° が一致）
     mag_pivot = (14.0, 170.0)       # 弾倉上端の中心（X, y）。写真の弾倉下端に合わせた
     mag_center_z = -84.0
-    box = (-46.0, -131.0, 0.0, 118.0)   # ボックス（前後・下面・上面）
-    box_x = (-50.0, 80.0)   # ボックスの左右（③ 幅 約 130mm。左斜め前の写真で受け部の左右両方へはみ出し、左の方が大きい）
+    box = (-44.0, -125.0, 0.0, 119.5)   # ボックス（前後・下面・上面。写真のトレースと同じ）
+    box_x = (-65.0, 65.0)   # ボックスの左右（③ 幅 約 130mm。受け部の左右へほぼ対称にはみ出す＝作者指摘）
     butt_z = 384.0
 
 
@@ -89,25 +90,45 @@ def rotated(parts, axis, deg, pivot):
     return out
 
 
-def _zy(pts):
-    return [(z, y) for z, y in pts]
+def outline_parts(o, x0, x1, mat, bevel=0.0, steps=1):
+    """トレースした側面形 {'outer', 'holes'} を X 方向に押し出す。穴があれば、穴の中心を通る縦線で
+    穴の無い片に切り分けてから押し出す（角丸めは切り口に溝が出るので、穴のある部品では使わない）。"""
+    from shapely.geometry import LineString, Polygon
+    from shapely.ops import split
+    g = Polygon(o["outer"], o["holes"])
+    if not o["holes"]:
+        f = extrude_x_beveled(o["outer"], x0, x1, bevel, mat, steps) if bevel else extrude_x(o["outer"], x0, x1, mat)
+        return [f]
+    pieces = [g]
+    for h in o["holes"]:
+        cz = Polygon(h).centroid.x
+        cut = LineString([(cz, -1e4), (cz, 1e4)])
+        pieces = [q for pc in pieces for q in split(pc, cut).geoms]
+    return [extrude_x(list(q.exterior.coords)[:-1], x0, x1, mat) for q in pieces if q.area > 0.5]
+
+
+def clip_y(o, y0, y1):
+    """側面形を高さ y0〜y1 で切る（穴も含めて）。"""
+    from shapely.geometry import Polygon, box as sbox
+    g = Polygon(o["outer"], o["holes"]).intersection(sbox(-1e4, y0, 1e4, y1))
+    if g.geom_type != "Polygon":
+        g = max(g.geoms, key=lambda q: q.area)
+    r = lambda ring: list(ring.coords)[:-1]
+    return {"outer": r(g.exterior), "holes": [r(h) for h in g.interiors]}
 
 
 # ---------------------------------------------------------------- 受け部
 def receiver(l=L):
     h, b = l.rcv_half, l.bore_y
-    side = [(l.rcv_front_z, l.rcv_bottom), (l.rcv_rear_z, l.rcv_bottom), (l.rcv_rear_z, l.cover_split),
-            (l.rcv_front_z, l.cover_split)]
     return [
-        extrude_x_beveled(side, -h, h, 1.5, M.RECEIVER, steps=1),              # 本体（鋼板のプレス。角張ったまま）
+        *outline_parts(O.RECEIVER, -h, h, M.RECEIVER),                         # 本体（鋼板のプレス。角張ったまま）
         box(h, 150, l.rcv_front_z + 6, h + 1.2, 160, l.rcv_rear_z - 6, M.RECEIVER),    # 側面の補強の帯（左）
         box(-h - 1.2, 150, l.rcv_front_z + 6, -h, 160, l.rcv_rear_z - 6, M.RECEIVER),  # 〃（右）
         # 左側のフィードトレイ（ベルトの入口）とその下の弾倉口
         box(h, 170.5, l.feed_z[0], h + 8, 209.5, l.feed_z[1], M.RECEIVER),
-        # 右側のコッキングハンドル（受け部前寄り、③ 位置は写真の下側の突起から推定）
+        # 右側のコッキングハンドル（③ 位置は写真の下側の突起から推定）
         box(-h - 18, 158, -152, -h, 166, -140, STEEL_BLACK),
-        # 受け部前端の銃身受け（トラニオン）
-        lathe(0, b, [(l.rcv_front_z - 6, 20), (l.rcv_front_z + 2, 20)], ar15_mesh.N_MID, STEEL_BLACK),
+        lathe(0, b, [(l.rcv_front_z - 6, 20), (l.rcv_front_z + 2, 20)], ar15_mesh.N_MID, STEEL_BLACK),   # 銃身受け
     ]
 
 
@@ -121,10 +142,7 @@ def magwell(l=L):
 
 def feed_cover(l=L):
     """フィードカバー（上面にレール、後ろにリアサイト）。後ろの蝶番で上へ開く（ボーン feed_cover）。"""
-    h = l.rcv_half
-    prof = [(l.cover_front_z, l.cover_split), (l.rcv_rear_z - 3, l.cover_split), (l.rcv_rear_z - 3, l.cover_top - 4),
-            (l.rcv_rear_z - 8, l.cover_top), (l.cover_front_z + 4, l.cover_top), (l.cover_front_z, l.cover_top - 4)]
-    return [extrude_x_beveled(prof, -h + 1, h - 1, 2.0, M.RECEIVER, steps=1)]
+    return [extrude_x_beveled(O.FEED_COVER["outer"], -l.rcv_half + 1, l.rcv_half - 1, 2.0, M.RECEIVER, steps=1)]
 
 
 def rail_top(l=L):
@@ -136,13 +154,14 @@ def rail_top(l=L):
 
 
 def rear_sight(l=L):
-    """リアサイト: フィードカバー後部の台に、左右の耳に守られたアパーチャー（穴の中心＝照準線）。"""
+    """リアサイト: 台の上に左右の耳（側面形は写真。耳を通して穴が見える）、間にアパーチャー板（穴の中心＝照準線）。"""
     z, sy, y0 = l.rear_sight_z, l.sight_y, l.cover_top
-    ear = [(z + 14, y0), (z - 18, y0), (z - 14, sy + 9), (z - 6, sy + 12.4), (z + 6, sy + 12.4), (z + 12, sy + 7)]
+    base = clip_y(O.REAR_SIGHT, -1e4, y0 + 6)
+    ears = clip_y(O.REAR_SIGHT, y0 + 5, 1e4)
     return [
-        box(-13, y0, z - 28, 13, y0 + 6, z + 33, M.RECEIVER),                  # 台
-        extrude_x_beveled(ear, 6, 11, 1.0, M.RECEIVER, steps=1),               # 耳（左）
-        extrude_x_beveled(ear, -11, -6, 1.0, M.RECEIVER, steps=1),             # 耳（右）
+        *outline_parts(base, -13, 13, M.RECEIVER),
+        *outline_parts(ears, 6, 11, M.RECEIVER),
+        *outline_parts(ears, -11, -6, M.RECEIVER),
         # アパーチャー板（中央に 3mm の穴）
         box(-5, y0 + 6, z - 1, 5, sy - 1.5, z + 1, STEEL_BLACK),
         box(-5, sy + 1.5, z - 1, 5, sy + 6, z + 1, STEEL_BLACK),
@@ -152,114 +171,97 @@ def rear_sight(l=L):
     ]
 
 
-# ---------------------------------------------------------------- 下回り（側面形は写真から）
-# グリップの側面形（写真から）。底は Y≒5（Y=0 の約 5mm 上。写真の縮尺誤差の範囲）
-GRIP = [(71.0, 108.0), (76.3, 81.7), (84.0, 62.0), (92.3, 42.6), (101.2, 26.0), (102.5, 17.0), (98.5, 8.5),
-        (90.0, 5.5), (60.0, 5.5), (43.0, 8.5), (36.0, 16.5), (33.0, 30.0), (32.0, 49.7), (27.0, 62.0),
-        (21.3, 81.7), (16.5, 95.0), (14.2, 108.0)]
-STOCK = [(121.4, 203.0), (130.0, 203.1), (155.5, 190.3), (189.6, 176.1), (223.6, 169.0), (249.3, 163.4),
-         (257.8, 164.8), (266.0, 169.0), (274.9, 177.6), (283.0, 181.8), (352.0, 188.9),
-         (352.0, 68.2), (266.0, 70.0), (257.8, 72.4), (252.0, 80.0), (249.3, 100.9), (240.8, 106.5),
-         (215.0, 112.2), (172.6, 119.3), (130.0, 120.7), (121.4, 121.0)]
-
-
+# ---------------------------------------------------------------- 下回り
 def pistol_grip(l=L):
     """樹脂のグリップ。断面は丸め、上端は受け部の下面（Y=108）に接する。"""
-    from core import smooth
-    pts = smooth(GRIP, 3)[:-1]
-
     def radius(nz, ny):
         return 4.0 + 8.0 * (1 - ar15_mesh._smoothstep(0.55, 0.9, abs(ny)))
-    return [inflate_x(pts, 14.0, M.POLYMER, steps=ar15_mesh.GRIP_STEPS, radius_fn=radius)]
+    return [inflate_x(O.GRIP["outer"], 14.0, M.POLYMER, steps=ar15_mesh.GRIP_STEPS, radius_fn=radius)]
 
 
 def trigger_guard(l=L):
-    return [
-        box(-5, 72.4, 11.0, 5, 108.0, 14.2, M.RECEIVER),     # 後ろの柱
-        box(-5, 72.4, -40.5, 5, 108.0, -37.5, M.RECEIVER),   # 前の柱
-        box(-5, 72.4, -40.5, 5, 75.6, 14.2, M.RECEIVER),     # 下辺
-    ]
+    return outline_parts(O.TRIGGER_GUARD, -5, 5, M.RECEIVER)
 
 
 def trigger(l=L):
-    blade = [(5.0, 109.0), (6.0, 100.0), (4.5, 92.0), (1.0, 86.0), (-3.0, 84.0), (-2.0, 88.0), (0.0, 94.0),
-             (1.0, 101.0), (0.0, 109.0)]
-    return [extrude_x_beveled(blade, -3, 3, 1.0, STEEL_BLACK, steps=1)]
+    return [extrude_x_beveled(O.TRIGGER["outer"], -3, 3, 1.0, STEEL_BLACK, steps=1)]
 
 
 def stock(l=L):
-    """固定ストック（樹脂）: 床尾側が高く、首は細く受け部の後端へ上がる。床尾板と肩当て（上の小さな鉤）付き。"""
+    """固定ストック（樹脂）と床尾板（肩当て付き）。側面形は写真。"""
     return [
-        extrude_x_beveled(STOCK, -19, 19, 5.0, M.POLYMER, steps=ar15_mesh.BEVEL_STEPS),
-        extrude_x_beveled([(352.0, 66.0), (372.0, 66.0), (377.0, 76.0), (377.0, 196.0), (372.0, 200.0), (352.0, 200.0)],
-                          -21, 21, 3.0, M.RUBBER, steps=1),                                  # 床尾板
-        extrude_x_beveled([(354.0, 199.0), (366.0, 199.0), (366.0, 207.4), (356.0, 207.4)], -8, 8, 1.5,
-                          STEEL_BLACK, steps=1),                                             # 肩当て
+        extrude_x_beveled(O.STOCK["outer"], -19, 19, 5.0, M.POLYMER, steps=ar15_mesh.BEVEL_STEPS),
+        *outline_parts(O.BUTTPLATE, -21, 21, M.RUBBER, bevel=3.0),
     ]
 
 
 # ---------------------------------------------------------------- 銃身まわり
+def _radius_profile(prof, r_max):
+    return [(z, min(r, r_max)) for z, r in prof]
+
+
 def barrel(l=L):
+    """銃身: 写真の太さの分布（先へ細くなり、銃口の手前で太くなる）。ハンドガード内は一定。"""
     b = l.bore_y
     bore = 5.56 / 2
+    prof = _radius_profile(O.BARREL_R, 10.1)          # フロントサイト・ガス調整ノブの写り込みを除く
+    pts = [(l.barrel_end_z, bore), (l.barrel_end_z, prof[-1][1])] + prof[::-1] + [(l.breech_z, 10.1)]
+    pts = [(z, r) for z, r in pts]
     return [
-        lathe(0, b, [(l.barrel_end_z, bore), (l.barrel_end_z, 9.0), (-420.0, 9.0), (-420.0, 11.0), (l.breech_z, 11.0)],
-              ar15_mesh.N_MID, M.STEEL, cap0=False),
+        lathe(0, b, pts, ar15_mesh.N_MID, M.STEEL, cap0=False),
         lathe(0, b, [(l.muzzle_z, bore), (l.muzzle_z + 25, bore)], ar15_mesh.N_SMALL, M.BORE, cap0=False),
     ]
 
 
 def flash_hider(l=L):
-    """スリット入りのフラッシュハイダー（先端は穴あきの輪）。"""
+    """スリット入りのフラッシュハイダー（太さは写真。先端は穴あきの輪）。"""
     b, z0, z1 = l.bore_y, l.muzzle_z, l.barrel_end_z
+    prof = [(z, r) for z, r in O.FLASH_HIDER_R if r > 8]
     out = [
-        lathe(0, b, [(z1 - 14, 10.5), (z1, 10.0)], ar15_mesh.N_MID, STEEL_BLACK),
-        lathe(0, b, [(z0 + 6, 4), (z0, 4), (z0, 10.5), (z0 + 6, 10.5)], ar15_mesh.N_MID, STEEL_BLACK, False, False),
-        lathe(0, b, [(z0 + 6, 6.5), (z1 - 14, 6.5)], ar15_mesh.N_MID, M.BORE),
+        lathe(0, b, [(z1, prof[0][1])] + prof[1:8], ar15_mesh.N_MID, STEEL_BLACK),             # 根元
+        lathe(0, b, [(z0 + 6, 4)] + [(z0 + 6, prof[-1][1])] + [p for p in prof if p[0] > z0 + 6][::-1][:1],
+              ar15_mesh.N_MID, STEEL_BLACK, False, False),
+        lathe(0, b, [(z0 + 6, 4), (z0, 4), (z0, 9.5), (z0 + 6, prof[-1][1])], ar15_mesh.N_MID, STEEL_BLACK, False, False),
+        lathe(0, b, [(z0 + 6, 6.5), (prof[7][0], 6.5)], ar15_mesh.N_MID, M.BORE),
     ]
+    r = max(p[1] for p in prof)
     for k in range(6):   # スリットの間の桟
         a = math.radians(30 + 60 * k)
-        cx, cy = 8.5 * math.cos(a), b + 8.5 * math.sin(a)
-        out += rotated([extrude_x([(z0 + 6, cy - 2), (z1 - 14, cy - 2), (z1 - 14, cy + 2), (z0 + 6, cy + 2)],
-                                  cx - 2, cx + 2, STEEL_BLACK)], "z", 0, (0, 0, 0))
+        cx, cy = (r - 2) * math.cos(a), b + (r - 2) * math.sin(a)
+        out.append(extrude_x([(z0 + 6, cy - 2), (prof[7][0], cy - 2), (prof[7][0], cy + 2), (z0 + 6, cy + 2)],
+                             cx - 2, cx + 2, STEEL_BLACK))
     return out
 
 
 def front_sight(l=L):
-    """フロントサイト: 銃身を抱く台から塔が立ち、上で左右の耳（フード）がポストを守る。"""
-    b, (z1, z0), sy = l.bore_y, l.fs_z, l.sight_y
-    tower = [(z1, b + 6), (z0, b + 6), (z0 + 3, b + 40), (z0 + 6, b + 44), (z1 - 6, b + 44), (z1 - 2, b + 40)]
-    ear = [(z1 - 4, b + 40), (z0 + 4, b + 40), (z0 + 6, l.fs_top - 3), (z0 + 9, l.fs_top), (z1 - 9, l.fs_top),
-           (z1 - 6, l.fs_top - 3)]
+    """フロントサイト: 銃身を抱く台、塔、上で左右の耳（フード）がポストを守る。側面形は写真。"""
+    b = l.bore_y
+    z0, z1 = min(p[0] for p in O.FRONT_SIGHT["outer"]), max(p[0] for p in O.FRONT_SIGHT["outer"])
+    split_y = l.sight_y - 12
+    tower = clip_y(O.FRONT_SIGHT, -1e4, split_y + 1)
+    ears = clip_y(O.FRONT_SIGHT, split_y, 1e4)
     return [
-        lathe(0, b, [(z0, 14), (z1, 14)], ar15_mesh.N_MID, STEEL_BLACK),
-        extrude_x_beveled(tower, -6, 6, 1.0, STEEL_BLACK, steps=1),
-        extrude_x_beveled(ear, 3.5, 6.5, 0.8, STEEL_BLACK, steps=1),
-        extrude_x_beveled(ear, -6.5, -3.5, 0.8, STEEL_BLACK, steps=1),
+        lathe(0, b, [(z0 + 4, 14), (z1 - 4, 14)], ar15_mesh.N_MID, STEEL_BLACK),
+        *outline_parts(tower, -6, 6, STEEL_BLACK),
+        *outline_parts(ears, 3.5, 6.5, STEEL_BLACK),
+        *outline_parts(ears, -6.5, -3.5, STEEL_BLACK),
     ]
 
 
 def front_sight_post(l=L):
     zc = sum(l.fs_z) / 2
-    return [box(-1, l.bore_y + 40, zc - 1, 1, l.sight_y, zc + 1, STEEL_BLACK)]
+    return [box(-1, l.sight_y - 14, zc - 1, 1, l.sight_y, zc + 1, STEEL_BLACK)]
 
 
 def gas_system(l=L):
-    """銃身下のガスシリンダーと、銃身とつなぐガスブロック、前端のレギュレーター。"""
-    b, gy = l.bore_y, l.gas_y
-    return [
-        lathe(0, gy, [(l.gas_front_z, 13), (l.hg_front_z + 10, 13)], ar15_mesh.N_MID, STEEL_BLACK),
-        lathe(0, gy, [(l.gas_front_z - 10, 17), (l.gas_front_z, 17)], ar15_mesh.N_MID, STEEL_BLACK),
-        box(-10, gy, -418, 10, b, -395, STEEL_BLACK),
-        box(-15, gy - 20, -392, 15, gy + 12, -372, STEEL_BLACK),          # 二脚の取付け
-    ]
+    """銃身下のガスシリンダー・ガスブロック・前端の調整ノブ・二脚の取付け（側面形は写真。断面は丸める）。"""
+    return [extrude_x_beveled(O.GAS["outer"], -13, 13, 5.0, STEEL_BLACK, steps=2)]
 
 
 def handguard(l=L):
-    """ハンドガード（樹脂、ガスシリンダーと銃身の下半分を覆う）。前端は丸い。"""
-    f, r, t, bt = l.hg_front_z, l.hg_rear_z, l.hg_top, l.hg_bottom
-    side = [(r, bt), (f + 26, bt), (f + 8, bt + 8), (f, bt + 24), (f, t - 14), (f + 6, t - 4), (f + 18, t), (r, t)]
-    out = [extrude_x_beveled(side, -l.hg_half, l.hg_half, 4.0, M.POLYMER, steps=ar15_mesh.BEVEL_STEPS)]
+    """ハンドガード（樹脂、ガスシリンダーと銃身の下半分を覆う）。側面形は二脚を立てた写真（下に脚が無い方）。"""
+    f, r = l.hg_front_z, l.hg_rear_z
+    out = [extrude_x_beveled(O.HANDGUARD["outer"], -l.hg_half, l.hg_half, 4.0, M.POLYMER, steps=ar15_mesh.BEVEL_STEPS)]
     for y in (118.0, 140.0, 158.0):     # 側面の横溝の間の帯（写真の 3 本の筋）
         for s in (1, -1):
             out.append(box(s * l.hg_half, y, f + 30, s * (l.hg_half + 1.2), y + 4, r - 20, M.POLYMER))
@@ -267,22 +269,29 @@ def handguard(l=L):
 
 
 def rail_handguard(l=L):
-    """銃身の上のレール台（ヒートシールドを兼ねる）とレール。"""
-    zr, zf, y0, y1 = l.shield
+    """銃身の上のレール台（ヒートシールドを兼ねる。側面形は写真）とレール。"""
+    zs = [p[0] for p in O.SHIELD["outer"]]
+    zf, zr = min(zs), max(zs)
+    y1 = max(p[1] for p in O.SHIELD["outer"])
     return [
-        box(-14, y0, zf, 14, y1, zr, M.RECEIVER),
+        extrude_x_beveled(O.SHIELD["outer"], -14, 14, 1.5, M.RECEIVER, steps=1),
         box(-8, y1, zf + 2, 8, y1 + 3, zr - 2, M.RAIL),
         box(-RAIL_W / 2, y1 + 3, zf + 2, RAIL_W / 2, y1 + 7.6, zr - 2, M.RAIL),
     ]
 
 
 def carry_handle(l=L):
-    """キャリングハンドル（たたんだ状態: 握りが銃身の上で前を向く）。"""
-    pz, py = l.handle_pivot
+    """キャリングハンドル（たたんだ状態: 握りが銃身の上で前を向く）。側面形は写真。台と腕は細く、握りは丸める。"""
+    mount = clip_y(O.CARRY_HANDLE, -1e4, 1e4)
+    from shapely.geometry import Polygon, box as sbox
+    g = Polygon(mount["outer"], mount["holes"])
+    grip = g.intersection(sbox(-1e4, -1e4, -180.0, 1e4))
+    arm = g.intersection(sbox(-181.0, -1e4, 1e4, 1e4))
+    pick = lambda q: q if q.geom_type == "Polygon" else max(q.geoms, key=lambda x: x.area)
+    grip, arm = pick(grip), pick(arm)
     return [
-        box(-9, l.hg_top, pz - 6, 9, py + 4, pz + 6, STEEL_BLACK),        # 銃身の台
-        box(-6, py, pz - 18, 6, py + 12, pz + 2, STEEL_BLACK),            # 腕
-        lathe(0, py + 16, [(pz - 88, 9), (pz - 86, 11), (pz - 20, 11), (pz - 18, 9)], ar15_mesh.N_MID, M.POLYMER),
+        extrude_x_beveled(list(grip.exterior.coords)[:-1], -11, 11, 5.0, M.POLYMER, steps=2),
+        extrude_x(list(arm.exterior.coords)[:-1], -7, 7, STEEL_BLACK),
     ]
 
 
@@ -305,29 +314,31 @@ def bipod_foot(l=L, side=1):
 
 # ---------------------------------------------------------------- 給弾
 def stanag_mag(l=L):
-    """STANAG 30 発弾倉（M4A1 と同じ形）を、弾倉口から左下へ 45° 傾けて差す。"""
+    """STANAG 30 発弾倉: 形は M4A1 の弾倉そのまま（側面のリブも含む）。弾倉口から左下へ 45° 傾けて差す点だけが違う。"""
     px, py = l.mag_pivot
 
     class _ML(ar15_parts.Layout):
         bore_y = py + 14.0
         mag_center_z = l.mag_center_z
-    parts = [p for p in ar15_mesh.magazine_stanag(_ML()) if isinstance(p, MeshPart)]
-    parts = [MeshPart([(v[0] + px, v[1], v[2]) for v in p.verts], p.faces, p.mat, p.normals, p.charts,
-                      p.chart_uv, p.chart_edge) for p in parts]
+    parts = []
+    for p in ar15_mesh.magazine_stanag(_ML()):
+        if not isinstance(p, MeshPart):     # キューブ（側面のリブ）は同じ寸法のメッシュに置き換えて一緒に傾ける
+            (x0, y0, z0), (sx, sy, sz) = p.origin, p.size
+            p = extrude_x([(z0, y0), (z0 + sz, y0), (z0 + sz, y0 + sy), (z0, y0 + sy)], x0, x0 + sx, p.mat)
+        parts.append(MeshPart([(v[0] + px, v[1], v[2]) for v in p.verts], p.faces, p.mat, p.normals, p.charts,
+                              p.chart_uv, p.chart_edge))
     return rotated(parts, "z", l.mag_tilt, (px, py, l.mag_center_z))
 
 
 def ammo_box(l=L):
-    """200 発ボックス（樹脂のふた＋布の袋。作者提供の単体写真）。受け部の左下に掛ける。"""
-    z0, z1, y0, y1 = l.box
+    """200 発ボックス（樹脂のふた＋布の袋）。側面形は写真。受け部の下に左右ほぼ対称に掛ける。"""
     x0, x1 = l.box_x
-    lid = 22.0
-    body = [(z1, y0), (z0, y0), (z0, y1 - lid), (z1, y1 - lid)]
-    top = [(z1, y1 - lid), (z0, y1 - lid), (z0 + 3, y1), (z1 - 3, y1)]
+    z0, z1 = min(p[0] for p in O.BOX_BODY["outer"]), max(p[0] for p in O.BOX_BODY["outer"])
+    zc = (z0 + z1) / 2
     return [
-        extrude_x_beveled(body, x0, x1, 4.0, M.CANVAS, steps=2),
-        extrude_x_beveled(top, x0 - 1, x1 + 1, 2.0, M.BOX_LID, steps=1),
-        box(x1 - 0.5, y1 - 40, (z0 + z1) / 2 - 2, x1 + 1.5, y0 + 8, (z0 + z1) / 2 + 2, M.BOX_LID),   # ファスナー（左面。側面写真で見える面）
+        extrude_x_beveled(O.BOX_BODY["outer"], x0, x1, 4.0, M.CANVAS, steps=2),
+        extrude_x_beveled(O.BOX_LID["outer"], x0 - 1, x1 + 1, 2.0, M.BOX_LID, steps=1),
+        box(x1 - 0.5, 20, zc - 2, x1 + 1.5, 80, zc + 2, M.BOX_LID),     # ファスナー（左面。側面写真で見える面）
     ]
 
 
@@ -395,7 +406,7 @@ def build(feed="belt"):
     add("bullet", "ammo", (0, b, tip + 6), None, bullet)
 
     from shapely.geometry import Polygon
-    c = Polygon(GRIP).centroid
+    c = Polygon(O.GRIP["outer"]).centroid
     add_locators(m, muzzle=(0, b * K, l.muzzle_z * K), sight_line_y=l.sight_y * K,
                  rear_sight_z=l.rear_sight_z * K, grip_center=(0, c.y * K, c.x * K))
     return m, parts

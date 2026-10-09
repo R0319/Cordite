@@ -8,7 +8,7 @@ python3 build.py              # 全方式を生成
 python3 build.py m4a1_parts   # 1方式だけ
 ```
 
-必要なもの: Python 3.10+、numpy、Pillow、shapely（メッシュの角丸めで使用）。
+必要なもの: Python 3.10+、numpy、Pillow、shapely（メッシュの角丸めで使用）。写真のトレースには contourpy も使う。
 
 | ファイル | 役割 |
 |---------|------|
@@ -20,6 +20,8 @@ python3 build.py m4a1_parts   # 1方式だけ
 | `rig.py` | コードが参照するロケーター・腕プレースホルダ（見た目の値は glock から流用した仮置き） |
 | `m4a1_parts.py` | A: パーツ組立版 M4A1 |
 | `m4a1_pixel.py` | B: ピクセル版 M4A1 |
+| `photo_trace.py` | 写真のトレース: 真横写真のシルエットを等値線（画素以下の精度）で取り出し、mm の多角形の範囲で部品ごとに切り出す。銃身などは太さの分布（Z, 半径）で取る |
+| `trace_m249.py` | M249 の写真から部品ごとの側面形をトレースして `m249_outline.py` に書き出す（写真はリポジトリに入れない。`python3 trace_m249.py <写真>`） |
 | `m249.py` | M249（メッシュ版）。`m249`（ボックス＋ベルト）と `m249_stanag`（STANAG 弾倉）の 2 つを出す。二脚・キャリングハンドル・フィードカバーは回転できるボーン |
 | （`build.py` 内） | C: パーツ組立＋メッシュ版 M4A1（`m4a1_parts.build(ar15_mesh)`）。メッシュ対応ローダーが必要。`m4a1_mesh_lite` はその簡略版（`ar15_mesh.set_detail("lite")`、敵 NPC 用など） |
 | `generated/` | 出力。`<方式>/m4a1.geo.json`・`m4a1.png`・`m4a1_modelshot.png`・`preview_*.png`、A は `parts/` に部品単体も |
