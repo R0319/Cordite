@@ -32,3 +32,6 @@ local.properties
 # Codex への作業指示ファイル（一時、セッションごとに使い捨て）
 codex-task.md
 codex-watch.ps1
+
+# モデル生成ツールの Python キャッシュ
+tools/modelgen/__pycache__/
