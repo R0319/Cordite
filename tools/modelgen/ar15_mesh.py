@@ -244,6 +244,51 @@ def set_mag_style(style):
     MAG_STYLE = style
 
 
+MAG_SHELL = 12.0                 # 弾倉の上部の中空の深さ（ここに送り板と弾。外したときに上から見える）
+MAG_WALL = 1.2                   # 上部の壁の厚さ
+MAG_LIP = (4.4, 2.0, 34.0)       # 給弾リップ（内側の縁の X、上下の厚さ、後ろの壁から前への長さ）
+MAG_ROUND_X = 2.4                # 中の弾の左右のずれ（複列。上の弾と次の弾が互い違い）
+MAG_ROUND_DY = 8.3               # 上の弾と次の弾の高さの差（直径 9.6mm の弾を互い違いに積んだときの段）
+
+
+def _mag_top(l):
+    """弾倉の上端の高さ・前後の端（本体の直線部）。"""
+    return l.bore_y - l.mag_top_below_bore, l.mag_center_z - 32.0, l.mag_center_z + 32.0
+
+
+def magazine_top(l=L, half_x=11.5, mat=None):
+    """弾倉の上部（中空）: 左右・前後の壁、内側へ巻き込んだ給弾リップ、送り板（段付き）。
+    外したときに上から見え、リップの間から一番上の弾（mag_ammo）が見える。弾が空のときは送り板が見える。"""
+    mat = mat or (M.MAG_USGI if MAG_STYLE == "usgi" else M.MAG_PMAG)
+    top, zf, zr = _mag_top(l)
+    y0, w = top - MAG_SHELL, MAG_WALL
+    out = []
+    for s_ in (1, -1):                                                          # 左右の壁
+        xa, xb = sorted((s_ * (half_x - w), s_ * half_x))
+        out.append(box(xa, y0 - 0.5, zf, xb, top, zr, mat))
+    out += [box(-half_x, y0 - 0.5, zf, half_x, top, zf + w, mat),               # 前の壁
+            box(-half_x, y0 - 0.5, zr - w, half_x, top, zr, mat)]               # 後ろの壁
+    lx, lt, ll = MAG_LIP
+    for s_ in (1, -1):                                                          # 給弾リップ（後ろの壁から前へ）
+        xa, xb = sorted((s_ * lx, s_ * (half_x - w + 0.3)))
+        out.append(extrude_x([(zr - ll, top - lt), (zr - w + 0.3, top - lt), (zr - w + 0.3, top),
+                              (zr - ll + 3.0, top)], xa, xb, mat))
+    out += [box(-half_x + w, y0 - 0.5, zf + w, half_x - w, y0 + 1.0, zr - w, M.FOLLOWER),     # 送り板
+            box(-half_x + w, y0 + 1.0, zf + 6.0, -0.5, y0 + 3.0, zr - 5.0, M.FOLLOWER)]       # 送り板の段
+    return out
+
+
+def magazine_rounds(l=L):
+    """弾倉の中の弾（mag_ammo）: 上の 2 発を互い違いに。薬莢の底を後ろの壁に当てる。"""
+    top, zf, zr = _mag_top(l)
+    z_tip = zr - MAG_WALL - 0.5 - 57.4
+    out = []
+    for x, y in ((MAG_ROUND_X, top - 4.8), (-MAG_ROUND_X, top - 4.8 - MAG_ROUND_DY)):
+        case, bullet = cartridge_556(z_tip, y, x=x)
+        out += case + bullet
+    return out
+
+
 def magazine_stanag(l=L):
     """STANAG 30 発弾倉（角張った箱形）。上は直線、マグウェルの下から半径一定で前へ反る（実物と同じ「バナナ」形）。
     外観は MAG_STYLE で切り替える（本体の輪郭・寸法は共通。M249 の STANAG 版もこれを回して使う）。"""
@@ -261,6 +306,9 @@ def magazine_stanag(l=L):
         tangents.append(t)
     back = [(cz + half * math.cos(t), cy - half * math.sin(t)) for (cz, cy), t in zip(center, tangents)]
     front = [(cz - half * math.cos(t), cy + half * math.sin(t)) for (cz, cy), t in zip(center, tangents)]
+    # 上 MAG_SHELL は中空（magazine_top）なので、詰まった本体はその下から
+    back[0] = (back[0][0], top - MAG_SHELL)
+    front[0] = (front[0][0], top - MAG_SHELL)
     body = back + front[::-1]
     # フロアプレート（最下端の法線方向へ 8mm、前後に 4mm ずつはみ出す）
     (cz, cy), t = center[-1], tangents[-1]
@@ -289,13 +337,14 @@ def magazine_stanag(l=L):
     # マグウェルに隠れる直線部（上 60mm）ではなく、見えている湾曲部に凹凸を置く
     if MAG_STYLE == "usgi":
         mat = M.MAG_USGI
-        out = [extrude_x(body, -11, 11, mat), extrude_x(plate, -13, 13, M.STEEL_DARK)]
+        out = [extrude_x(body, -11, 11, mat), extrude_x(plate, -13, 13, M.STEEL_DARK), *magazine_top(l, 11.0, mat)]
         for o in (-19.0, -6.5, 6.5, 19.0):            # 縦リブ 4 本（側面の補強の段。湾曲部にも沿う）
             out.append(extrude_x(strip(o - 1.6, o + 1.6, 1), -12.2, 12.2, mat))
         return out
     mat = M.MAG_PMAG
     out = [
         extrude_x(body, -11.5, 11.5, mat),
+        *magazine_top(l, 11.5, mat),
         extrude_x(plate, -13.5, 13.5, mat),            # フロアプレート（樹脂。本体より少し厚く、前後にはみ出す）
         extrude_x(strip(-half - 1.5, -half + 3.5, 1), -12.6, 12.6, mat),   # 前の背骨
         extrude_x(strip(half - 3.5, half + 1.5, 1), -12.6, 12.6, mat),     # 後ろの背骨
@@ -325,8 +374,8 @@ def stock_m4(l=L):
     ]
 
 
-def cartridge_556(z_tip, y, case_mat=M.BRASS, bullet_mat=M.COPPER):
-    case = lathe(0, y, [(z_tip + 12.7, 3.1), (z_tip + 20, 3.1), (z_tip + 25, 4.7), (z_tip + 56, 4.8),
+def cartridge_556(z_tip, y, case_mat=M.BRASS, bullet_mat=M.COPPER, x=0.0):
+    case = lathe(x, y, [(z_tip + 12.7, 3.1), (z_tip + 20, 3.1), (z_tip + 25, 4.7), (z_tip + 56, 4.8),
                         (z_tip + 56, 4.2), (z_tip + 57.4, 4.8)], N_SMALL, case_mat)
-    bullet = lathe(0, y, [(z_tip, 0.4), (z_tip + 5, 2.1), (z_tip + 12.7, 2.85)], N_SMALL, bullet_mat)
+    bullet = lathe(x, y, [(z_tip, 0.4), (z_tip + 5, 2.1), (z_tip + 12.7, 2.85)], N_SMALL, bullet_mat)
     return [case], [bullet]
