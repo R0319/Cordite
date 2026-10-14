@@ -31,7 +31,7 @@ BORE_Y = 133.0          # 銃身の軸（図面の銃身の上下の中点）
 SIGHT_Y = 176.0         # 照準線（照星のフードの中のポストの先端）
 MUZZLE_Z = -572.0       # 銃口（床尾 +308 から全長 880）
 REAR_SIGHT_Z = -132.0   # 照門（照尺の後端の切り欠き）
-FRONT_SIGHT_Z = -482.0  # 照星
+FRONT_SIGHT_Z = -488.0  # 照星（ポスト。図面の塔の耳の前後の中央）
 CHAMBER_Z = -150.0      # 銃身の後端（受け部の前端）
 
 # 左右の半幅（作者提供の図面の上面図から。上面図の全長 880mm で縮尺を合わせ、各位置の幅を測った）
@@ -56,6 +56,15 @@ def _yr(o):
     return min(ys), max(ys)
 
 
+def _clip(outer, z0, y0, z1, y1):
+    """トレースした輪郭の一部（矩形 z0..z1 × y0..y1 との共通部分）を、多角形の頂点列のリストで返す。
+    図面のトレースは接している部品が 1 つの影絵になっているので、部品ごとに切り分けるのに使う。"""
+    from shapely.geometry import Polygon, box as sbox
+    g = Polygon(outer).intersection(sbox(z0, y0, z1, y1))
+    return [list(q.exterior.coords)[:-1] for q in getattr(g, "geoms", [g])
+            if q.geom_type == "Polygon" and q.area > 0.5]
+
+
 # ---------------------------------------------------------------- 受け部
 def receiver():
     h = HALF_RECEIVER
@@ -71,9 +80,27 @@ def receiver():
         for s in (1, -1):
             x0, x1 = sorted((s * (h - 0.3), s * (h + 0.9)))
             out.append(x_cyl(z, y, r, x0, x1, STEEL_BLACK, n=10))
-    # セレクターレバー（右側面）: 後ろの丸い軸から前へ長く伸びる板（図面: 軸 Z≈+30・Y≈126、先端 Z≈-45・Y≈138）
-    out.append(x_cyl(30.0, 126.0, 8.0, -h - 2.0, -h, STEEL_BLACK, n=14))
-    out.append(extrude_x([(30.0, 120.0), (30.0, 132.0), (-45.0, 141.0), (-48.0, 137.0)], -h - 2.0, -h - 0.5, STEEL_BLACK))
+    return out
+
+
+SELECTOR_PIVOT = (21.0, 127.0)   # セレクターの軸（図面の後ろの大きな丸の中心。半径 約 9mm）
+
+
+def selector():
+    """セレクターレバー（右側面）。後ろの丸い軸から前へ長く伸びる板で、上（安全）では板がダストカバーの下の
+    ボルトの通り道を塞ぐ。下げるほど 連発（АВ）→ 単発（ОД）。前端に指を掛ける外向きの爪。
+    図面の線: 軸 Z≈+21・Y≈127、先端 Z≈-48（すぐ前がコッキングハンドル）。板は受け部の側面に密着させる（浮くと隙間に見える）。"""
+    h = HALF_RECEIVER
+    zc, yc = SELECTOR_PIVOT
+    out = [x_cyl(zc, yc, 9.0, -h - 2.4, -h + 0.5, STEEL_BLACK, n=18),          # 軸のボス
+           x_cyl(zc, yc, 2.8, -h - 3.2, -h - 2.0, M.STEEL, n=10)]              # 軸の頭
+    # 板: 軸の側で幅 12mm → 先端 6mm に細る。上の縁はダストカバーの下の縁（Y 140）に沿う
+    out.append(extrude_x_beveled([(zc, yc - 6.0), (zc - 20.0, yc - 3.0), (-46.0, 135.0), (-48.5, 137.0),
+                                  (-47.0, 141.0), (zc - 20.0, 140.0), (zc, yc + 6.0)],
+                                 -h - 2.0, -h + 0.5, 0.6, STEEL_BLACK, steps=1))
+    # 前端の指掛け（外へ折り曲げた爪）
+    out.append(extrude_x_beveled([(-49.0, 133.5), (-43.0, 134.5), (-43.5, 141.0), (-48.5, 141.0)],
+                                 -h - 6.5, -h - 1.0, 0.8, STEEL_BLACK, steps=1))
     return out
 
 
@@ -99,21 +126,66 @@ def front_trunnion():
     return outline_parts(O.FRONT_TRUNNION, -HALF_TRUNNION, HALF_TRUNNION, STEEL_BLACK, bevel=2.0)
 
 
+REAR_LEAF_HINGE = (-203.0, 175.5)      # 照尺の前の蝶番（図面の照門ブロックの前上の角）
+REAR_SLIDER_Z = (-194.0, -181.0)       # スライダー（図面の照尺の上の前寄りの膨らみ。「П」の位置）
+REAR_NOTCH_Z = (-140.0, -133.0)        # 照尺の後端の照門（図面の後ろの膨らみ。後端 -133）
+
+
 def rear_sight():
-    """照門ブロック＋照尺（図面の側面形。照尺は前の軸から後ろへ伸び、後端に V 字の照門）。"""
-    out = outline_parts(O.REAR_SIGHT, -10.0, 10.0, STEEL_BLACK, bevel=1.0)
-    out.append(box(-1.5, SIGHT_Y + 0.5, REAR_SIGHT_Z - 2.5, 1.5, SIGHT_Y + 8.0, REAR_SIGHT_Z + 2.5, M.BORE))   # V 字の切り欠き
+    """照門ブロック＋照尺（作者提供の写真: ブロックの前の蝶番ピンで照尺が起き、照尺の上をスライダーが前後する。
+    スライダーは左右のボタンをつまんで動かす。照尺の後端に照門の切り欠き）。
+    高さ・前後の位置は図面のトレース（REAR_SIGHT）、ブロックの上面 Y 173 から上を照尺とスライダーに分けた。
+    照尺の目盛り（1〜8・П）は 1 テクセル（約 3mm）より細かいので形にしない。"""
+    out = [extrude_x_beveled(p, -11.0, 11.0, 1.2, STEEL_BLACK, steps=1)
+           for p in _clip(O.REAR_SIGHT["outer"], -300.0, 0.0, -100.0, 173.5)]
+    zh, yh = REAR_LEAF_HINGE
+    nz0, nz1 = REAR_NOTCH_Z
+    # 照尺（厚さ 6mm の板。ブロックの上面に 1mm 食い込ませて隙間を作らない）
+    out.append(extrude_x_beveled([(zh - 1.0, 172.5), (nz0, 172.5), (nz0, 178.0), (zh - 1.0, 179.5)],
+                                 -7.0, 7.0, 0.8, STEEL_BLACK, steps=1))
+    out.append(x_cyl(zh, yh, 3.2, -11.6, 11.6, M.STEEL, n=12))                  # 蝶番のピン
+    # 後端の照門: 左右 2 本の爪の間の切り欠きの底が照準線（SIGHT_Y）
+    out.append(extrude_x_beveled([(nz0, 172.5), (nz1, 172.5), (nz1, SIGHT_Y), (nz0, SIGHT_Y)],
+                                 -7.0, 7.0, 0.5, STEEL_BLACK, steps=1))
+    for s in (1, -1):
+        x0, x1 = sorted((s * 1.3, s * 7.0))
+        out.append(extrude_x_beveled([(nz0, SIGHT_Y - 0.5), (nz1, SIGHT_Y - 0.5), (nz1, 184.0), (nz0 + 1.5, 184.0)],
+                                     x0, x1, 0.5, STEEL_BLACK, steps=1))
+    # スライダー（照尺を抱く箱）と左右のボタン
+    sz0, sz1 = REAR_SLIDER_Z
+    out.append(extrude_x_beveled([(sz0, 171.0), (sz1, 171.0), (sz1 + 1.5, 184.0), (sz0, 184.0)],
+                                 -9.0, 9.0, 1.0, STEEL_BLACK, steps=1))
+    for s in (1, -1):
+        x0, x1 = sorted((s * 8.5, s * 11.2))
+        out.append(x_cyl((sz0 + sz1) / 2, 178.0, 2.7, x0, x1, M.STEEL, n=12))
     return out
 
 
+# 図面のトレース TRIGGER_GUARD は、トリガーガード・その中のトリガー・前のマガジンキャッチが 1 つの影絵になっている。
+# 矩形で切り分けて、それぞれの厚みで作る
+TRIGGER_BOX = (-16.0, 75.5, 5.5, 101.0)       # ガードの中のトリガー（ガードの下の帯 Y≦74・後ろの柱 Z≧6 は含まない）
+MAG_CATCH_BOX = (-53.0, 50.0, -44.5, 101.0)   # ガードの前に垂れるマガジンキャッチ（弾倉の後ろの縁に 0.5mm 掛かる）
+MAG_CATCH_PIN = (-41.0, 95.0)                 # マガジンキャッチの軸（ガードの前の付け根）
+
+
 def trigger_guard():
-    return outline_parts(O.TRIGGER_GUARD, -5.0, 5.0, STEEL_BLACK)
+    """トリガーガード（プレス鋼板）。図面の輪郭からトリガーとマガジンキャッチを除いた残り。"""
+    from shapely.geometry import Polygon, box as sbox
+    g = Polygon(O.TRIGGER_GUARD["outer"]).difference(sbox(*TRIGGER_BOX)).difference(sbox(*MAG_CATCH_BOX))
+    out = [extrude_x_beveled(list(q.exterior.coords)[:-1], -5.5, 5.5, 1.0, STEEL_BLACK, steps=1)
+           for q in getattr(g, "geoms", [g]) if q.geom_type == "Polygon" and q.area > 0.5]
+    out.append(x_cyl(*MAG_CATCH_PIN, 1.8, -6.4, 6.4, M.STEEL, n=8))              # マガジンキャッチの軸のピン
+    return out
 
 
 def trigger():
-    """トリガー（図面: ガードの中で後ろ下へ曲がる板）。"""
-    return [extrude_x([(4.0, 100.0), (-4.0, 100.0), (-3.0, 88.0), (2.0, 80.0), (8.0, 77.0), (6.0, 82.0), (2.0, 90.0)],
-                      -3.0, 3.0, STEEL_BLACK)]
+    """トリガー（図面: ガードの中の、前へ反って下端が前へ出る板。幅 6.5mm）。"""
+    return [extrude_x_beveled(p, -3.2, 3.2, 0.8, STEEL_BLACK, steps=1) for p in _clip(O.TRIGGER_GUARD["outer"], *TRIGGER_BOX)]
+
+
+def mag_release():
+    """マガジンキャッチ（弾倉の後ろに垂れるパドル。前へ押すと弾倉の後ろの突起が外れる）。幅 13mm の板。"""
+    return [extrude_x_beveled(p, -6.5, 6.5, 1.0, STEEL_BLACK, steps=1) for p in _clip(O.TRIGGER_GUARD["outer"], *MAG_CATCH_BOX)]
 
 
 def pistol_grip():
@@ -167,9 +239,35 @@ def cleaning_rod():
     return [lathe(0, 121.5, [(-505.0, 2.2), (-320.0, 2.2)], 6, M.STEEL)]
 
 
+FRONT_EARS_Y = 166.0                  # 照星の塔の上の左右の耳（ポストを守る）の下端
+FRONT_DRUM = (FRONT_SIGHT_Z, 163.0, 5.0)   # ポストのドラム（Z, Y, 半径。側面に丸く見える）
+FRONT_WINDOW = [(-494.0, 147.5), (-481.0, 147.5), (-481.0, 155.5), (-494.0, 155.5)]   # 塔の窓（横に抜ける）
+
+
 def front_sight():
-    return [*outline_parts(O.FRONT_SIGHT, -6.0, 6.0, STEEL_BLACK, bevel=1.0),
-            *outline_parts(O.FRONT_SIGHT_BASE, -11.0, 11.0, STEEL_BLACK, bevel=3.0)]
+    """照星（作者提供の写真）: 銃身を抱く筒の台・その下の突起（清掃棒が通る）・窓の抜けた三角の塔・
+    上の左右の耳・その間のポスト・塔を貫く丸いドラム（ポストの上下調整）。輪郭は図面のトレース。"""
+    o = O.FRONT_SIGHT["outer"]
+    out = []
+    lower = _clip(o, -600.0, 0.0, -400.0, FRONT_EARS_Y)
+    out += outline_parts({"outer": lower[0], "holes": [FRONT_WINDOW]}, -6.0, 6.0, STEEL_BLACK)
+    for ear in _clip(o, -600.0, FRONT_EARS_Y - 0.5, -400.0, 300.0):
+        for s in (1, -1):
+            x0, x1 = sorted((s * 3.0, s * 6.0))
+            out.append(extrude_x_beveled(ear, x0, x1, 0.8, STEEL_BLACK, steps=1))
+    zd, yd, rd = FRONT_DRUM
+    out.append(x_cyl(zd, yd, rd, -7.0, 7.0, STEEL_BLACK, n=16))
+    out.append(x_cyl(zd, yd, 1.2, -7.4, 7.4, M.BORE, n=8))                      # ドラムの中心の穴（調整工具）
+    out.append(box(-1.1, yd + rd - 0.5, zd - 1.1, 1.1, SIGHT_Y, zd + 1.1, STEEL_BLACK))   # ポスト
+    # 台: 銃身を抱く筒（銃口ナットと同じ太さ）＋図面の下の突起
+    z0, z1 = _zr(O.FRONT_SIGHT_BASE)
+    out.append(lathe(0, BORE_Y, [(z0, 12.0), (z1 - 1.0, 12.0)], ar15_mesh.N_MID, STEEL_BLACK))
+    out += [extrude_x_beveled(p, -6.5, 6.5, 1.5, STEEL_BLACK, steps=1)
+            for p in _clip(O.FRONT_SIGHT_BASE["outer"], -600.0, 0.0, -400.0, 126.0)]
+    for z in (z0 + 7.0, z1 - 9.0):                                              # 銃身に留めるピン
+        out.append(x_cyl(z, 127.5, 1.6, -10.9, 10.9, M.STEEL, n=8))
+    out.append(lathe(-7.5, 128.5, [(z0 - 2.0, 1.3), (z0 + 1.0, 1.3)], 8, M.STEEL))   # 銃口ナットの止めピン（右前）
+    return out
 
 
 # ---------------------------------------------------------------- ハンドガード
@@ -273,9 +371,48 @@ def charging_handle():
 
 
 # ---------------------------------------------------------------- 弾倉
+MAG_REAR_Z = MAG_CATCH_BOX[0] + 0.5     # 弾倉の後ろの縁（図面ではマガジンキャッチと 1 つの影絵なので、ここで切る）
+MAG_RIBS = (0.30, 0.68)                 # 側面の補強リブ（前の縁→後ろの縁の割合。図面の縦の 4 本線＝リブ 2 本の両縁）
+
+
+def _mag_edges():
+    """弾倉の輪郭を前の縁・後ろの縁・底に分ける（図面の輪郭の点の並びから）。"""
+    pts = O.MAGAZINE["outer"]
+    i_rb = max(range(len(pts)), key=lambda i: (pts[i][0] < -140 and pts[i][1] < -50, -pts[i][1], pts[i][0]))  # 後ろ下の角
+    i_fb = min(range(len(pts)), key=lambda i: pts[i][0])                                                        # 前下の角
+    i_ft = min(range(len(pts)), key=lambda i: (abs(pts[i][1] - 100.0) > 0.5, pts[i][0]))                        # 前上の角
+    rear = [(MAG_REAR_Z, 100.0)] + [p for p in pts[:i_rb + 1] if p[0] <= MAG_REAR_Z]   # 上端から
+    front = pts[i_fb:i_ft + 1][::-1]          # 上 → 下
+    return front, rear, (pts[i_rb], pts[i_fb])
+
+
+def _resample(line, n):
+    from shapely.geometry import LineString
+    ls = LineString(line)
+    return [ls.interpolate(k / (n - 1), normalized=True).coords[0] for k in range(n)]
+
+
 def magazine_ak():
-    """AK 30 発弾倉（鋼）: 図面の側面形（強く前へ反ったバナナ形）を押し出す。図面の縦のビードを 2 本足す。"""
-    out = [extrude_x_beveled(O.MAGAZINE["outer"], -HALF_MAG, HALF_MAG, 1.5, M.MAG_AK, steps=1)]
+    """AK 30 発弾倉（鋼）: 図面の側面形（強く前へ反ったバナナ形）。後ろの縁はマガジンキャッチの前で切る。
+    側面に湾曲に沿った補強リブ 2 本（図面の縦の線）、底に一回り大きい底板。"""
+    from shapely.geometry import LineString, Polygon, box as sbox
+    body = Polygon(O.MAGAZINE["outer"]).intersection(sbox(-400.0, -200.0, MAG_REAR_Z, 200.0))
+    body = max(getattr(body, "geoms", [body]), key=lambda q: q.area)
+    out = [extrude_x_beveled(list(body.exterior.coords)[:-1], -HALF_MAG, HALF_MAG, 1.5, M.MAG_AK, steps=1)]
+    front, rear, (rb, fb) = _mag_edges()
+    F, R = _resample(front, 40), _resample(rear, 40)
+    for f in MAG_RIBS:
+        mid = [(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f) for a, b in zip(F, R)][6:34]   # 受け部の中・底板は避ける
+        rib = LineString(mid).buffer(2.8, cap_style=1).intersection(body)
+        for q in getattr(rib, "geoms", [rib]):
+            if q.geom_type == "Polygon" and q.area > 1.0:
+                out.append(extrude_x_beveled(list(q.simplify(0.2).exterior.coords)[:-1], -HALF_MAG - 1.4, HALF_MAG + 1.4,
+                                             0.9, M.MAG_AK, steps=1))
+    # 底板: 底の縁から 4mm の帯を、本体より 0.8mm 大きく
+    plate = LineString([rb, fb]).buffer(4.5, cap_style=2).intersection(body.buffer(0.8, join_style=2))
+    plate = max(getattr(plate, "geoms", [plate]), key=lambda q: q.area)
+    out.append(extrude_x_beveled(list(plate.simplify(0.2).exterior.coords)[:-1], -HALF_MAG - 0.8, HALF_MAG + 0.8,
+                                 1.0, M.MAG_AK, steps=1))
     return out
 
 
@@ -304,7 +441,9 @@ def build(variant="wood"):
 
     m.bone("root", None, (0, 0, 0))
     add("receiver", "root", (0, b, 0), "receiver", receiver() + front_trunnion() + dust_cover(rail=rail))
+    add("selector", "receiver", (-HALF_RECEIVER, SELECTOR_PIVOT[1], SELECTOR_PIVOT[0]), "selector", selector())
     add("lower_receiver", "receiver", (0, 100.0, 0), "trigger_guard", trigger_guard())
+    add("mag_release", "lower_receiver", (0, MAG_CATCH_PIN[1], MAG_CATCH_PIN[0]), "mag_release", mag_release())
     add("pistol_grip", "receiver", (0, 100.0, 40.0), "pistol_grip", pistol_grip())
     add("trigger", "root", (0, 100.0, 0), "trigger", trigger())
     add("stock", "root", (0, b, 80.0), "stock", stock())
