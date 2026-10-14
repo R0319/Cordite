@@ -300,8 +300,17 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> M
                 cuv.append([(s0, t_acc), (s1, t_acc), (s1, t_acc + dt), (s0, t_acc + dt)])
             t_acc += dt
         cap = ring_idx[(side, steps)]
-        for tri in _triangulate(pts):
-            faces.append([cap[t] for t in (tri if side == 1 else (tri[0], tri[2], tri[1]))])
+        extra = {}
+
+        def vid(t):
+            if isinstance(t, int):
+                return cap[t]
+            if t not in extra:          # 自己交差を解いたときに増えた点（側面の平らな面の上）
+                extra[t] = len(verts)
+                verts.append((side * H * scale(t[0], t[1]), t[1], t[0]))
+            return extra[t]
+        for tri in _cap_triangles(pts, [(verts[c][2], verts[c][1]) for c in cap]):
+            faces.append([vid(t) for t in (tri if side == 1 else (tri[0], tri[2], tri[1]))])
             charts.append(None)
             cuv.append(None)
     # 縁の帯（左右の稜線をつなぐ。半径 = half_w の点では幅 0）
@@ -310,7 +319,7 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> M
         j = (i + 1) % n
         faces.append([a[i], a[j], b[j], b[i]])
         charts.append(2)
-        w = 2 * (H - max(radii[i], radii[j]) * 0.999)
+        w = 2 * (H - min(radii[i], radii[j]) * 0.999)   # 半径が切り替わる点では帯が三角形になるので、広い側の幅で塗る
         cuv.append([(perim[i], 0), (perim[i + 1], 0), (perim[i + 1], max(w, 0.01)), (perim[i], max(w, 0.01))])
     return MeshPart(verts, faces, mat, None, charts, cuv, {0: False, 1: False, 2: False}).finalize()
 
@@ -377,6 +386,55 @@ def smooth(points, per_seg=6):
 
 def _area2(p):
     return sum(p[i][0] * p[(i + 1) % len(p)][1] - p[(i + 1) % len(p)][0] * p[i][1] for i in range(len(p)))
+
+
+def _cap_triangles(pts, cap):
+    """inflate_x の側面（平らな面）の三角形分割。通常は元の輪郭 pts で分割して縮めた輪郭 cap に当てはめるが、
+    点ごとに丸みの半径が違うと縮め方が場所で変わり、当てはめた三角形が裏返って割れ目が出る。
+    裏返りがあるときだけ、縮めた輪郭そのものを（重なった点を除いて）分割し直す。"""
+    tris = _triangulate(pts)
+    if all(_tri_area2(cap, t) > 1e-9 for t in tris):
+        return tris
+    keep = []
+    for i, q in enumerate(cap):
+        if not keep or math.dist(cap[keep[-1]], q) > 1e-4:
+            keep.append(i)
+    if len(keep) > 1 and math.dist(cap[keep[0]], cap[keep[-1]]) <= 1e-4:
+        keep.pop()
+    sub = [cap[i] for i in keep]
+    try:
+        out = [tuple(keep[i] for i in t) for t in _triangulate(sub)]
+        if all(_tri_area2(cap, t) > 1e-9 for t in out):   # 自己交差した輪郭だと最後の三角形が裏返ることがある
+            return out
+    except ValueError:
+        pass
+    # 縮めた輪郭が細くくびれている・自己交差している（細い切り欠きを大きく丸めたとき）: 交差を解いた形を
+    # 制約付きドロネーで分割する。交点など元に無い点は (z, y) の座標のまま返し、呼び出し側で頂点を足す
+    try:
+        import shapely
+        from shapely.geometry import Polygon
+        from shapely.validation import make_valid
+        g = make_valid(Polygon(sub))
+        polys = [q for q in getattr(g, "geoms", [g]) if q.geom_type == "Polygon" and q.area > 1e-6]
+        out = []
+        for poly in polys:
+            for tg in shapely.constrained_delaunay_triangles(poly).geoms:
+                t = []
+                for q in list(tg.exterior.coords)[:3]:
+                    i = min(range(len(sub)), key=lambda i: math.dist(sub[i], q))
+                    t.append(keep[i] if math.dist(sub[i], q) < 1e-3 else (q[0], q[1]))
+                (ax, ay), (bx, by), (cx, cy) = [cap[v] if isinstance(v, int) else v for v in t]
+                a2 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+                if abs(a2) > 1e-9:
+                    out.append(tuple(t) if a2 > 0 else (t[0], t[2], t[1]))
+        return out or tris
+    except Exception:
+        return tris
+
+
+def _tri_area2(p, t):
+    (ax, ay), (bx, by), (cx, cy) = p[t[0]], p[t[1]], p[t[2]]
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
 
 
 def _triangulate(p):

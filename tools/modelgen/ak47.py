@@ -80,7 +80,11 @@ def receiver():
 def dust_cover(rail=False):
     """ダストカバー（板金の蓋）。図面の側面形を押し出し、上の角を大きく丸める。rail=True で上面にレール。"""
     o = O.DUST_COVER
-    out = [extrude_x_beveled(o["outer"], -HALF_COVER, HALF_COVER, 7.0, M.RECEIVER, steps=3)]
+    # 下の縁は受け部の中へ 8mm 差し込み、少しだけ外へ張り出させる。丸めは全周に掛かるので、そのままだと
+    # 下の縁も内側へ丸まり、受け部との継ぎ目に溝ができる（実物のカバーは受け部の外側に被さって面一）
+    y_bottom = _yr(o)[0]
+    outer = [(z, y - 8.0 if y <= y_bottom + 0.5 else y) for z, y in o["outer"]]
+    out = [extrude_x_beveled(outer, -(HALF_RECEIVER + 0.4), HALF_RECEIVER + 0.4, 7.0, M.RECEIVER, steps=3)]
     z0, z1 = _zr(o)
     yt = _yr(o)[1]
     if rail:
@@ -114,6 +118,8 @@ def trigger():
 
 def pistol_grip():
     def radius(nz, ny):
+        if ny > 0.6:
+            return 1.0          # 上端（受け部の下面に付く面）は丸めない。丸めると付け根が細って溝になる
         return 5.0 if ny < -0.7 else HALF_GRIP
     return [inflate_x(O.GRIP["outer"], HALF_GRIP, WOOD, steps=4, radius_fn=radius)]
 
@@ -125,7 +131,7 @@ def stock():
         return 1.0 + 0.23 * (z - z0) / (z1 - z0)        # 付け根 30mm → 床尾 37mm
 
     def radius(nz, ny):
-        return 9.0
+        return 1.0 if nz < -0.6 else 9.0     # 前の端面（受け部の後端に付く面）は丸めない
     out = [inflate_x(O.STOCK["outer"], HALF_STOCK, WOOD, steps=4, width_fn=width, radius_fn=radius)]
     # 鋼の床尾板（図面: 床尾の縦の帯）
     y0, y1 = _yr(O.STOCK)
@@ -167,11 +173,42 @@ def front_sight():
 
 
 # ---------------------------------------------------------------- ハンドガード
+def _clip_z_outline(o, z0, z1):
+    from shapely.geometry import Polygon, box as sbox
+    g = Polygon(o["outer"]).intersection(sbox(z0, -1e4, z1, 1e4))
+    if g.geom_type != "Polygon":
+        g = max(g.geoms, key=lambda q: q.area)
+    return list(g.exterior.coords)[:-1]
+
+
+HG_RETAINERS = ((-214.0, -206.0), (-320.0, -306.0))   # 下ハンドガードの後ろ・前の留め金（図面の前の縦の帯 Z -306〜-318）
+
+
+def handguard_retainers():
+    """下ハンドガードの前後の鋼の留め金。木より 1mm 太い輪で、木の端面（受け部より幅広いので横から見える）を覆う。"""
+    # 幅 8〜14mm の薄い輪なので inflate_x は使えない（半幅が輪郭の厚みを超えて内側オフセットが潰れる）
+    hw = HALF_LOWER_HG * 1.45 + 1.0
+    out = []
+    for z0, z1 in HG_RETAINERS:
+        prof = _clip_z_outline(O.LOWER_HANDGUARD, z0 - 0.5, z1 + 0.5)
+        # 木の端面と同じ Z だと面が重なって木が透ける（z-fighting）ので、端は 0.8mm 外へ出して隣の部品に食い込ませる
+        lo, hi = min(z for z, _ in prof), max(z for z, _ in prof)
+        top = max(y for _, y in prof)
+        # 上面も木の上面（上ハンドガードとの合わせ目）と同じ高さだと透けるので 0.8mm 上げる。下面は 1mm 下へ
+        prof = [(lo - 0.8 if z == lo else hi + 0.8 if z == hi else z,
+                 top + 0.8 if y == top else y - 1.0 if y < 120 else y) for z, y in prof]
+        out.append(extrude_x_beveled(prof, -hw, hw, 1.5, STEEL_BLACK, steps=2))
+    return out
+
+
 def lower_handguard_wood():
     def width(z, y, f):
         return 1.45
 
     def radius(nz, ny):
+        # 前後の端面（照門ブロック・ガス部に付く）と上面（上ハンドガードとの合わせ目）は丸めない
+        if abs(nz) > 0.6 or ny > 0.6:
+            return 1.5
         return 12.0 if ny < -0.5 else 3.0
     return [inflate_x(O.LOWER_HANDGUARD["outer"], HALF_LOWER_HG, WOOD, steps=4, width_fn=width, radius_fn=radius)]
 
@@ -179,7 +216,12 @@ def lower_handguard_wood():
 def upper_handguard_wood():
     def width(z, y, f):
         return 1.2
-    return [inflate_x(O.UPPER_HANDGUARD["outer"], HALF_UPPER_HG, WOOD, steps=4, width_fn=width)]
+
+    def radius(nz, ny):
+        # 後ろの端面（照門ブロックに付く）と下面（下ハンドガードとの合わせ目）は丸めない。
+        # 前の端は実物でも丸く絞られている（ガスチューブだけが前へ続く）ので丸める
+        return 1.5 if (nz > 0.6 or ny < -0.6) else HALF_UPPER_HG
+    return [inflate_x(O.UPPER_HANDGUARD["outer"], HALF_UPPER_HG, WOOD, steps=4, width_fn=width, radius_fn=radius)]
 
 
 def lower_handguard_rail():
@@ -282,7 +324,8 @@ def build(variant="wood"):
         add("rail_bottom", "root", (0, y_bottom, r1), None, [])
         add("rail_side", "root", (x_side, yc, r1), None, [])
     else:
-        add("handguard", "root", (0, b, -208.0), "handguard_wood", lower_handguard_wood() + upper_handguard_wood())
+        add("handguard", "root", (0, b, -208.0), "handguard_wood",
+            lower_handguard_wood() + upper_handguard_wood() + handguard_retainers())
         add("rail_top", "root", (0, _yr(O.DUST_COVER)[1], 60.0), None, [])
         add("rail_bottom", "root", (0, _yr(O.LOWER_HANDGUARD)[0], -208.0), None, [])
         add("rail_side", "root", (HALF_RECEIVER, b, -208.0), None, [])
