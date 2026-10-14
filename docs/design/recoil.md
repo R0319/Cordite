@@ -10,7 +10,7 @@
 |---|-----|------------------|-----|---------|
 | ① **視点キック** | クロスヘアが跳ね上がり、じわっと戻る | **あり**（狙いがズレる） | クライアント（MCの視点はクライアントが持つ） | **本ドキュメント。実装済み** |
 | ② **銃モデルのキック** | 手元で銃が跳ねる見た目 | なし | クライアント表示のみ | 作者制作の`fire`クリップ（[animation-system.md](animation-system.md)） |
-| ③ **拡散** | 腰だめで着弾がばらける | **あり** | **サーバー権威（必須）** | **腰だめの基本拡散は実装済み**（`GunProperties#hipSpreadDeg` / `ProjectileManager#applyConeSpread`）。連射・移動によるブルームは未実装 |
+| ③ **拡散** | 腰だめで着弾がばらける | **あり** | **サーバー権威（必須）** | **腰だめの基本拡散は実装済み**（`GunDefinition#hipSpreadDeg` / `ProjectileManager#applyConeSpread`）。連射・移動によるブルームは未実装 |
 
 **①だけではチート耐性が無い**。MCの視点はクライアントが持つため、キックを無視する改造クライアントは反動なしで撃てる。命中のばらつきを担保するのは③であり、①は「手触り」を作る層と位置づける。
 
@@ -57,7 +57,7 @@
 | `RECOVER_RATE` | 0.12 | 1tickで戻す割合。小さいほどゆっくり戻る |
 | `ADS_RECOIL_MULTIPLIER` | 0.6 | ADS中の反動倍率 |
 
-銃ごとの量は `GunProperties.recoilPitch` / `recoilYaw`（度／発）。値は [../specs/02-guns.md](../specs/02-guns.md#武器別ステータス仮) の表。
+銃ごとの量は gunpack 定義 `GunDefinition.recoilPitch` / `recoilYaw`（度／発）。値は [../specs/02-guns.md](../specs/02-guns.md#武器別ステータス仮) の表。
 
 ## 視点への反映（`client.GunRecoilHandler`）
 
@@ -83,13 +83,12 @@
 | `client.anim.GunRecoilState` | キック量の蓄積・立ち上がり・回復の計算（素のJava。ModNetworkのハンドラから触る） |
 | `client.anim.ReticleKickState` | 発射直後のレティクルの追加の開き[px]（演出のみ。素のJava） |
 | `client.GunRecoilHandler` | 毎tick、計算結果をプレイヤーの向きへ反映 |
-| `item.gun.GunProperties` | 銃ごとの `recoilPitch` / `recoilYaw` |
+| `gunpack.GunDefinition` | 銃ごとの `recoilPitch` / `recoilYaw` |
 
 ## 後続作業
 
 - **③ ブルーム（拡散の増加）**: 連射・移動・ジャンプ・しゃがみで拡散を増減させる。腰だめの基本拡散とADS状態のサーバー同期は実装済みなので、`hipSpreadDeg`に係数を掛ける形で載せられる。
 - ADS中に②の反動を見せるための「サイト固定の貫通率」
-- 反動の数値を gunpack JSON から読む（現状 `GunProperties` のプリセット）
 - アタッチメント（マズルブレーキ等）による反動軽減 → [../specs/02-guns.md](../specs/02-guns.md)
 - 耐久劣化による反動増加 → 同上
 - 連射中に反動が累積して増えていくカーブ（現状は1発ごとに一定量）
