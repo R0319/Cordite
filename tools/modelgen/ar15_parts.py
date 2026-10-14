@@ -37,7 +37,9 @@ class Layout:
     barrel_od = 19.05       # 銃身外径: ハンドガード内〜ガスブロックの軸受け（.750in）
     barrel_od_front = 18.4  # 銃身外径: フロントサイトベースより前（.725in）
     handguard_rear_z = -152.0   # デルタリング前面（上部レシーバー前端の約 27mm 前）
-    ras_slots = 10          # RAS 各面のレールのスロット数（規約の 0.5px=12mm/スロット）
+    ras_slots = 11          # RAS 各面のレールのスロット数（規約の 0.5px=12mm/スロット）。実物のレールは本体の前後端まで
+                            # 続く（端に素の面は無い）ので、本体長 140mm に収まる最大数（132mm）にする。10 だと両端に 10mm ずつ
+                            # 素の面が残り、キャップ・デルタリングとの間に不自然な段ができていた
     magwell_front_z = -114.0    # マグウェル前面（写真から）
     magwell_rear_z = -42.0      # マグウェル後面＝ガードの前の耳（写真から）
     mag_center_z = -78.0        # 弾倉の前後中心
@@ -111,11 +113,14 @@ def rail(l=L, z_rear=None):
 
 
 def charging_handle(l=L):
+    """チャージングハンドル。T 字の高さは「バッファチューブ上面（ボア軸 +10.5）より上・レール天面（+26）より下」。
+    実物はボルトキャリアの上を通ってレシーバー後端の上部から出るので、チューブの中には入らない。
+    以前は +8〜+16 でチューブ（+10.5 まで）に 2.5mm 食い込んでいた。"""
     b = l.bore_y
     z0 = l.upper_rear_z
     return [
-        box(-21, b + 8, z0, 21, b + 16, z0 + 9, M.STEEL_DARK),     # T字ハンドル
-        box(13, b + 8, z0 + 2, 25, b + 16, z0 + 14, M.STEEL_DARK),  # ラッチ（左）
+        box(-21, b + 14, z0, 21, b + 22, z0 + 9, M.STEEL_DARK),     # T字ハンドル
+        box(13, b + 14, z0 + 2, 25, b + 22, z0 + 14, M.STEEL_DARK),  # ラッチ（左）
     ]
 
 
@@ -138,7 +143,7 @@ def rear_sight(l=L, z=None):
         box(-6, sl + 2, z + 11, 6, sl + 4, z + 13, M.STEEL_DARK),
         box(2, sl - 2, z + 11, 6, sl + 2, z + 13, M.STEEL_DARK),
         box(-6, sl - 2, z + 11, -2, sl + 2, z + 13, M.STEEL_DARK),
-        box(8, rt + 7, z + 6, 12, rt + 12, z + 12, M.STEEL_DARK),     # 左右調整ノブ（左）
+        box(-12, rt + 7, z + 6, -8, rt + 12, z + 12, M.STEEL_DARK),   # 左右調整ノブ（右側。AR 系の照門の風偏ノブは右）
     ]
 
 
@@ -226,6 +231,9 @@ def fsb_frame_lower(l=L):
     (r0, r1), (f0, f1) = FSB_RINGS
     return [
         _fsb_box(l, 0.0, 46.0, FSB_BAR[0], FSB_BAR[1], -t, t),           # 横棒（中にガスチューブ）
+        # ガスチューブ（外径 0.18in≒4.6mm）: 横棒の後端から上部レシーバー前面まで、銃身の上を通る。
+        # RAS の丸穴やデルタリングとの隙間から見える「作動機構」の部品。横棒の中心高さ（h=18）に合わせる
+        *round_rod(0, l.bore_y + (FSB_BAR[0] + FSB_BAR[1]) / 2, l.gas_z, l.upper_front_z, 4.6, M.STEEL_DARK),
         _fsb_box(l, r0, r1, 0.0, FSB_BAR[0], -FSB_RING_R, FSB_RING_R),    # 後ろの脚（輪の上半分〜横棒）
         _fsb_box(l, f0, f1, 0.0, FSB_BAR[0], -FSB_RING_R, FSB_RING_R),    # 前の脚
         _fsb_box(l, 36.2, 53.9, -17.9, -9.9, -4, 4),                      # 着剣ラグ（前の輪の下から前へ突き出す）
