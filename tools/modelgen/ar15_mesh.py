@@ -82,8 +82,10 @@ def front_sight_base(l=L):
     ]
 
 
-RAS_HOLES_PER_FACE = 7    # 斜めの面 1 枚あたりの丸穴の数（参考写真）
-RAS_HOLE_RATIO = 0.74     # 丸穴の直径 / 斜めの面の幅
+RAS_HOLES_PER_FACE = 7    # 斜めの面 1 枚あたりの穴の数（作者提供の図面: 1 列 7 個）
+RAS_HOLE_RATIO = 0.74     # 穴の直径 / 斜めの面の幅
+RAS_HOLE_ASPECT = 1.0     # 穴は実物では丸（作者確認）。側面図で前後に長い楕円に見えるのは 45° の面を真横から
+                          # 見た投影で縦に潰れるため。一度これを楕円と誤読して 1.55 にしたが、丸に戻した
 
 
 def ras_body(l=L):
@@ -120,7 +122,8 @@ def ras_body(l=L):
         quad(theta, k, [(-w / 2, r), (w / 2, r), (w / 2, z_first), (-w / 2, z_first)])
         quad(theta, k, [(-w / 2, z_first - cell * n), (w / 2, z_first - cell * n), (w / 2, f), (-w / 2, f)])
         m = RAS_HOLE_SEG
-        rad = cell * RAS_HOLE_RATIO / 2
+        rad_s = cell * RAS_HOLE_RATIO / 2                # 幅方向の半径
+        rad_z = min(rad_s * RAS_HOLE_ASPECT, cell * 0.46)  # 前後方向の半径（マスからはみ出さない）
         for h in range(n):
             zc = z_first - cell * (h + 0.5)
             ring = []
@@ -128,7 +131,7 @@ def ras_body(l=L):
                 a = 2 * math.pi * j / m
                 ca, sa = math.cos(a), math.sin(a)
                 k_sq = (cell / 2) / max(abs(ca), abs(sa))   # 同じ向きの、マスの縁までの距離
-                ring.append(((rad * ca, zc + rad * sa), (k_sq * ca, zc + k_sq * sa)))
+                ring.append(((rad_s * ca, zc + rad_z * sa), (k_sq * ca, zc + k_sq * sa)))
             for j in range(m):
                 (c0, e0), (c1, e1) = ring[j], ring[j + 1]
                 quad(theta, k, [c0, c1, e1, e0])
@@ -233,8 +236,17 @@ def lower_receiver(l=L):
     return lower_body(l) + trigger_guard(l)
 
 
+MAG_STYLE = "pmag"   # "usgi"（アルミ・灰色・縦リブ 4 本）/ "pmag"（Magpul PMAG・黒い樹脂・横の段と前後の背骨）
+
+
+def set_mag_style(style):
+    global MAG_STYLE
+    MAG_STYLE = style
+
+
 def magazine_stanag(l=L):
-    """STANAG 30 発弾倉（角張った箱形）。上は直線、マグウェルの下から半径一定で前へ反る（実物と同じ「バナナ」形）。"""
+    """STANAG 30 発弾倉（角張った箱形）。上は直線、マグウェルの下から半径一定で前へ反る（実物と同じ「バナナ」形）。
+    外観は MAG_STYLE で切り替える（本体の輪郭・寸法は共通。M249 の STANAG 版もこれを回して使う）。"""
     b = l.bore_y
     top = b - l.mag_top_below_bore
     split = top - l.mag_straight
@@ -257,11 +269,42 @@ def magazine_stanag(l=L):
     def p(s_n, s_d):
         return (cz + nb[0] * s_n + dn[0] * s_d, cy + nb[1] * s_n + dn[1] * s_d)
     plate = [p(half + 4, -2), p(half + 4, 6), p(-half - 4, 6), p(-half - 4, -2)]
-    return [
-        extrude_x(body, -11, 11, M.MAG),
-        extrude_x(plate, -13, 13, M.STEEL_DARK),
-        box(-11.6, split + 5, zc - 25, 11.6, top - 25, zc + 25, M.MAG),  # 側面のリブ（直線部）
+    def strip(o0, o1, i0=0, i1=None):
+        """中心線に沿った帯（前後方向のオフセット o0〜o1、index i0〜i1 の区間）の側面形。湾曲部にも追従する。"""
+        i1 = len(center) if i1 is None else i1
+        pts = [(cz_ + o1 * math.cos(t), cy_ - o1 * math.sin(t)) for (cz_, cy_), t in zip(center[i0:i1], tangents[i0:i1])]
+        pts += [(cz_ + o0 * math.cos(t), cy_ - o0 * math.sin(t)) for (cz_, cy_), t in zip(center[i0:i1], tangents[i0:i1])][::-1]
+        return pts
+
+    def band(i, w_along=1.8, extra=2.5):
+        """中心線上の点 i で、弾倉を一周する帯（側面形は中心線に直交する細い長方形）。"""
+        (cz_, cy_), t = center[i], tangents[i]
+        nb_ = (math.cos(t), -math.sin(t))            # 前後方向
+        dn_ = (-math.sin(t), -math.cos(t))           # 弾倉の長さ方向（下向き）
+        pts = []
+        for s_n, s_d in ((half + extra, -w_along), (half + extra, w_along), (-half - extra, w_along), (-half - extra, -w_along)):
+            pts.append((cz_ + nb_[0] * s_n + dn_[0] * s_d, cy_ + nb_[1] * s_n + dn_[1] * s_d))
+        return pts
+
+    # マグウェルに隠れる直線部（上 60mm）ではなく、見えている湾曲部に凹凸を置く
+    if MAG_STYLE == "usgi":
+        mat = M.MAG_USGI
+        out = [extrude_x(body, -11, 11, mat), extrude_x(plate, -13, 13, M.STEEL_DARK)]
+        for o in (-19.0, -6.5, 6.5, 19.0):            # 縦リブ 4 本（側面の補強の段。湾曲部にも沿う）
+            out.append(extrude_x(strip(o - 1.6, o + 1.6, 1), -12.2, 12.2, mat))
+        return out
+    mat = M.MAG_PMAG
+    out = [
+        extrude_x(body, -11.5, 11.5, mat),
+        extrude_x(plate, -13.5, 13.5, mat),            # フロアプレート（樹脂。本体より少し厚く、前後にはみ出す）
+        extrude_x(strip(-half - 1.5, -half + 3.5, 1), -12.6, 12.6, mat),   # 前の背骨
+        extrude_x(strip(half - 3.5, half + 1.5, 1), -12.6, 12.6, mat),     # 後ろの背骨
     ]
+    n = len(center)
+    for k in range(5):                                 # 側面の横の段（指掛かりの帯）。湾曲部に等間隔
+        i = 2 + int((n - 3) * k / 4)
+        out.append(extrude_x(band(i), -12.8, 12.8, mat))
+    return out
 
 
 def stock_m4(l=L):
@@ -269,7 +312,9 @@ def stock_m4(l=L):
     b = l.bore_y
     f = l.stock_front_z
     z1 = l.butt_z - 8
-    sleeve = [(f, b + 18), (z1, b + 18), (z1, b - 24), (f + 8, b - 24), (f, b - 18)]
+    # 筒の上面 +14: 写真はモデル（+18）より約 7mm 低く、三面図も「レール天面の約 13mm 下」（＝+13）と示す。
+    # ただしバッファチューブ上面が +10.5 なので、肉厚 3.5mm を残せる +14 までにとどめる（これ以上下げるならチューブ位置の再検討が要る）
+    sleeve = [(f, b + 14), (z1, b + 14), (z1, b - 24), (f + 8, b - 24), (f, b - 18)]
     fin = [(f + 18, b - 20), (z1, b - 20), (z1, b - 86), (z1 - 18, b - 86), (f + 26, b - 30)]
     butt = [(z1, b + 20), (l.butt_z, b + 19), (l.butt_z + 1, b - 84), (z1, b - 88)]
     return [

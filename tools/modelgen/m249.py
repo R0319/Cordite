@@ -32,7 +32,8 @@ class Layout:
     breech_z = -138.0       # 銃身の後端（薬室）。銃身 465mm から逆算（受け部前端の少し奥）
     rcv_rear_z = 121.4      # 受け部の後端（ストックの付け根）
     rcv_front_z = -151.0    # 受け部の前端
-    rcv_half = 27.0         # 受け部の半幅（③ 未確認）
+    rcv_half = 30.0         # 受け部の半幅。作者提供の三面図（the-blueprints、全長 1035mm で縮尺 2.73mm/px）の上面図で
+                            # 約 22px ≒ 60mm（±3mm）。以前の 54mm は推定値（③）
     rcv_bottom = 110.0      # 受け部の下面
     cover_split = 197.0     # 受け部本体とフィードカバーの境目（写真の横線）
     cover_hinge = (-128.0, 205.0)   # フィードカバーの蝶番（z, y）。前端で回り、後ろが持ち上がる（写真のカバー前端の形から）
@@ -60,14 +61,18 @@ class Layout:
     bipod_pivot = (-385.0, 99.0)    # 二脚の回転軸（z, y）。ガスシリンダーから下がる取付け金具の下端（写真）
     bipod_len = 235.0       # 回転軸→足先。たたむと足板が受け部の前（Z≈-150）に来て、立てると足が Y≈-135（写真 2 枚）
     bipod_ext = 30.0        # 脚の伸び（伸縮量は未確認）
-    bipod_fold_deg = 0.5    # たたんだ脚はハンドガードの下面に沿ってほぼ水平（写真）
+    bipod_fold_deg = 3.0    # たたんだ脚はハンドガードの下面に沿ってほぼ水平（写真）。0.5° だと脚（厚さ 12mm、軸の高さ 99）が
+                            # ハンドガード後半の下面（Y≈94〜99）の中に埋まり、横からも下からも見えなかった。わずかに後ろ下がり
+                            # にして、後半（Z>-290）で脚の下半分と足板が下面の下に出るようにする（後端で約 12mm 下がる。
+                            # 4.5° まで倒すと脚が下面から離れて垂れて見えるので、下面に沿う範囲で最小にした）
     handle_pivot = (-200.0, 206.0)  # キャリングハンドルの回転軸（z, y）。軸は銃身と平行（前後方向）で、左へ倒れる
     handle_fold_deg = 72.0  # たたんだ角度（写真 1 枚目: 握りの高さと傾きが起こした状態の cos72°≒0.3 倍）
     mag_tilt = 45.0         # STANAG 弾倉の傾き（左下へ。③ 写真の見かけの高さ 122mm と 45° が一致）
     mag_pivot = (14.0, 170.0)       # 弾倉上端の中心（X, y）。写真の弾倉下端に合わせた
     mag_center_z = -84.0
     box = (-44.0, -125.0, 0.0, 119.5)   # ボックス（前後・下面・上面。写真のトレースと同じ）
-    box_x = (-65.0, 65.0)   # ボックスの左右（③ 幅 約 130mm。受け部の左右へほぼ対称にはみ出す＝作者指摘）
+    box_x = (-86.0, 86.0)   # ボックスの左右。三面図の上面図で約 63px ≒ 172mm、正面図でも同程度（±5mm）。受け部の左右へ
+                            # ほぼ対称にはみ出す（作者指摘）。以前の 130mm は単体写真の比からの推定（③）
     butt_z = 384.0
 
 
@@ -369,7 +374,7 @@ def stock(l=L):
         extrude_x_beveled(O.STOCK["outer"], -hw, hw, 8.0, M.POLYMER, steps=3),
         *outline_parts(O.BUTTPLATE, -hw - 1.5, hw + 1.5, STEEL_BLACK, bevel=2.0),
     ]
-    out += [box(x - 1.0, 74.0, zb - 0.2, x + 1.0, 192.0, zb + 0.4, M.BORE) for x in range(-20, 21, 5)]   # 床尾板の溝
+    # 床尾板は無地（作者提供の三面図では溝の無い板。以前入れていた縦の溝は資料に無く、柵のように見えたので廃止）
     # 負い紐の輪（ストック下の段の前。写真の小さな鉤）: Y-Z 面の輪
     ring = ring_z(0.0, -1.5, 1.5, 4.0, 7.0, STEEL_BLACK, n=12)
     out.append(MeshPart([(v[2], v[1] + 82.0, v[0] + 247.0) for v in ring.verts], ring.faces, ring.mat,
@@ -529,7 +534,8 @@ def bipod_foot(l=L, side=1):
     end = pz + l.bipod_len
     foot = [extrude_x([(end - 40, py - 3.5), (end - 3, py - 3.5), (end - 3, py + 3.5), (end - 40, py + 3.5)],
                       x - 1.2, x + 1.2, STEEL_BLACK),
-            extrude_x([(end - 4, py - 15), (end, py - 15), (end, py + 13), (end - 4, py + 13)], x - 8, x + 8, STEEL_BLACK)]
+            # 足板の上端は、たたんだときにハンドガード下面（Y≈94）とほぼ面一になる高さ（軸 99 − 後端での下がり 12 ＋ 6）
+            extrude_x([(end - 4, py - 15), (end, py - 15), (end, py + 6), (end - 4, py + 6)], x - 8, x + 8, STEEL_BLACK)]
     return rotated(foot, "x", l.bipod_fold_deg, (0, py, pz))
 
 
@@ -552,15 +558,20 @@ def stanag_mag(l=L):
 
 
 def ammo_box(l=L):
-    """200 発ボックス（樹脂のふた＋布の袋）。側面形は写真。受け部の下に左右ほぼ対称に掛ける。"""
+    """200 発ボックス（標準の硬質樹脂の箱。作者提供の三面図: 角を丸めた直方体で、上部に分かれ目のあるふた）。
+    前後・高さは写真トレースの範囲（box）、左右は三面図（box_x）。受け部の下に左右対称に掛ける。
+    以前の「樹脂のふた＋布の袋」（ソフトパック）は作者の単体写真から作った別物で、図面の標準装備に合わせて置き換えた。"""
     x0, x1 = l.box_x
-    z0, z1 = min(p[0] for p in O.BOX_BODY["outer"]), max(p[0] for p in O.BOX_BODY["outer"])
-    zc = (z0 + z1) / 2
+    zr, zf, yb, yt = l.box                             # box は (後端 z, 前端 z, 下面, 上面)。zf < zr（前が銃口側）
+    lid_h = 22.0                                       # ふたの高さ（分かれ目の線の位置）
+    body = [(zf, yb), (zr, yb), (zr, yt - lid_h), (zf, yt - lid_h)]
+    lid = [(zf - 1.5, yt - lid_h), (zr + 1.5, yt - lid_h), (zr + 1.5, yt), (zf - 1.5, yt)]
     return [
-        extrude_x_beveled(O.BOX_BODY["outer"], x0, x1, 4.0, M.CANVAS, steps=2),
-        extrude_x_beveled(O.BOX_LID["outer"], x0 - 1, x1 + 1, 2.0, M.BOX_LID, steps=1),
-        box(x1 - 0.5, 20, zc - 2, x1 + 1.5, 80, zc + 2, M.BOX_LID),     # ファスナー（左面。側面写真で見える面）
-        box(40, l.box[3] - 0.2, z0 + 12, 60, l.box[3] + 0.3, z1 - 12, M.BORE),   # ふたの上の弾帯の出口
+        extrude_x_beveled(body, x0, x1, 5.0, M.BOX_PLASTIC, steps=2),
+        extrude_x_beveled(lid, x0 - 1.5, x1 + 1.5, 4.0, M.BOX_PLASTIC, steps=2),
+        box(x0 - 1.6, yt - lid_h - 0.4, zf - 1.6, x1 + 1.6, yt - lid_h + 0.4, zr + 1.6, M.BORE),  # ふたの合わせ目
+        box(-10, yt - lid_h - 8, zr + 1.4, 10, yt - lid_h + 6, zr + 3.0, STEEL_BLACK),           # 後面のラッチ
+        box(40, yt - 0.2, zf + 10, 62, yt + 0.3, zr - 10, M.BORE),                               # ふたの上の弾帯の出口
     ]
 
 

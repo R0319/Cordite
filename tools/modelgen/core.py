@@ -36,6 +36,8 @@ class Material:
     stripe_dark: float = 0.45
     stripe_faces: tuple = ("up",)
     dots: int = 0               # >0 なら側面・上下面に周期 dots テクセルの暗い点（放熱孔など）
+    grime: float = 0.0          # 低周波の汚れ（面の中で明暗がゆっくり変わる。0〜1 の振幅）
+    scratch: float = 0.0        # 傷の密度（テクセル面積あたりの本数。細く明るい/暗い筋）
 
 
 # ---------------------------------------------------------------- 形状
@@ -182,20 +184,28 @@ def extrude_x(profile, x0, x1, mat) -> MeshPart:
     return MeshPart(verts, faces, mat, None, charts, cuv, {0: "rows"}).finalize()
 
 
-def extrude_x_beveled(profile, x0, x1, bevel, mat, steps=2) -> MeshPart:
+def extrude_x_beveled(profile, x0, x1, bevel, mat, steps=2, round0=True, round1=True) -> MeshPart:
     """extrude_x の角丸め版。X 方向の両端で輪郭を内側へ縮め（1/4 円を steps 段で近似）、
-    グリップ・ストックのような「角の丸い樹脂部品」を作る。"""
+    グリップ・ストックのような「角の丸い樹脂部品」を作る。
+    round0 / round1=False でその端だけ丸めない（左右で形の違う部品を X=0 で 2 つに分けて作るとき、
+    分けた面に溝が出ないように）。"""
     pts = list(profile)
     if _area2(pts) < 0:
         pts.reverse()
     n = len(pts)
     rings = []  # (x, inset)
-    for k in range(steps, -1, -1):
-        t = math.pi / 2 * k / steps
-        rings.append((x0 + bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
-    for k in range(0, steps + 1):
-        t = math.pi / 2 * k / steps
-        rings.append((x1 - bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
+    if round0:
+        for k in range(steps, -1, -1):
+            t = math.pi / 2 * k / steps
+            rings.append((x0 + bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
+    else:
+        rings.append((x0, 0.0))
+    if round1:
+        for k in range(0, steps + 1):
+            t = math.pi / 2 * k / steps
+            rings.append((x1 - bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
+    else:
+        rings.append((x1, 0.0))
     verts, ring_idx = [], []
     for x, d in rings:
         off = _inset(pts, d) if d > 1e-9 else pts
@@ -298,8 +308,17 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> M
                 cuv.append([(s0, t_acc), (s1, t_acc), (s1, t_acc + dt), (s0, t_acc + dt)])
             t_acc += dt
         cap = ring_idx[(side, steps)]
-        for tri in _triangulate(pts):
-            faces.append([cap[t] for t in (tri if side == 1 else (tri[0], tri[2], tri[1]))])
+        extra = {}
+
+        def vid(t):
+            if isinstance(t, int):
+                return cap[t]
+            if t not in extra:          # 自己交差を解いたときに増えた点（側面の平らな面の上）
+                extra[t] = len(verts)
+                verts.append((side * H * scale(t[0], t[1]), t[1], t[0]))
+            return extra[t]
+        for tri in _cap_triangles(pts, [(verts[c][2], verts[c][1]) for c in cap]):
+            faces.append([vid(t) for t in (tri if side == 1 else (tri[0], tri[2], tri[1]))])
             charts.append(None)
             cuv.append(None)
     # 縁の帯（左右の稜線をつなぐ。半径 = half_w の点では幅 0）
@@ -308,7 +327,7 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> M
         j = (i + 1) % n
         faces.append([a[i], a[j], b[j], b[i]])
         charts.append(2)
-        w = 2 * (H - max(radii[i], radii[j]) * 0.999)
+        w = 2 * (H - min(radii[i], radii[j]) * 0.999)   # 半径が切り替わる点では帯が三角形になるので、広い側の幅で塗る
         cuv.append([(perim[i], 0), (perim[i + 1], 0), (perim[i + 1], max(w, 0.01)), (perim[i], max(w, 0.01))])
     return MeshPart(verts, faces, mat, None, charts, cuv, {0: False, 1: False, 2: False}).finalize()
 
@@ -375,6 +394,55 @@ def smooth(points, per_seg=6):
 
 def _area2(p):
     return sum(p[i][0] * p[(i + 1) % len(p)][1] - p[(i + 1) % len(p)][0] * p[i][1] for i in range(len(p)))
+
+
+def _cap_triangles(pts, cap):
+    """inflate_x の側面（平らな面）の三角形分割。通常は元の輪郭 pts で分割して縮めた輪郭 cap に当てはめるが、
+    点ごとに丸みの半径が違うと縮め方が場所で変わり、当てはめた三角形が裏返って割れ目が出る。
+    裏返りがあるときだけ、縮めた輪郭そのものを（重なった点を除いて）分割し直す。"""
+    tris = _triangulate(pts)
+    if all(_tri_area2(cap, t) > 1e-9 for t in tris):
+        return tris
+    keep = []
+    for i, q in enumerate(cap):
+        if not keep or math.dist(cap[keep[-1]], q) > 1e-4:
+            keep.append(i)
+    if len(keep) > 1 and math.dist(cap[keep[0]], cap[keep[-1]]) <= 1e-4:
+        keep.pop()
+    sub = [cap[i] for i in keep]
+    try:
+        out = [tuple(keep[i] for i in t) for t in _triangulate(sub)]
+        if all(_tri_area2(cap, t) > 1e-9 for t in out):   # 自己交差した輪郭だと最後の三角形が裏返ることがある
+            return out
+    except ValueError:
+        pass
+    # 縮めた輪郭が細くくびれている・自己交差している（細い切り欠きを大きく丸めたとき）: 交差を解いた形を
+    # 制約付きドロネーで分割する。交点など元に無い点は (z, y) の座標のまま返し、呼び出し側で頂点を足す
+    try:
+        import shapely
+        from shapely.geometry import Polygon
+        from shapely.validation import make_valid
+        g = make_valid(Polygon(sub))
+        polys = [q for q in getattr(g, "geoms", [g]) if q.geom_type == "Polygon" and q.area > 1e-6]
+        out = []
+        for poly in polys:
+            for tg in shapely.constrained_delaunay_triangles(poly).geoms:
+                t = []
+                for q in list(tg.exterior.coords)[:3]:
+                    i = min(range(len(sub)), key=lambda i: math.dist(sub[i], q))
+                    t.append(keep[i] if math.dist(sub[i], q) < 1e-3 else (q[0], q[1]))
+                (ax, ay), (bx, by), (cx, cy) = [cap[v] if isinstance(v, int) else v for v in t]
+                a2 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+                if abs(a2) > 1e-9:
+                    out.append(tuple(t) if a2 > 0 else (t[0], t[2], t[1]))
+        return out or tris
+    except Exception:
+        return tris
+
+
+def _tri_area2(p, t):
+    (ax, ay), (bx, by), (cx, cy) = p[t[0]], p[t[1]], p[t[2]]
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
 
 
 def _triangulate(p):
@@ -569,23 +637,55 @@ def _shelf_pack(items, size):
     return out
 
 
+def _value_noise(nr: np.random.Generator, h: int, w: int, cell: int) -> np.ndarray:
+    """粗い格子の乱数を双一次補間した、なだらかな [-1, 1] のノイズ（汚れのむら用）。"""
+    gh, gw = h // cell + 2, w // cell + 2
+    g = nr.uniform(-1, 1, (gh, gw))
+    ys = np.arange(h) / cell
+    xs = np.arange(w) / cell
+    y0 = np.floor(ys).astype(int); x0 = np.floor(xs).astype(int)
+    fy = (ys - y0)[:, None]; fx = (xs - x0)[None, :]
+    a = g[y0][:, x0]; b = g[y0][:, x0 + 1]; c = g[y0 + 1][:, x0]; d = g[y0 + 1][:, x0 + 1]
+    return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
+
+
 def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
+    """面 1 枚の矩形を塗る。下塗り色 × (細かいゆらぎ × 汚れのむら × 傷 × 縁 × 縞 × 点)。
+    面ごとの縁取り（edge）は「分解できない場所にも継ぎ目が入る」ため、材質の既定では使わない
+    （部品の継ぎ目は形状そのものの段差と陰影で見せる）。"""
     base = np.array(mat.color, dtype=np.float32)
-    for yy in range(h):
-        for xx in range(w):
-            k = 1.0 + (rng.uniform(-1, 1) * mat.noise if mat.noise else 0.0)
-            if mat.edge and face != "mesh_flat" and w >= mat.edge_min and h >= mat.edge_min and (
-                    (xx in (0, w - 1) and face != "mesh_rows") or yy in (0, h - 1)):
-                k *= 1.0 - mat.edge
-            if mat.stripe and face in mat.stripe_faces and \
-                    ((xx if face in ("east", "west") else yy) % mat.stripe) < mat.stripe // 2:
-                k *= 1.0 - mat.stripe_dark
-            if mat.dots and face not in ("north", "south", "mesh_flat") and w >= mat.dots and h >= mat.dots \
-                    and xx % mat.dots == mat.dots // 2 and yy % mat.dots == mat.dots // 2 \
-                    and 0 < xx < w - 1 and 0 < yy < h - 1:
-                k *= 0.25
-            c = np.clip(base * k, 0, 255)
-            img[v + yy, u + xx] = (*c.astype(np.uint8), 255)
+    nr = np.random.default_rng(rng.getrandbits(32))
+    k = np.ones((h, w), dtype=np.float32)
+    if mat.noise:
+        k *= 1.0 + nr.uniform(-1, 1, (h, w)) * mat.noise
+    if mat.grime and w >= 4 and h >= 4:
+        # 大小 2 つの周期を重ねる（大きなむら＋小さな染み）。暗い側へ寄せて「汚れ」にする
+        n = 0.7 * _value_noise(nr, h, w, max(4, min(w, h) // 3)) + 0.3 * _value_noise(nr, h, w, 3)
+        k *= 1.0 - mat.grime * (0.6 + 0.4 * n) * (n > -0.2)
+    if mat.scratch and w >= 6 and h >= 6:
+        for _ in range(int(nr.poisson(mat.scratch * w * h))):
+            x, y = nr.uniform(0, w), nr.uniform(0, h)
+            ang = nr.uniform(0, math.pi)
+            length = nr.uniform(2, min(9.0, max(2.0, min(w, h) * 0.5)))   # 8 テクセル/px なら最長 27mm 程度の細かい傷
+            gain = 1.14 if nr.uniform() < 0.6 else 0.88         # 明るい傷（地金）か暗い傷（汚れが入った）か。淡く
+            for t in np.arange(0, length, 0.7):
+                px, py = int(x + math.cos(ang) * t), int(y + math.sin(ang) * t)
+                if 0 <= px < w and 0 <= py < h:
+                    k[py, px] *= gain
+    if mat.edge and face != "mesh_flat" and w >= mat.edge_min and h >= mat.edge_min:
+        k[0, :] *= 1.0 - mat.edge; k[h - 1, :] *= 1.0 - mat.edge
+        if face != "mesh_rows":
+            k[:, 0] *= 1.0 - mat.edge; k[:, w - 1] *= 1.0 - mat.edge
+    if mat.stripe and face in mat.stripe_faces:
+        idx = np.arange(w)[None, :] if face in ("east", "west") else np.arange(h)[:, None]
+        k = k * np.where((idx % mat.stripe) < mat.stripe // 2, 1.0 - mat.stripe_dark, 1.0)
+    if mat.dots and face not in ("north", "south", "mesh_flat") and w >= mat.dots and h >= mat.dots:
+        yy, xx = np.mgrid[0:h, 0:w]
+        m = (xx % mat.dots == mat.dots // 2) & (yy % mat.dots == mat.dots // 2) & (xx > 0) & (xx < w - 1) & (yy > 0) & (yy < h - 1)
+        k[m] *= 0.25
+    c = np.clip(base[None, None, :] * k[:, :, None], 0, 255).astype(np.uint8)
+    img[v:v + h, u:u + w, :3] = c
+    img[v:v + h, u:u + w, 3] = 255
 
 
 def _r(v: float) -> float:

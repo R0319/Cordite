@@ -37,7 +37,9 @@ class Layout:
     barrel_od = 19.05       # 銃身外径: ハンドガード内〜ガスブロックの軸受け（.750in）
     barrel_od_front = 18.4  # 銃身外径: フロントサイトベースより前（.725in）
     handguard_rear_z = -152.0   # デルタリング前面（上部レシーバー前端の約 27mm 前）
-    ras_slots = 10          # RAS 各面のレールのスロット数（規約の 0.5px=12mm/スロット）
+    ras_slots = 11          # RAS 各面のレールのスロット数（規約の 0.5px=12mm/スロット）。実物のレールは本体の前後端まで
+                            # 続く（端に素の面は無い）ので、本体長 140mm に収まる最大数（132mm）にする。10 だと両端に 10mm ずつ
+                            # 素の面が残り、キャップ・デルタリングとの間に不自然な段ができていた
     magwell_front_z = -114.0    # マグウェル前面（写真から）
     magwell_rear_z = -42.0      # マグウェル後面＝ガードの前の耳（写真から）
     mag_center_z = -78.0        # 弾倉の前後中心
@@ -46,10 +48,12 @@ class Layout:
     fh_len = 44.0           # A2 フラッシュハイダーの銃身先端からの長さ
     buffer_end_z = 232.0    # バッファチューブ後端（全長 7.3in=185mm のうち約 25mm がレシーバー内 → 後端から 160mm）
     tube_od = 29.0          # バッファチューブ外径（1.14in）
-    stock_collapsed_butt_z = 241.0   # 最も縮めたときの床尾。全体写真でストック前端がキャッスルナットのすぐ後ろ（Z≈86）
+    stock_collapsed_butt_z = 251.0   # 最も縮めたときの床尾。全体写真でストック前端がキャッスルナットのすぐ後ろ（Z≈86）。
+                                     # stock_len を 165 にしたぶん後ろへ（最短全長 766mm。米軍の 756 と Colt の 775 の間）
     stock_travel = 82.0     # 6 段階の伸縮幅（M4A1 全長 756→838mm の差）
     stock_pos = 2           # 0=最短 … 5=最長。既定は 3 段目（チューブが長く見えすぎないよう中間）
-    stock_len = 155.0       # ストック本体の長さ（前端〜床尾。最短位置でレシーバーに当たらない長さ）
+    stock_len = 165.0       # ストック本体の長さ（前端〜床尾）。作者提供の全体写真（+10mm）と三面図（上部レシーバー長 195mm
+                            # 基準で約 163mm）の両方が 155 より長いと示したので 165 にした
     mag_top_below_bore = 14.0   # 弾倉上端（送り出し口）のボア軸からの下がり
     mag_straight = 60.0     # 弾倉の直線部（上端〜マグウェル下あたり）
     mag_arc = 98.0          # 弾倉の湾曲部（半径一定で前へ反る）。全体写真（USGI 型のアルミ弾倉）で下端を合わせ 112→98
@@ -111,11 +115,14 @@ def rail(l=L, z_rear=None):
 
 
 def charging_handle(l=L):
+    """チャージングハンドル。T 字の高さは「バッファチューブ上面（ボア軸 +10.5）より上・レール天面（+26）より下」。
+    実物はボルトキャリアの上を通ってレシーバー後端の上部から出るので、チューブの中には入らない。
+    以前は +8〜+16 でチューブ（+10.5 まで）に 2.5mm 食い込んでいた。"""
     b = l.bore_y
     z0 = l.upper_rear_z
     return [
-        box(-21, b + 8, z0, 21, b + 16, z0 + 9, M.STEEL_DARK),     # T字ハンドル
-        box(13, b + 8, z0 + 2, 25, b + 16, z0 + 14, M.STEEL_DARK),  # ラッチ（左）
+        box(-21, b + 14, z0, 21, b + 22, z0 + 9, M.STEEL_DARK),     # T字ハンドル
+        box(13, b + 14, z0 + 2, 25, b + 22, z0 + 14, M.STEEL_DARK),  # ラッチ（左）
     ]
 
 
@@ -138,7 +145,7 @@ def rear_sight(l=L, z=None):
         box(-6, sl + 2, z + 11, 6, sl + 4, z + 13, M.STEEL_DARK),
         box(2, sl - 2, z + 11, 6, sl + 2, z + 13, M.STEEL_DARK),
         box(-6, sl - 2, z + 11, -2, sl + 2, z + 13, M.STEEL_DARK),
-        box(8, rt + 7, z + 6, 12, rt + 12, z + 12, M.STEEL_DARK),     # 左右調整ノブ（左）
+        box(-12, rt + 7, z + 6, -8, rt + 12, z + 12, M.STEEL_DARK),   # 左右調整ノブ（右側。AR 系の照門の風偏ノブは右）
     ]
 
 
@@ -226,6 +233,9 @@ def fsb_frame_lower(l=L):
     (r0, r1), (f0, f1) = FSB_RINGS
     return [
         _fsb_box(l, 0.0, 46.0, FSB_BAR[0], FSB_BAR[1], -t, t),           # 横棒（中にガスチューブ）
+        # ガスチューブ（外径 0.18in≒4.6mm）: 横棒の後端から上部レシーバー前面まで、銃身の上を通る。
+        # RAS の丸穴やデルタリングとの隙間から見える「作動機構」の部品。横棒の中心高さ（h=18）に合わせる
+        *round_rod(0, l.bore_y + (FSB_BAR[0] + FSB_BAR[1]) / 2, l.gas_z, l.upper_front_z, 4.6, M.STEEL_DARK),
         _fsb_box(l, r0, r1, 0.0, FSB_BAR[0], -FSB_RING_R, FSB_RING_R),    # 後ろの脚（輪の上半分〜横棒）
         _fsb_box(l, f0, f1, 0.0, FSB_BAR[0], -FSB_RING_R, FSB_RING_R),    # 前の脚
         _fsb_box(l, 36.2, 53.9, -17.9, -9.9, -4, 4),                      # 着剣ラグ（前の輪の下から前へ突き出す）
@@ -297,7 +307,31 @@ def ras_rail_bottom(l=L):
 
 
 def ras_rail_sides(l=L):
-    return _ras_rail(l, "left", M.RAIL_SIDE) + _ras_rail(l, "right", M.RAIL_SIDE)
+    return _ras_rail(l, "left", M.RAIL_SIDE) + _ras_rail(l, "right", M.RAIL_SIDE) + rail_panels(l)
+
+
+PANEL_RIBS = 11       # KAC 11-Rib Rail Panel（M4 RAS に 3 枚付属。作者提供の図面では側面レールに付いている）
+PANEL_THICK = 3.0     # パネル本体の厚み（レールの頭の上に被さる）
+PANEL_RIB_H = 1.6     # リブの高さ
+
+
+def rail_panels(l=L):
+    """側面レールのレールカバー（左右）。レールの頭を樹脂の板が覆い、前後方向に 11 本のリブが並ぶ。
+    図面では側面の縦リブが目立ち、上下のレールは素のまま（刻みが見える）。"""
+    b = l.bore_y
+    z0, z1 = ras_rail_span(l)
+    (_, nh), (hw, hh) = RAS_NECK, RAS_HEAD
+    r_out = RAS_FLAT + nh + hh                         # レールの頭の外面
+    pitch = (z1 - z0) / PANEL_RIBS
+    out = []
+    for s in (1, -1):
+        x0, x1 = sorted((s * r_out, s * (r_out + PANEL_THICK)))
+        out.append(box(x0, b - hw / 2 - 0.5, z0, x1, b + hw / 2 + 0.5, z1, M.PANEL))
+        rx0, rx1 = sorted((s * (r_out + PANEL_THICK), s * (r_out + PANEL_THICK + PANEL_RIB_H)))
+        for i in range(PANEL_RIBS):
+            zc = z0 + pitch * (i + 0.5)
+            out.append(box(rx0, b - hw / 2 + 1.0, zc - pitch * 0.22, rx1, b + hw / 2 - 1.0, zc + pitch * 0.22, M.PANEL))
+    return out
 
 
 def flash_hider_a2(l=L):
@@ -573,7 +607,7 @@ def stock_m4(l=L):
     line = lambda z: b - 22 - (z - f) * 58 / dz   # 下縁の斜面
     zs1, zs2 = f + dz * 0.25, f + dz * 0.6
     return [
-        box(-17, b - 22, f, 17, b + 16, z1, M.POLYMER),                        # チューブ外套
+        box(-17, b - 22, f, 17, b + 14, z1, M.POLYMER),                        # チューブ外套（上面は mesh 版と同じ +14）
         box(-16, b - 80, zr, 16, b - 22, z1, M.POLYMER),                       # 後部
         box(-15.7, line(zs2), zs2, 15.7, b - 22, zr, M.POLYMER),               # 斜面の内側を段で埋める
         box(-15.7, line(zs1), zs1, 15.7, b - 22, zs2, M.POLYMER),
@@ -600,11 +634,11 @@ def magazine_stanag(l=L):
     rot1, rot2 = (-MAG_ANGLE / 2, 0, 0), (-MAG_ANGLE, 0, 0)
     p2y, p2z = piv2[1], piv2[2]
     return [
-        box(-11, split, zf, 11, top, zr, M.MAG),
-        box(-11, split - half, zf, 11, split, zr, M.MAG, rotation=rot1, pivot=piv1),
-        box(-11, p2y - half, p2z - 64, 11, p2y + 1, p2z, M.MAG, rotation=rot2, pivot=piv2),
+        box(-11, split, zf, 11, top, zr, M.MAG_PMAG),
+        box(-11, split - half, zf, 11, split, zr, M.MAG_PMAG, rotation=rot1, pivot=piv1),
+        box(-11, p2y - half, p2z - 64, 11, p2y + 1, p2z, M.MAG_PMAG, rotation=rot2, pivot=piv2),
         box(-13, p2y - half - 6, p2z - 68, 13, p2y - half + 2, p2z + 4, M.STEEL_DARK, rotation=rot2, pivot=piv2),  # 底板
-        box(-11.6, split + 5, zf + 7, 11.6, top - 25, zr - 7, M.MAG),  # 側面のリブ（直線部）
+        box(-11.6, split + 5, zf + 7, 11.6, top - 25, zr - 7, M.MAG_PMAG),  # 側面のリブ（直線部）
     ]
 
 

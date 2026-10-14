@@ -50,7 +50,7 @@ def build(P=P) -> tuple[Model, dict]:
     add("muzzle", "root", (0, b, l.muzzle_z), "flash_hider_a2", P.flash_hider_a2())
 
     add("bolt", "root", (0, b, l.bolt_face_z + 37), "bolt_carrier", P.bolt_carrier())
-    add("charging_handle", "root", (0, b + 12, l.upper_rear_z), "charging_handle", P.charging_handle())
+    add("charging_handle", "root", (0, b + 18, l.upper_rear_z), "charging_handle", P.charging_handle())
     add("trigger", "root", (0, b + l.lower_bottom, -2), "trigger", P.trigger())
 
     mz = l.mag_center_z
