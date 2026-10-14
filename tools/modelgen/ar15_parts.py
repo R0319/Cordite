@@ -87,14 +87,33 @@ L = Layout()
 
 
 # ---------------------------------------------------------------- 上部
+# 右側面のエジェクションポート（ボルトフェイスからの前後・ボア軸からの上下）。実物は 約 53×14mm
+PORT_Z = (10.0, 64.0)
+PORT_Y = (-7.0, 5.0)
+PORT_DEPTH_X = -2.0          # 開口の奥（暗い面）の X。右の壁はここまでの厚さで、間をボルトキャリアの側面が動く
+PORT_COVER_OPEN = True       # ダストカバーの既定の姿勢。実物は一度ボルトが動くと開いたまま（閉じると排莢が突き抜ける）
+CH_TRAVEL_MAX = 90.0         # チャージングハンドルを引ける量の上限（🟡 実物の値は未確認。軸の長さをこれで決める）
+
+
 def upper_receiver(l=L):
-    b = l.bore_y
+    """上部レシーバー。右側面にエジェクションポート（奥は暗い面、間をボルトキャリアの側面とボルトが動く）。
+    以前は詰まった箱にカバーを貼っただけで、ボルトを動かしても何も見えなかった。"""
+    b, bf = l.bore_y, l.bolt_face_z
+    y0, y1 = b + l.upper_bottom, b + l.upper_top
+    pz0, pz1 = bf + PORT_Z[0], bf + PORT_Z[1]
+    py0, py1 = b + PORT_Y[0], b + PORT_Y[1]
+    zf, zr = l.upper_front_z, l.upper_rear_z
     return [
-        box(-14, b + l.upper_bottom, l.upper_front_z, 14, b + l.upper_top, l.upper_rear_z, M.RECEIVER),
+        box(PORT_DEPTH_X, y0, zf, 14, y1, zr, M.RECEIVER),                    # 開口の奥より左
+        box(-14, y0, zf, PORT_DEPTH_X, py0, zr, M.RECEIVER),                  # 右の壁: 開口の下
+        box(-14, py1, zf, PORT_DEPTH_X, y1, zr, M.RECEIVER),                  # 〃 上
+        box(-14, py0, zf, PORT_DEPTH_X, py1, pz0, M.RECEIVER),                # 〃 前
+        box(-14, py0, pz1, PORT_DEPTH_X, py1, zr, M.RECEIVER),                # 〃 後ろ
+        box(PORT_DEPTH_X - 0.3, py0, pz0, PORT_DEPTH_X, py1, pz1, M.BORE),    # 開口の奥（暗い）
         # 銃身ナット部（上部レシーバー前端のリング）
         *round_rod(0, b, l.upper_front_z - 15, l.upper_front_z, 32, M.STEEL_DARK),
-        # エジェクションポートカバー（右側面）
-        box(-14.8, b - 8, l.bolt_face_z + 5, -14, b + 6, l.bolt_face_z + 70, M.STEEL_DARK),
+        # チャージングハンドルの溝（後端面。引くとここから軸が出る）
+        box(-5, b + 14, zr - 0.3, 5, b + 20.5, zr + 0.05, M.BORE),
         # フォワードアシスト（右後方）＋ボタン
         box(-21, b - 1, l.bolt_face_z + 90, -13, b + 13, l.bolt_face_z + 125, M.RECEIVER),
         box(-24, b + 1, l.bolt_face_z + 118, -19, b + 11, l.bolt_face_z + 130, M.STEEL_DARK),
@@ -114,6 +133,19 @@ def rail(l=L, z_rear=None):
     ]
 
 
+def port_cover(l=L, open_=None):
+    """エジェクションポートのダストカバー（ボーン port_cover。軸＝開口の下の縁に沿った Z 軸）。
+    開いた姿勢は軸から真下へ垂れる（右の側面に沿う）。閉じるには軸まわりに 180° 回す。"""
+    b, bf = l.bore_y, l.bolt_face_z
+    open_ = PORT_COVER_OPEN if open_ is None else open_
+    z0, z1 = bf + PORT_Z[0] - 5, bf + PORT_Z[1] + 6
+    hy = b + PORT_Y[0] - 1                      # 軸の高さ
+    h = (PORT_Y[1] - PORT_Y[0]) + 2             # カバーの高さ
+    plate = (box(-14.8, hy - h, z0, -14.0, hy, z1, M.STEEL_DARK) if open_
+             else box(-14.8, hy, z0, -14.0, hy + h, z1, M.STEEL_DARK))
+    return [plate, *round_rod(-14.6, hy, z0 - 2, z1 + 2, 2.4, M.STEEL)]
+
+
 def charging_handle(l=L):
     """チャージングハンドル。T 字の高さは「バッファチューブ上面（ボア軸 +10.5）より上・レール天面（+26）より下」。
     実物はボルトキャリアの上を通ってレシーバー後端の上部から出るので、チューブの中には入らない。
@@ -123,13 +155,17 @@ def charging_handle(l=L):
     return [
         box(-21, b + 14, z0, 21, b + 22, z0 + 9, M.STEEL_DARK),     # T字ハンドル
         box(13, b + 14, z0 + 2, 25, b + 22, z0 + 14, M.STEEL_DARK),  # ラッチ（左）
+        # 軸（レシーバーの上の溝の中を前へ伸びる。引いたときに T 字が浮かないよう、最大まで引いても 20mm 残る長さ）
+        box(-4.5, b + 14.5, z0 - CH_TRAVEL_MAX - 20, 4.5, b + 20, z0, M.STEEL_DARK),
     ]
 
 
 def bolt_carrier(l=L):
-    """エジェクションポート奥に見えるボルトキャリア（射撃アニメで前後させる部品）。"""
-    b = l.bore_y
-    return [box(-13.6, b - 7, l.bolt_face_z + 7, -6, b + 5, l.bolt_face_z + 68, M.STEEL)]
+    """エジェクションポート奥に見えるボルトキャリア（射撃アニメで前後させる部品）: 側面とボルトの頭。
+    閉鎖位置ではキャリアの側面が開口を塞ぎ、後退するとボルトの頭と奥の暗い面が見える。"""
+    b, bf = l.bore_y, l.bolt_face_z
+    return [box(-13.4, b - 7, bf + 13, PORT_DEPTH_X - 0.5, b + 5, bf + 75, M.STEEL),
+            *round_rod(0, b, bf, bf + 13, 15, M.STEEL)]
 
 
 def rear_sight(l=L, z=None):

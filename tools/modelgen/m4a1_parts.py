@@ -51,13 +51,18 @@ def build(P=P) -> tuple[Model, dict]:
 
     add("bolt", "root", (0, b, l.bolt_face_z + 37), "bolt_carrier", P.bolt_carrier())
     add("charging_handle", "root", (0, b + 18, l.upper_rear_z), "charging_handle", P.charging_handle())
+    add("port_cover", "receiver", (-14.6, b + P.PORT_Y[0] - 1, l.bolt_face_z + sum(P.PORT_Z) / 2), "port_cover",
+        P.port_cover())
     add("trigger", "root", (0, b + l.lower_bottom, -2), "trigger", P.trigger())
 
     mz = l.mag_center_z
     add("magazin", "root", (0, b - 95, mz), "magazine_stanag", P.magazine_stanag())
     ry = b - l.mag_top_below_bore - 5                   # 最上段の弾（送り出し口の下）
-    case, bullet = P.cartridge_556(z_tip=mz - 27, y=ry)
-    add("mag_ammo", "magazin", (0, ry, mz + 2), None, case + bullet)
+    if hasattr(P, "magazine_rounds"):                   # メッシュ版: 中空の上部に 2 発を互い違いに
+        add("mag_ammo", "magazin", (0, ry, mz + 2), None, P.magazine_rounds())
+    else:
+        case, bullet = P.cartridge_556(z_tip=mz - 27, y=ry)
+        add("mag_ammo", "magazin", (0, ry, mz + 2), None, case + bullet)
 
     tip = l.bolt_face_z - 57.4                          # 薬室内の実包（排莢クリップの起点）
     case, bullet = P.cartridge_556(z_tip=tip, y=b)
