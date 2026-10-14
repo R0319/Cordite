@@ -66,9 +66,38 @@ def _clip(outer, z0, y0, z1, y1):
 
 
 # ---------------------------------------------------------------- 受け部
+# 右側面の開口（図面: 弾倉の真上の Z -60〜-125 に排莢口の枠、その後ろは受け部の上の縁 Y 141 とダストカバーの
+# 下の縁の間の溝をコッキングハンドルが通る。安全位置のセレクターがこの溝を覆ってハンドルを止める）
+BOLT_TRAVEL_MAX = 110.0          # ボルトキャリアの後退量の上限（🟡 実物の値は未確認。下の溝・排莢口はこの範囲で破綻しない）
+PORT_Z = (-122.0, -62.0)         # 排莢口（前の端は照門ブロックの後ろ、後ろの端はハンドルの前）
+PORT_Y = (127.0, 152.0)          # 下は軽量化の削り込みの上 3mm、上はダストカバーに食い込む
+SLOT_Y = (141.0, 147.0)          # ハンドルの溝（受け部の上の縁〜ダストカバーの下の縁）
+HANDLE_Z = (-66.0, -54.0)        # ハンドルの軸の前後（閉鎖位置。図面の四角）
+SLOT_Z = (PORT_Z[1] - 1.0, HANDLE_Z[1] + BOLT_TRAVEL_MAX + 2.0)
+
+
+def _right_cut(outline, cuts):
+    """側面形から右側の開口（(z0, y0, z1, y1) の矩形）を除いた多角形の頂点列。"""
+    from shapely.geometry import Polygon, box as sbox
+    g = Polygon(outline)
+    for c in cuts:
+        g = g.difference(sbox(*c))
+    g = max(getattr(g, "geoms", [g]), key=lambda q: q.area)
+    return list(g.exterior.coords)[:-1]
+
+
+def _split_lr(outline, cuts, half, bevel, mat, steps):
+    """左半分は側面形のまま、右半分は開口を抜いた形で押し出す。分けた面（X=0）は丸めない（継ぎ目に溝を出さない）。"""
+    return [extrude_x_beveled(outline, 0.0, half, bevel, mat, steps=steps, round0=False),
+            extrude_x_beveled(_right_cut(outline, cuts), -half, 0.0, bevel, mat, steps=steps, round1=False)]
+
+
 def receiver():
     h = HALF_RECEIVER
-    out = outline_parts(O.RECEIVER, -h, h, M.RECEIVER, bevel=1.5)
+    out = _split_lr(O.RECEIVER["outer"], [(PORT_Z[0], PORT_Y[0], PORT_Z[1], 300.0)], h, 1.5, M.RECEIVER, 1)
+    # 開口の奥（右から覗くと見える受け部の中）: 暗い奥の壁と床。ボルトキャリアが前にいる間はキャリアの側面が見える
+    out.append(box(-0.3, PORT_Y[0] - 0.3, PORT_Z[0], 9.0, SLOT_Y[1] + 0.5, SLOT_Z[1] + 2.0, M.BORE))
+    out.append(box(-h + 1.2, PORT_Y[0], PORT_Z[0], -0.3, PORT_Y[0] + 0.3, PORT_Z[1], M.BORE))
     # Type 3 の軽量化の削り込み（弾倉口の上。図面の角の丸い長方形）: 両側面
     for s in (1, -1):
         x0, x1 = sorted((s * (h - 0.6), s * (h + 0.2)))
@@ -95,11 +124,13 @@ def selector():
     out = [x_cyl(zc, yc, 9.0, -h - 2.4, -h + 0.5, STEEL_BLACK, n=18),          # 軸のボス
            x_cyl(zc, yc, 2.8, -h - 3.2, -h - 2.0, M.STEEL, n=10)]              # 軸の頭
     # 板: 軸の側で幅 12mm → 先端 6mm に細る。上の縁はダストカバーの下の縁（Y 140）に沿う
+    # 上の縁は安全位置でハンドルの溝（SLOT_Y）を覆う高さ（図面: 軸の上から前へ Y 147〜150 の線）
+    top = SLOT_Y[1] + 0.8
     out.append(extrude_x_beveled([(zc, yc - 6.0), (zc - 20.0, yc - 3.0), (-46.0, 135.0), (-48.5, 137.0),
-                                  (-47.0, 141.0), (zc - 20.0, 140.0), (zc, yc + 6.0)],
+                                  (-47.0, top), (zc - 12.0, top), (zc, yc + 8.0)],
                                  -h - 2.0, -h + 0.5, 0.6, STEEL_BLACK, steps=1))
     # 前端の指掛け（外へ折り曲げた爪）
-    out.append(extrude_x_beveled([(-49.0, 133.5), (-43.0, 134.5), (-43.5, 141.0), (-48.5, 141.0)],
+    out.append(extrude_x_beveled([(-49.0, 133.5), (-43.0, 134.5), (-43.5, top), (-48.5, top)],
                                  -h - 6.5, -h - 1.0, 0.8, STEEL_BLACK, steps=1))
     return out
 
@@ -109,9 +140,11 @@ def dust_cover(rail=False):
     o = O.DUST_COVER
     # 下の縁は受け部の中へ 8mm 差し込み、少しだけ外へ張り出させる。丸めは全周に掛かるので、そのままだと
     # 下の縁も内側へ丸まり、受け部との継ぎ目に溝ができる（実物のカバーは受け部の外側に被さって面一）
+    # 右側面は排莢口とハンドルの溝の上の縁になるので、そこだけ下の縁を上げる（左右を X=0 で分けて作る）
     y_bottom = _yr(o)[0]
     outer = [(z, y - 8.0 if y <= y_bottom + 0.5 else y) for z, y in o["outer"]]
-    out = [extrude_x_beveled(outer, -(HALF_RECEIVER + 0.4), HALF_RECEIVER + 0.4, 7.0, M.RECEIVER, steps=3)]
+    out = _split_lr(outer, [(PORT_Z[0], 0.0, PORT_Z[1], PORT_Y[1]), (SLOT_Z[0], 0.0, SLOT_Z[1], SLOT_Y[1])],
+                    HALF_RECEIVER + 0.4, 7.0, M.RECEIVER, 3)
     z0, z1 = _zr(o)
     yt = _yr(o)[1]
     if rail:
@@ -359,20 +392,35 @@ def upper_handguard_rail():
 
 
 # ---------------------------------------------------------------- 機関部の可動部
+BOLT_FACE_Z = CHAMBER_Z + 18.0          # ボルトの前面＝薬室の実包の底（ammo ボーンの薬莢の底と同じ）
+
+
 def bolt_carrier():
-    return [box(-12, BORE_Y - 4, -120, 12, BORE_Y + 14, -40, M.STEEL)]
+    """ボルトキャリア＋ボルトの頭。排莢口から側面が見え、後退すると奥（暗い壁）と薬室の後ろが見える。
+    後ろの端は BOLT_TRAVEL_MAX 下がっても受け部の後端（Z +75）を越えない長さ。"""
+    rear = 75.0 - BOLT_TRAVEL_MAX - 2.0
+    return [box(-10, BORE_Y - 4, BOLT_FACE_Z + 12.0, 10, SLOT_Y[1] - 0.5, rear, M.STEEL),
+            lathe(0, BORE_Y, [(BOLT_FACE_Z, 7.5), (BOLT_FACE_Z + 12.5, 7.5)], ar15_mesh.N_MID, M.STEEL)]
 
 
 def charging_handle():
-    """コッキングハンドル（右側面。図面: Z≈-53〜-67・Y≈137〜147 の丸いつまみ）。"""
+    """コッキングハンドル（右側面。図面: Z≈-53〜-67 の四角＋丸いつまみ）。軸はキャリアの側面から溝（SLOT_Y）を
+    通って外へ出る（溝の上下の縁に触れないよう 0.5mm 空ける）。"""
     h = HALF_RECEIVER
-    return [box(-h - 8, 139.0, -66.0, -h + 1, 145.0, -54.0, STEEL_BLACK),
-            x_cyl(-60.0, 142.0, 6.0, -h - 16, -h - 7, STEEL_BLACK, n=12)]
+    z0, z1 = HANDLE_Z
+    return [box(-h - 8, SLOT_Y[0] + 0.5, z0, -9.5, SLOT_Y[1] - 0.5, z1, STEEL_BLACK),
+            x_cyl((z0 + z1) / 2, 144.0, 6.0, -h - 16, -h - 7, STEEL_BLACK, n=12)]
 
 
 # ---------------------------------------------------------------- 弾倉
 MAG_REAR_Z = MAG_CATCH_BOX[0] + 0.5     # 弾倉の後ろの縁（図面ではマガジンキャッチと 1 つの影絵なので、ここで切る）
 MAG_RIBS = (0.30, 0.68)                 # 側面の補強リブ（前の縁→後ろの縁の割合。図面の縦の 4 本線＝リブ 2 本の両縁）
+MAG_TOP_Y = 100.0                       # 弾倉の上端（差すと受け部の中＝Y 99 より上に隠れる）
+MAG_SHELL_Y = 86.0                      # ここから上は中空（壁と給弾リップ）。下は詰まった本体で、その上面が送り板
+MAG_WALL = 1.0                          # 上部の壁の厚さ
+MAG_LIP = (5.6, 2.4, 46.0)              # 給弾リップ（内側の縁の X、上下の厚さ、後ろの壁から前への長さ）
+MAG_ROUND_X = 2.7                       # 中の弾の左右のずれ（複列。上の弾と次の弾が互い違い）
+MAG_ROUND_Y = (94.3, 84.6)              # 上の弾・次の弾の軸の高さ（上の弾の頂部がリップの上面に揃う）
 
 
 def _mag_edges():
@@ -398,7 +446,11 @@ def magazine_ak():
     from shapely.geometry import LineString, Polygon, box as sbox
     body = Polygon(O.MAGAZINE["outer"]).intersection(sbox(-400.0, -200.0, MAG_REAR_Z, 200.0))
     body = max(getattr(body, "geoms", [body]), key=lambda q: q.area)
-    out = [extrude_x_beveled(list(body.exterior.coords)[:-1], -HALF_MAG, HALF_MAG, 1.5, M.MAG_AK, steps=1)]
+    # 詰まった本体は MAG_SHELL_Y まで。その上は中空の箱（外したときに上から弾と送り板が見える）
+    solid = body.intersection(sbox(-400.0, -200.0, 0.0, MAG_SHELL_Y + 0.5))
+    solid = max(getattr(solid, "geoms", [solid]), key=lambda q: q.area)
+    out = [extrude_x_beveled(list(solid.exterior.coords)[:-1], -HALF_MAG, HALF_MAG, 1.5, M.MAG_AK, steps=1)]
+    out += magazine_top(body)
     front, rear, (rb, fb) = _mag_edges()
     F, R = _resample(front, 40), _resample(rear, 40)
     for f in MAG_RIBS:
@@ -416,14 +468,59 @@ def magazine_ak():
     return out
 
 
-def cartridge_762(z_tip, y):
+def magazine_top(body):
+    """弾倉の上部（MAG_SHELL_Y〜上端）: 左右・前後の壁、内側へ巻き込んだ給弾リップ、送り板、前後の掛け金の突起。
+    実物の AK の弾倉は上が開いていて、2 枚のリップの間から一番上の弾が見える。"""
+    from shapely.geometry import box as sbox
+    top = body.intersection(sbox(-400.0, MAG_SHELL_Y, 0.0, MAG_TOP_Y))
+    top = max(getattr(top, "geoms", [top]), key=lambda q: q.area)
+    z0, _, z1, _ = top.bounds
+    prof = list(top.exterior.coords)[:-1]
+    h, w = HALF_MAG, MAG_WALL
+    out = []
+    for s in (1, -1):                                                              # 左右の壁
+        xa, xb = sorted((s * (h - w), s * h))
+        out.append(extrude_x_beveled(prof, xa, xb, 0.4, M.MAG_AK, steps=1))
+    for zz0, zz1 in ((z0 - 1.0, z0 + w + 0.5), (z1 - w, z1)):                       # 前後の壁
+        for q in [top.intersection(sbox(zz0, MAG_SHELL_Y, zz1, MAG_TOP_Y))]:
+            out.append(extrude_x_beveled(list(q.exterior.coords)[:-1], -h, h, 0.4, M.MAG_AK, steps=1))
+    lx, lt, ll = MAG_LIP
+    for s in (1, -1):                                                              # 給弾リップ（後ろの壁から前へ）
+        xa, xb = sorted((s * lx, s * (h - w + 0.3)))
+        out.append(extrude_x_beveled([(z1 - ll, MAG_TOP_Y - lt), (z1 - w + 0.3, MAG_TOP_Y - lt),
+                                      (z1 - w + 0.3, MAG_TOP_Y), (z1 - ll + 4.0, MAG_TOP_Y)],
+                                     xa, xb, 0.6, M.MAG_AK, steps=1))
+    # 送り板（本体の上面に載る板。片側の段で 1 発目を互い違いの位置へ寄せる）。弾が空のときはこれが見える
+    out.append(box(-h + w, MAG_SHELL_Y, z0 + w, h - w, MAG_SHELL_Y + 1.5, z1 - w, M.STEEL))
+    out.append(box(-h + w, MAG_SHELL_Y + 1.5, z0 + 8.0, -0.5, MAG_SHELL_Y + 3.5, z1 - 6.0, M.STEEL))
+    # 掛け金の突起: 前（受け部の前の溝に掛かる）・後ろ（マガジンキャッチが掛かる）。差すと受け部の中
+    zf = min(z for z, y in prof if y >= MAG_TOP_Y - 0.5)                          # 上端での前の縁
+    out.append(extrude_x_beveled([(zf - 3.0, MAG_TOP_Y - 1.0), (zf + w + 0.5, MAG_TOP_Y - 6.0), (zf + w + 0.5, MAG_TOP_Y + 2.5),
+                                  (zf - 2.0, MAG_TOP_Y + 2.5)], -6.0, 6.0, 0.6, M.MAG_AK, steps=1))
+    out.append(extrude_x_beveled([(z1 - 0.5, MAG_SHELL_Y - 2.0), (z1 + 2.5, MAG_SHELL_Y - 1.0), (z1 + 2.5, MAG_SHELL_Y + 6.0),
+                                  (z1 - 0.5, MAG_SHELL_Y + 6.0)], -4.5, 4.5, 0.6, M.MAG_AK, steps=1))
+    return out
+
+
+def magazine_rounds():
+    """弾倉の中の弾（mag_ammo ボーン）: 上の 2 発を互い違いに。薬莢の底を後ろの壁に当てる。"""
+    z_tip = MAG_REAR_Z - MAG_WALL - 0.5 - 56.0
+    out = []
+    # 次の弾は 5mm 前へ（弾倉の後ろの縁は下ほど前へ反るので、同じ位置だと薬莢の底が外へ出る）
+    for x, y, dz in ((MAG_ROUND_X, MAG_ROUND_Y[0], 0.0), (-MAG_ROUND_X, MAG_ROUND_Y[1], -5.0)):
+        case, bullet = cartridge_762(z_tip + dz, y, x)
+        out += case + bullet
+    return out
+
+
+def cartridge_762(z_tip, y, x=0.0):
     """7.62×39mm 実包（回転体）: 全長 56mm、薬莢 38.7mm、テーパーの強い胴。"""
     b = z_tip + 56.0
     case = [(b, 5.6), (b - 1.5, 5.6), (b - 1.8, 4.9), (b - 3.0, 4.9), (b - 3.4, 5.55), (b - 30.5, 5.2),
             (b - 33.5, 4.4), (b - 38.7, 4.3)]
     bullet = [(b - 38.7, 3.9), (b - 44.0, 3.85), (b - 50.0, 2.9), (b - 54.5, 1.2), (z_tip, 0.4)]
-    return ([lathe(0, y, case, ar15_mesh.N_SMALL, M.BRASS, cap0=True, cap1=False)],
-            [lathe(0, y, bullet, ar15_mesh.N_SMALL, M.COPPER, cap0=False, cap1=True)])
+    return ([lathe(x, y, case, ar15_mesh.N_SMALL, M.BRASS, cap0=True, cap1=False)],
+            [lathe(x, y, bullet, ar15_mesh.N_SMALL, M.COPPER, cap0=False, cap1=True)])
 
 
 # ---------------------------------------------------------------- 組み立て
@@ -470,11 +567,10 @@ def build(variant="wood"):
         add("rail_side", "root", (HALF_RECEIVER, b, -208.0), None, [])
 
     add("bolt", "root", (0, b, -80.0), "bolt_carrier", bolt_carrier())
-    add("charging_handle", "bolt", (-HALF_RECEIVER, 142.0, -60.0), "charging_handle", charging_handle())
+    add("charging_handle", "bolt", (-HALF_RECEIVER, 144.0, sum(HANDLE_Z) / 2), "charging_handle", charging_handle())
 
     add("magazin", "root", (0, 100.0, -90.0), "magazine_ak", magazine_ak())
-    case, bullet = cartridge_762(z_tip=-118.0, y=103.0)
-    add("mag_ammo", "magazin", (0, 103.0, -88.0), None, case + bullet)
+    add("mag_ammo", "magazin", (0, MAG_ROUND_Y[0], -88.0), None, magazine_rounds())
 
     tip = CHAMBER_Z - 56.0 + 18.0                       # 薬室内の実包（排莢クリップの起点）
     case, bullet = cartridge_762(z_tip=tip, y=b)

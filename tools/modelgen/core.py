@@ -184,20 +184,28 @@ def extrude_x(profile, x0, x1, mat) -> MeshPart:
     return MeshPart(verts, faces, mat, None, charts, cuv, {0: "rows"}).finalize()
 
 
-def extrude_x_beveled(profile, x0, x1, bevel, mat, steps=2) -> MeshPart:
+def extrude_x_beveled(profile, x0, x1, bevel, mat, steps=2, round0=True, round1=True) -> MeshPart:
     """extrude_x の角丸め版。X 方向の両端で輪郭を内側へ縮め（1/4 円を steps 段で近似）、
-    グリップ・ストックのような「角の丸い樹脂部品」を作る。"""
+    グリップ・ストックのような「角の丸い樹脂部品」を作る。
+    round0 / round1=False でその端だけ丸めない（左右で形の違う部品を X=0 で 2 つに分けて作るとき、
+    分けた面に溝が出ないように）。"""
     pts = list(profile)
     if _area2(pts) < 0:
         pts.reverse()
     n = len(pts)
     rings = []  # (x, inset)
-    for k in range(steps, -1, -1):
-        t = math.pi / 2 * k / steps
-        rings.append((x0 + bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
-    for k in range(0, steps + 1):
-        t = math.pi / 2 * k / steps
-        rings.append((x1 - bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
+    if round0:
+        for k in range(steps, -1, -1):
+            t = math.pi / 2 * k / steps
+            rings.append((x0 + bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
+    else:
+        rings.append((x0, 0.0))
+    if round1:
+        for k in range(0, steps + 1):
+            t = math.pi / 2 * k / steps
+            rings.append((x1 - bevel * (1 - math.sin(t)), bevel * (1 - math.cos(t))))
+    else:
+        rings.append((x1, 0.0))
     verts, ring_idx = [], []
     for x, d in rings:
         off = _inset(pts, d) if d > 1e-9 else pts
