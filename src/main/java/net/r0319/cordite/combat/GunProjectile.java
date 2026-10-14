@@ -6,7 +6,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -15,6 +14,8 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.r0319.cordite.gunpack.GunDefinition;
+
+import java.util.Optional;
 
 /**
  * 軽量な弾丸トラッカー（Entityを使わない）。サーバーtickごとに弾速ぶんだけ前進し、
@@ -27,8 +28,24 @@ import net.r0319.cordite.gunpack.GunDefinition;
  * パーティクルを撒いていたが、1発あたり数十パケット飛ぶうえ表示もtick単位の点列にしかならなかった。</p>
  */
 public class GunProjectile {
-    /** 当たり判定の膨らみ。 */
-    private static final double HIT_INFLATE = 0.25;
+    /**
+     * 移動区間の周囲から命中候補のエンティティを集めるときの探索範囲の膨らみ。
+     * 判定そのものではなく「候補集め」の範囲なので、{@link #ENTITY_HIT_INFLATE} 以上であればよい。
+     */
+    private static final double SEARCH_INFLATE = 0.3;
+    /**
+     * エンティティの当たり判定（バウンディングボックス）を各面に膨らませる量[ブロック]。🟡仮。
+     *
+     * <p>以前は {@code ProjectileUtil.getEntityHitResult}（6引数版）に任せていたが、あれは内部で各面を
+     * 0.3 膨らませたうえ、<b>命中位置を持たない</b> {@code EntityHitResult} を返す
+     * （{@code getLocation()} はエンティティの足元座標になる）。そのため部位判定が常に「足元＝手足」と
+     * なり、ヘッドショットが一度も成立していなかった。ここでは自前で判定して<b>実際の交点</b>を使う。</p>
+     *
+     * <p>値は旧実装と同じ 0.3 を据え置いている。プレイヤーの幅 0.6 に対して各面 0.3 は「見た目の倍の幅に
+     * 当たる」かなり甘い判定なので、PvP の手触りとして厳しくするなら 0.1 前後まで下げる余地がある
+     * （矢の判定はバニラも 0.3 で、銃に流用するには大きい）。</p>
+     */
+    private static final double ENTITY_HIT_INFLATE = 0.3;
     /** 安全のための最大生存tick。 */
     private static final int MAX_TICKS = 100;
     /** 着弾時に飛び散るブロック破片の数と勢い。🟡仮（見た目の調整値）。 */
@@ -73,11 +90,8 @@ public class GunProjectile {
                 start, next, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, owner));
         Vec3 end = block.getType() != HitResult.Type.MISS ? block.getLocation() : next;
 
-        // エンティティ命中
-        AABB search = new AABB(start, end).inflate(HIT_INFLATE);
-        EntityHitResult hit = ProjectileUtil.getEntityHitResult(
-                level, owner, start, end, search,
-                e -> e != owner && e.isAlive() && e.isPickable() && !e.isSpectator());
+        // エンティティ命中（ブロックに遮られた場合は、その手前の区間だけを判定する）
+        EntityHitResult hit = findEntityHit(start, end);
 
         if (hit != null) {
             applyDamage(hit.getEntity(), hit.getLocation());
@@ -99,6 +113,37 @@ public class GunProjectile {
         }
     }
 
+    /**
+     * 区間 {@code start}→{@code end} 上で最初に当たるエンティティと<b>その交点</b>を返す。無ければ null。
+     *
+     * <p>{@code ProjectileUtil.getEntityHitResult} を使わない理由は {@link #ENTITY_HIT_INFLATE} のコメント参照
+     * （交点が取れず部位判定が壊れる）。候補はバニラと同じく {@code level.getEntities} で区間周辺から集め、
+     * 各エンティティの膨らませた箱と区間の交点のうち、始点に最も近いものを採る。射手自身と観戦者は除く。</p>
+     */
+    private EntityHitResult findEntityHit(Vec3 start, Vec3 end) {
+        AABB search = new AABB(start, end).inflate(SEARCH_INFLATE);
+        Entity closest = null;
+        Vec3 closestPoint = null;
+        double closestDistSq = Double.MAX_VALUE;
+        for (Entity candidate : level.getEntities(owner, search,
+                e -> e != owner && e.isAlive() && e.isPickable() && !e.isSpectator())) {
+            AABB box = candidate.getBoundingBox().inflate(ENTITY_HIT_INFLATE);
+            // 密着して撃った場合は始点がすでに箱の中にある。AABB#clip は外から入る面しか検出しないため
+            // そのままだと至近距離だけ当たらない（バニラの矢にも同じ癖がある）。始点を交点とみなす。
+            Optional<Vec3> point = box.contains(start) ? Optional.of(start) : box.clip(start, end);
+            if (point.isEmpty()) {
+                continue;
+            }
+            double distSq = start.distanceToSqr(point.get());
+            if (distSq < closestDistSq) {
+                closest = candidate;
+                closestPoint = point.get();
+                closestDistSq = distSq;
+            }
+        }
+        return closest == null ? null : new EntityHitResult(closest, closestPoint);
+    }
+
     private void applyDamage(Entity target, Vec3 hitPos) {
         float dmg = computeDamage(origin.distanceTo(hitPos), hitPos, target);
         // 連射で命中が無効化されないよう無敵時間をリセット（銃は毎発判定）
@@ -108,7 +153,12 @@ public class GunProjectile {
         target.hurt(level.damageSources().playerAttack(owner), dmg);
     }
 
-    /** ダメージ計算式（docs/specs/02-guns.md）: 基礎 × 距離係数 × 部位倍率。防具軽減は後続。 */
+    /**
+     * ダメージ計算式（docs/specs/02-guns.md）: 基礎 × 距離係数 × 部位倍率。防具軽減は後続。
+     *
+     * <p>部位は命中点の高さで判定するため、{@code hitPos} は<b>実際の交点</b>でなければならない
+     * （{@link #findEntityHit}）。足元座標を渡すと常に手足扱いになる。</p>
+     */
     private float computeDamage(double dist, Vec3 hitPos, Entity target) {
         double falloffStart = props.falloffStart();
         double range = props.effectiveRange();

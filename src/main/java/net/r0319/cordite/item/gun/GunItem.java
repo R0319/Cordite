@@ -60,10 +60,25 @@ public class GunItem extends Item {
         return stack;
     }
 
+    /**
+     * 表示名。レベルを受け取れないため論理サイドが分からず、クライアント側の定義を優先し、無ければ
+     * サーバー側の定義にフォールバックする。
+     *
+     * <p>クライアント優先なのは、マルチプレイのクライアントではサーバー側マップが空（または以前入っていた
+     * シングルプレイの古い定義）だから。逆に専用サーバーではクライアント側マップが常に空なので、
+     * サーバー側へ落ちる。以前はクライアント側しか見ておらず、専用サーバーで {@code /cordite give} の
+     * 成功メッセージが銃名ではなく「銃」になっていた。</p>
+     */
     @Override
     public Component getName(ItemStack stack) {
         ResourceLocation id = gunId(stack);
-        GunDefinition definition = id == null ? null : GunDefinitions.client(id);
+        if (id == null) {
+            return Component.translatable("item.cordite.gun");
+        }
+        GunDefinition definition = GunDefinitions.client(id);
+        if (definition == null) {
+            definition = GunDefinitions.server(id);
+        }
         if (definition == null) {
             return Component.translatable("item.cordite.gun");
         }
@@ -99,10 +114,20 @@ public class GunItem extends Item {
 
     // --- 状態アクセサ ---
 
-    /** マガジン内の残弾（薬室を含まない）。 */
+    /**
+     * マガジン内の残弾（薬室を含まない）。
+     *
+     * <p>定義上のマガジン容量で上から押さえる。gunpack はデータ駆動で容量を後から小さくできるため、
+     * 変更前に装填済みだったスタックには容量を超える値が残りうる。そのままだと HUD が「36 / 30」のように
+     * なるうえ、{@link #startReload} の満タン判定（{@code >= magSize}）で永遠にリロードできない。</p>
+     */
     public int getMagazine(ItemStack stack, Level level) {
         GunDefinition definition = definitionOf(stack, level);
-        return definition == null ? 0 : stack.getOrDefault(ModDataComponents.MAGAZINE_AMMO.get(), definition.magSize());
+        if (definition == null) {
+            return 0;
+        }
+        int stored = stack.getOrDefault(ModDataComponents.MAGAZINE_AMMO.get(), definition.magSize());
+        return Math.max(0, Math.min(stored, definition.magSize()));
     }
 
     /** 薬室に弾があるか。オープンボルトは常に false。 */
@@ -154,8 +179,8 @@ public class GunItem extends Item {
         if (now < state.reloadCompleteTick) {
             return false;
         }
-        // 連射レート（実銃準拠）
-        if (now - state.lastShotTick < props.fireIntervalTicks()) {
+        // 連射レート（実銃準拠）。間隔は小数tickで積み上げる（GunFireManager.State#nextShotTick 参照）
+        if (!state.canShootAt(now)) {
             return false;
         }
 
@@ -175,7 +200,7 @@ public class GunItem extends Item {
                         SoundEvents.DISPENSER_FAIL, SoundSource.PLAYERS, 0.6f, 1.2f);
                 state.dryFiredThisPress = true;
             }
-            state.lastShotTick = now;
+            state.markShot(now, props.fireIntervalTicks());
             return false;
         }
 
@@ -191,7 +216,7 @@ public class GunItem extends Item {
         } else {
             stack.set(ModDataComponents.MAGAZINE_AMMO.get(), mag - 1);
         }
-        state.lastShotTick = now;
+        state.markShot(now, props.fireIntervalTicks());
 
         // 発射音は周囲にも聞こえる必要があるためサーバーから配信する（第1引数nullで本人も含む全員へ）。
         level.playSound(null, player.getX(), player.getY(), player.getZ(),
