@@ -12,6 +12,7 @@ import ar15_mesh
 import m4a1_parts
 import m4a1_pixel
 import m249
+import ak47
 
 OUT = Path(__file__).parent / "generated"
 VARIANTS = {
@@ -22,6 +23,8 @@ VARIANTS = {
     "m4a1_mesh_lite": (lambda: _with_detail("lite"), 6, "m4a1"),   # 敵 NPC 用などの簡略版（面を減らす）
     "m249_mesh": (lambda: m249.build("belt"), 8, "m249"),          # ボックス＋ベルト（標準）
     "m249_stanag_mesh": (lambda: m249.build("stanag"), 8, "m249_stanag"),   # STANAG 弾倉
+    "ak_47_mesh": (lambda: ak47.build("wood"), 8, "ak_47"),                 # 木製（標準）
+    "ak_47_rail_mesh": (lambda: ak47.build("rail"), 8, "ak_47_rail"),       # レール付き
 }
 def _with_detail(level):
     ar15_mesh.set_detail(level)
