@@ -82,8 +82,9 @@ def front_sight_base(l=L):
     ]
 
 
-RAS_HOLES_PER_FACE = 7    # 斜めの面 1 枚あたりの丸穴の数（参考写真）
-RAS_HOLE_RATIO = 0.74     # 丸穴の直径 / 斜めの面の幅
+RAS_HOLES_PER_FACE = 7    # 斜めの面 1 枚あたりの穴の数（作者提供の図面: 1 列 7 個）
+RAS_HOLE_RATIO = 0.62     # 穴の幅（面の幅方向）/ 斜めの面の幅
+RAS_HOLE_ASPECT = 1.55    # 穴の前後長 / 幅。図面では丸ではなく前後に長い楕円（長さ:幅 ≒ 1.5）
 
 
 def ras_body(l=L):
@@ -120,7 +121,8 @@ def ras_body(l=L):
         quad(theta, k, [(-w / 2, r), (w / 2, r), (w / 2, z_first), (-w / 2, z_first)])
         quad(theta, k, [(-w / 2, z_first - cell * n), (w / 2, z_first - cell * n), (w / 2, f), (-w / 2, f)])
         m = RAS_HOLE_SEG
-        rad = cell * RAS_HOLE_RATIO / 2
+        rad_s = cell * RAS_HOLE_RATIO / 2                # 幅方向の半径
+        rad_z = min(rad_s * RAS_HOLE_ASPECT, cell * 0.46)  # 前後方向の半径（マスからはみ出さない）
         for h in range(n):
             zc = z_first - cell * (h + 0.5)
             ring = []
@@ -128,7 +130,7 @@ def ras_body(l=L):
                 a = 2 * math.pi * j / m
                 ca, sa = math.cos(a), math.sin(a)
                 k_sq = (cell / 2) / max(abs(ca), abs(sa))   # 同じ向きの、マスの縁までの距離
-                ring.append(((rad * ca, zc + rad * sa), (k_sq * ca, zc + k_sq * sa)))
+                ring.append(((rad_s * ca, zc + rad_z * sa), (k_sq * ca, zc + k_sq * sa)))
             for j in range(m):
                 (c0, e0), (c1, e1) = ring[j], ring[j + 1]
                 quad(theta, k, [c0, c1, e1, e0])

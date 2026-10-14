@@ -1,22 +1,26 @@
 """材質パレット。色はテクスチャの下塗り。作者が PNG を塗り直す前提の仮色。"""
 from core import Material
 
-# --- パーツ組立版（実寸寄り）: 微小なゆらぎ＋面の縁を暗く
-RECEIVER = Material("receiver", (62, 64, 67), noise=0.05, edge=0.30, edge_min=6)
-POLYMER = Material("polymer", (40, 40, 42), noise=0.07, edge=0.25, edge_min=6)
-HANDGUARD = Material("handguard", (40, 40, 42), noise=0.07, edge=0.25, edge_min=6, dots=6)
-STEEL = Material("steel", (74, 74, 70), noise=0.06, edge=0.30, edge_min=6)
-STEEL_DARK = Material("steel_dark", (38, 38, 38), noise=0.05, edge=0.25, edge_min=6)
+# --- パーツ組立版（実寸寄り）: 微小なゆらぎ＋汚れのむら＋傷。
+# 面ごとの縁取り（edge）は使わない: 分解できない場所（1 部品の中の面の境目）にも継ぎ目が入って見えるため。
+# 金属は傷が目立ち（地金が光る）、樹脂は傷が少なく汚れが乗る、という作り分け。
+RECEIVER = Material("receiver", (62, 64, 67), noise=0.05, grime=0.14, scratch=0.004)
+POLYMER = Material("polymer", (40, 40, 42), noise=0.06, grime=0.10, scratch=0.0015)
+HANDGUARD = Material("handguard", (40, 40, 42), noise=0.06, grime=0.10, scratch=0.0015, dots=6)
+STEEL = Material("steel", (74, 74, 70), noise=0.06, grime=0.16, scratch=0.006)
+STEEL_DARK = Material("steel_dark", (38, 38, 38), noise=0.05, grime=0.14, scratch=0.004)
 BORE = Material("bore", (12, 12, 12))
-RAIL = Material("rail", (46, 47, 49), noise=0.05, edge=0.30, edge_min=6, stripe=4)  # 8tex/px で 0.5px/スロット
-RAIL_SIDE = Material("rail_side", (46, 47, 49), noise=0.05, edge=0.30, edge_min=6, stripe=4, stripe_faces=("east", "west"))
-RAIL_DOWN = Material("rail_down", (46, 47, 49), noise=0.05, edge=0.30, edge_min=6, stripe=4, stripe_faces=("down",))
-MAG = Material("mag", (74, 76, 68), noise=0.06, edge=0.30, edge_min=6)
-RUBBER = Material("rubber", (24, 24, 24), noise=0.10)
-CANVAS = Material("canvas", (150, 126, 82), noise=0.10, edge=0.20, edge_min=6)   # 弾薬ボックスの布（タン）
-BOX_LID = Material("box_lid", (30, 30, 32), noise=0.05, edge=0.25, edge_min=6)
-BRASS = Material("brass", (184, 142, 62), noise=0.05)
-COPPER = Material("copper", (176, 102, 62), noise=0.05)
+RAIL = Material("rail", (46, 47, 49), noise=0.05, grime=0.12, scratch=0.003, stripe=4)  # 8tex/px で 0.5px/スロット
+RAIL_SIDE = Material("rail_side", (46, 47, 49), noise=0.05, grime=0.12, scratch=0.003, stripe=4, stripe_faces=("east", "west"))
+RAIL_DOWN = Material("rail_down", (46, 47, 49), noise=0.05, grime=0.12, scratch=0.003, stripe=4, stripe_faces=("down",))
+PANEL = Material("panel", (36, 36, 38), noise=0.06, grime=0.10, scratch=0.001)   # レールカバー（樹脂）
+MAG = Material("mag", (74, 76, 68), noise=0.06, grime=0.16, scratch=0.006)
+RUBBER = Material("rubber", (24, 24, 24), noise=0.10, grime=0.08)
+CANVAS = Material("canvas", (150, 126, 82), noise=0.10, grime=0.18)   # 布（タン）
+BOX_LID = Material("box_lid", (30, 30, 32), noise=0.05, grime=0.12, scratch=0.002)
+BOX_PLASTIC = Material("box_plastic", (46, 50, 44), noise=0.05, grime=0.14, scratch=0.002)   # 200 発ボックス（硬質樹脂・暗い緑黒）
+BRASS = Material("brass", (184, 142, 62), noise=0.05, grime=0.08)
+COPPER = Material("copper", (176, 102, 62), noise=0.05, grime=0.06)
 
 # --- ピクセル版: 平塗り＋縁取り（ドット絵寄り）。グレーの段差をはっきり付けて部品を見分けやすくする
 PX_RECEIVER = Material("px_receiver", (70, 72, 76), edge=0.35, edge_min=3)

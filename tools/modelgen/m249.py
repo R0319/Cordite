@@ -374,7 +374,7 @@ def stock(l=L):
         extrude_x_beveled(O.STOCK["outer"], -hw, hw, 8.0, M.POLYMER, steps=3),
         *outline_parts(O.BUTTPLATE, -hw - 1.5, hw + 1.5, STEEL_BLACK, bevel=2.0),
     ]
-    out += [box(x - 1.0, 74.0, zb - 0.2, x + 1.0, 192.0, zb + 0.4, M.BORE) for x in range(-20, 21, 5)]   # 床尾板の溝
+    # 床尾板は無地（作者提供の三面図では溝の無い板。以前入れていた縦の溝は資料に無く、柵のように見えたので廃止）
     # 負い紐の輪（ストック下の段の前。写真の小さな鉤）: Y-Z 面の輪
     ring = ring_z(0.0, -1.5, 1.5, 4.0, 7.0, STEEL_BLACK, n=12)
     out.append(MeshPart([(v[2], v[1] + 82.0, v[0] + 247.0) for v in ring.verts], ring.faces, ring.mat,
@@ -558,15 +558,20 @@ def stanag_mag(l=L):
 
 
 def ammo_box(l=L):
-    """200 発ボックス（樹脂のふた＋布の袋）。側面形は写真。受け部の下に左右ほぼ対称に掛ける。"""
+    """200 発ボックス（標準の硬質樹脂の箱。作者提供の三面図: 角を丸めた直方体で、上部に分かれ目のあるふた）。
+    前後・高さは写真トレースの範囲（box）、左右は三面図（box_x）。受け部の下に左右対称に掛ける。
+    以前の「樹脂のふた＋布の袋」（ソフトパック）は作者の単体写真から作った別物で、図面の標準装備に合わせて置き換えた。"""
     x0, x1 = l.box_x
-    z0, z1 = min(p[0] for p in O.BOX_BODY["outer"]), max(p[0] for p in O.BOX_BODY["outer"])
-    zc = (z0 + z1) / 2
+    zr, zf, yb, yt = l.box                             # box は (後端 z, 前端 z, 下面, 上面)。zf < zr（前が銃口側）
+    lid_h = 22.0                                       # ふたの高さ（分かれ目の線の位置）
+    body = [(zf, yb), (zr, yb), (zr, yt - lid_h), (zf, yt - lid_h)]
+    lid = [(zf - 1.5, yt - lid_h), (zr + 1.5, yt - lid_h), (zr + 1.5, yt), (zf - 1.5, yt)]
     return [
-        extrude_x_beveled(O.BOX_BODY["outer"], x0, x1, 4.0, M.CANVAS, steps=2),
-        extrude_x_beveled(O.BOX_LID["outer"], x0 - 1, x1 + 1, 2.0, M.BOX_LID, steps=1),
-        box(x1 - 0.5, 20, zc - 2, x1 + 1.5, 80, zc + 2, M.BOX_LID),     # ファスナー（左面。側面写真で見える面）
-        box(40, l.box[3] - 0.2, z0 + 12, 60, l.box[3] + 0.3, z1 - 12, M.BORE),   # ふたの上の弾帯の出口
+        extrude_x_beveled(body, x0, x1, 5.0, M.BOX_PLASTIC, steps=2),
+        extrude_x_beveled(lid, x0 - 1.5, x1 + 1.5, 4.0, M.BOX_PLASTIC, steps=2),
+        box(x0 - 1.6, yt - lid_h - 0.4, zf - 1.6, x1 + 1.6, yt - lid_h + 0.4, zr + 1.6, M.BORE),  # ふたの合わせ目
+        box(-10, yt - lid_h - 8, zr + 1.4, 10, yt - lid_h + 6, zr + 3.0, STEEL_BLACK),           # 後面のラッチ
+        box(40, yt - 0.2, zf + 10, 62, yt + 0.3, zr - 10, M.BORE),                               # ふたの上の弾帯の出口
     ]
 
 

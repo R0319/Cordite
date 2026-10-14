@@ -307,7 +307,31 @@ def ras_rail_bottom(l=L):
 
 
 def ras_rail_sides(l=L):
-    return _ras_rail(l, "left", M.RAIL_SIDE) + _ras_rail(l, "right", M.RAIL_SIDE)
+    return _ras_rail(l, "left", M.RAIL_SIDE) + _ras_rail(l, "right", M.RAIL_SIDE) + rail_panels(l)
+
+
+PANEL_RIBS = 11       # KAC 11-Rib Rail Panel（M4 RAS に 3 枚付属。作者提供の図面では側面レールに付いている）
+PANEL_THICK = 3.0     # パネル本体の厚み（レールの頭の上に被さる）
+PANEL_RIB_H = 1.6     # リブの高さ
+
+
+def rail_panels(l=L):
+    """側面レールのレールカバー（左右）。レールの頭を樹脂の板が覆い、前後方向に 11 本のリブが並ぶ。
+    図面では側面の縦リブが目立ち、上下のレールは素のまま（刻みが見える）。"""
+    b = l.bore_y
+    z0, z1 = ras_rail_span(l)
+    (_, nh), (hw, hh) = RAS_NECK, RAS_HEAD
+    r_out = RAS_FLAT + nh + hh                         # レールの頭の外面
+    pitch = (z1 - z0) / PANEL_RIBS
+    out = []
+    for s in (1, -1):
+        x0, x1 = sorted((s * r_out, s * (r_out + PANEL_THICK)))
+        out.append(box(x0, b - hw / 2 - 0.5, z0, x1, b + hw / 2 + 0.5, z1, M.PANEL))
+        rx0, rx1 = sorted((s * (r_out + PANEL_THICK), s * (r_out + PANEL_THICK + PANEL_RIB_H)))
+        for i in range(PANEL_RIBS):
+            zc = z0 + pitch * (i + 0.5)
+            out.append(box(rx0, b - hw / 2 + 1.0, zc - pitch * 0.22, rx1, b + hw / 2 - 1.0, zc + pitch * 0.22, M.PANEL))
+    return out
 
 
 def flash_hider_a2(l=L):

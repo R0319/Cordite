@@ -36,6 +36,8 @@ class Material:
     stripe_dark: float = 0.45
     stripe_faces: tuple = ("up",)
     dots: int = 0               # >0 なら側面・上下面に周期 dots テクセルの暗い点（放熱孔など）
+    grime: float = 0.0          # 低周波の汚れ（面の中で明暗がゆっくり変わる。0〜1 の振幅）
+    scratch: float = 0.0        # 傷の密度（テクセル面積あたりの本数。細く明るい/暗い筋）
 
 
 # ---------------------------------------------------------------- 形状
@@ -569,23 +571,55 @@ def _shelf_pack(items, size):
     return out
 
 
+def _value_noise(nr: np.random.Generator, h: int, w: int, cell: int) -> np.ndarray:
+    """粗い格子の乱数を双一次補間した、なだらかな [-1, 1] のノイズ（汚れのむら用）。"""
+    gh, gw = h // cell + 2, w // cell + 2
+    g = nr.uniform(-1, 1, (gh, gw))
+    ys = np.arange(h) / cell
+    xs = np.arange(w) / cell
+    y0 = np.floor(ys).astype(int); x0 = np.floor(xs).astype(int)
+    fy = (ys - y0)[:, None]; fx = (xs - x0)[None, :]
+    a = g[y0][:, x0]; b = g[y0][:, x0 + 1]; c = g[y0 + 1][:, x0]; d = g[y0 + 1][:, x0 + 1]
+    return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
+
+
 def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
+    """面 1 枚の矩形を塗る。下塗り色 × (細かいゆらぎ × 汚れのむら × 傷 × 縁 × 縞 × 点)。
+    面ごとの縁取り（edge）は「分解できない場所にも継ぎ目が入る」ため、材質の既定では使わない
+    （部品の継ぎ目は形状そのものの段差と陰影で見せる）。"""
     base = np.array(mat.color, dtype=np.float32)
-    for yy in range(h):
-        for xx in range(w):
-            k = 1.0 + (rng.uniform(-1, 1) * mat.noise if mat.noise else 0.0)
-            if mat.edge and face != "mesh_flat" and w >= mat.edge_min and h >= mat.edge_min and (
-                    (xx in (0, w - 1) and face != "mesh_rows") or yy in (0, h - 1)):
-                k *= 1.0 - mat.edge
-            if mat.stripe and face in mat.stripe_faces and \
-                    ((xx if face in ("east", "west") else yy) % mat.stripe) < mat.stripe // 2:
-                k *= 1.0 - mat.stripe_dark
-            if mat.dots and face not in ("north", "south", "mesh_flat") and w >= mat.dots and h >= mat.dots \
-                    and xx % mat.dots == mat.dots // 2 and yy % mat.dots == mat.dots // 2 \
-                    and 0 < xx < w - 1 and 0 < yy < h - 1:
-                k *= 0.25
-            c = np.clip(base * k, 0, 255)
-            img[v + yy, u + xx] = (*c.astype(np.uint8), 255)
+    nr = np.random.default_rng(rng.getrandbits(32))
+    k = np.ones((h, w), dtype=np.float32)
+    if mat.noise:
+        k *= 1.0 + nr.uniform(-1, 1, (h, w)) * mat.noise
+    if mat.grime and w >= 4 and h >= 4:
+        # 大小 2 つの周期を重ねる（大きなむら＋小さな染み）。暗い側へ寄せて「汚れ」にする
+        n = 0.7 * _value_noise(nr, h, w, max(4, min(w, h) // 3)) + 0.3 * _value_noise(nr, h, w, 3)
+        k *= 1.0 - mat.grime * (0.6 + 0.4 * n) * (n > -0.2)
+    if mat.scratch and w >= 6 and h >= 6:
+        for _ in range(int(nr.poisson(mat.scratch * w * h))):
+            x, y = nr.uniform(0, w), nr.uniform(0, h)
+            ang = nr.uniform(0, math.pi)
+            length = nr.uniform(2, min(9.0, max(2.0, min(w, h) * 0.5)))   # 8 テクセル/px なら最長 27mm 程度の細かい傷
+            gain = 1.14 if nr.uniform() < 0.6 else 0.88         # 明るい傷（地金）か暗い傷（汚れが入った）か。淡く
+            for t in np.arange(0, length, 0.7):
+                px, py = int(x + math.cos(ang) * t), int(y + math.sin(ang) * t)
+                if 0 <= px < w and 0 <= py < h:
+                    k[py, px] *= gain
+    if mat.edge and face != "mesh_flat" and w >= mat.edge_min and h >= mat.edge_min:
+        k[0, :] *= 1.0 - mat.edge; k[h - 1, :] *= 1.0 - mat.edge
+        if face != "mesh_rows":
+            k[:, 0] *= 1.0 - mat.edge; k[:, w - 1] *= 1.0 - mat.edge
+    if mat.stripe and face in mat.stripe_faces:
+        idx = np.arange(w)[None, :] if face in ("east", "west") else np.arange(h)[:, None]
+        k = k * np.where((idx % mat.stripe) < mat.stripe // 2, 1.0 - mat.stripe_dark, 1.0)
+    if mat.dots and face not in ("north", "south", "mesh_flat") and w >= mat.dots and h >= mat.dots:
+        yy, xx = np.mgrid[0:h, 0:w]
+        m = (xx % mat.dots == mat.dots // 2) & (yy % mat.dots == mat.dots // 2) & (xx > 0) & (xx < w - 1) & (yy > 0) & (yy < h - 1)
+        k[m] *= 0.25
+    c = np.clip(base[None, None, :] * k[:, :, None], 0, 255).astype(np.uint8)
+    img[v:v + h, u:u + w, :3] = c
+    img[v:v + h, u:u + w, 3] = 255
 
 
 def _r(v: float) -> float:
