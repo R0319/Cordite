@@ -40,7 +40,7 @@
 
 ## 発射モード（実銃準拠）
 
-`FireMode` = SINGLE / FULL_AUTO / BURST。対応モードは銃ごとに `GunProperties.fireModes`（先頭が既定）。
+`FireMode` = SINGLE / FULL_AUTO / BURST。対応モードは銃ごとに gunpack 定義 `GunDefinition.fireModes`（先頭が既定）。
 
 | 銃 | 対応モード | rpm(実銃準拠) | ボルト |
 |----|----------|---------------|-------|
@@ -48,12 +48,15 @@
 | AK-47 | 単発 / フルオート | 600（サイクリックレート） | クローズド |
 | M4A1 | 単発 / フルオート / バースト | 800（サイクリックレート） | クローズド |
 
-- `rpm` はフルオート機のサイクリックレート、単発機は速射上限。発射間隔 = `1200 / rpm` tick。
+- `rpm` はフルオート機のサイクリックレート、単発機は速射上限。発射間隔 = `1200 / rpm` tick（**小数のまま扱う**）。
+- 間隔を整数tickに丸めない: 800rpm = 1.5tick を 2tick に丸めると実効 600rpm に落ちる。`GunFireManager.State#nextShotTick`（double）に
+  間隔を積み上げ、`now >= nextShotTick` で許可する。1.5tick なら 2tick・1tick 空きを交互に繰り返し、平均で定義どおりになる。
+  しばらく撃っていなければ現在tickを起点にし直す（過去の許可時刻から積むと連射の「貯金」ができてしまうため）。
 - バーストは `FireMode.BURST_COUNT`（=3）発。
 
 ## 薬室（チャンバー）とボルト方式
 
-`GunProperties.boltType`（`BoltType.CLOSED` / `OPEN`）で挙動を分ける。状態は `chambered`（bool）Data Component。
+`GunDefinition.boltType`（`BoltType.CLOSED` / `OPEN`）で挙動を分ける。状態は `chambered`（bool）Data Component。
 
 | ボルト方式 | 満タン装弾数 | 挙動 |
 |-----------|------------|------|
@@ -70,8 +73,9 @@
 
 Entityを使わない軽量トラッカー方式（`combat.GunProjectile` / `ProjectileManager`）。
 
-- サーバーtickごとに `muzzleVelocity/20` blocks 前進し、移動区間を `clip`（ブロック）＋`getEntityHitResult`（エンティティ）でレイキャスト。区間判定なので高速弾でもすり抜けない。
-- **全弾に曳光弾トレイル**（オレンジの `DustParticleOptions`）で弾道を可視化。
+- サーバーtickごとに `muzzleVelocity/20` blocks 前進し、移動区間を `clip`（ブロック）でレイキャストし、ブロックに遮られた手前までの区間でエンティティ命中を判定する。区間判定なので高速弾でもすり抜けない。
+- エンティティ命中は**自前判定**（`GunProjectile#findEntityHit`）: 区間周辺のエンティティを `level.getEntities` で集め、各バウンディングボックスを `ENTITY_HIT_INFLATE`（🟡仮 0.3）膨らませて `AABB.clip` で交点を取り、始点に最も近いものを採る。バニラの `ProjectileUtil.getEntityHitResult`（6引数版）は**交点を持たない結果**（`getLocation()` が足元座標）を返すため使わない——部位判定が常に手足になる。
+- 曳光弾は見た目だけで、発射時に `TracerPayload` を1発1パケット配りクライアントが描く（[tracer.md](tracer.md)）。
 - 命中でダメージ（距離係数＋部位倍率）を適用し消滅。射程 `effectiveRange` 到達でも消滅。
 - 連射で命中が無効化されないよう、命中対象の `invulnerableTime` を毎発リセット。
 - `ServerTickEvent.Post` で全弾を前進、`ServerStoppingEvent` でクリア。
@@ -82,7 +86,7 @@ Entityを使わない軽量トラッカー方式（`combat.GunProjectile` / `Pro
 命中ダメージ = 基礎ダメージ × 距離係数 × 部位倍率
 ```
 - 距離係数: 減衰開始まで1.0 → 有効射程で0.5へ線形低下 → 超過0.5。
-- 部位倍率（仮）: 頭2.0 / 胴1.0 / 手足0.75（命中Y座標と対象の身長比で判定）。
+- 部位倍率（仮）: 頭2.0 / 胴1.0 / 手足0.75（**実際の交点**のY座標と対象の身長比で判定。85%以上=頭 / 35%以下=手足）。
 - 防具軽減は後続。
 
 ## HUD
@@ -104,7 +108,7 @@ Entityを使わない軽量トラッカー方式（`combat.GunProjectile` / `Pro
 | クラス | 役割 |
 |-------|------|
 | `item.gun.GunItem` | 銃アイテム。`tryFire`/`completeReload`/`cycleFireMode`/`startReload` |
-| `item.gun.GunProperties` | 不変ステータス（プリセット GLOCK/AK47/M4A1） |
+| `gunpack.GunDefinition` | 不変ステータス（gunpack JSON から読む → [gunpack.md](gunpack.md)） |
 | `item.gun.FireMode` / `BoltType` | 発射モード／ボルト方式の列挙 |
 | `combat.GunFireManager` | プレイヤー別の過渡状態（トリガー/レート/バースト/リロード） |
 | `combat.GunProjectile` / `ProjectileManager` | 弾丸トラッカーと一括tick |
@@ -120,8 +124,8 @@ Entityを使わない軽量トラッカー方式（`combat.GunProjectile` / `Pro
 - 弾道ドロップ（重力）・貫通・跳弾、専用トレイル/着弾/マズルフラッシュのアセット化
 - ボルトアクション／ポンプ等の手動サイクル・1発ずつ装填（ショットガン）
 - リロード中のHUD/演出、耐久劣化・ジャム、アタッチメント、防具軽減
-- gunpack JSON からの定義読み込み（現状ハードコード）
-- 発射エフェクト/音の専用アセット化（現状はバニラ音の暫定流用）
+- 銃専用の `DamageType`（現状はバニラの `playerAttack` を流用しており、バニラ防具の軽減・毎発ノックバック・「〜に殺された」死亡メッセージがそのまま乗る）
+- 有効射程を超えた弾の扱い（仕様は「射程超過後は距離係数 0.5 固定」だが、現状は有効射程到達で弾が消える＝最大到達距離=有効射程）
 
 ## 動作確認
 
