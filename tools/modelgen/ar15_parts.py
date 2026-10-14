@@ -634,11 +634,11 @@ def magazine_stanag(l=L):
     rot1, rot2 = (-MAG_ANGLE / 2, 0, 0), (-MAG_ANGLE, 0, 0)
     p2y, p2z = piv2[1], piv2[2]
     return [
-        box(-11, split, zf, 11, top, zr, M.MAG),
-        box(-11, split - half, zf, 11, split, zr, M.MAG, rotation=rot1, pivot=piv1),
-        box(-11, p2y - half, p2z - 64, 11, p2y + 1, p2z, M.MAG, rotation=rot2, pivot=piv2),
+        box(-11, split, zf, 11, top, zr, M.MAG_PMAG),
+        box(-11, split - half, zf, 11, split, zr, M.MAG_PMAG, rotation=rot1, pivot=piv1),
+        box(-11, p2y - half, p2z - 64, 11, p2y + 1, p2z, M.MAG_PMAG, rotation=rot2, pivot=piv2),
         box(-13, p2y - half - 6, p2z - 68, 13, p2y - half + 2, p2z + 4, M.STEEL_DARK, rotation=rot2, pivot=piv2),  # 底板
-        box(-11.6, split + 5, zf + 7, 11.6, top - 25, zr - 7, M.MAG),  # 側面のリブ（直線部）
+        box(-11.6, split + 5, zf + 7, 11.6, top - 25, zr - 7, M.MAG_PMAG),  # 側面のリブ（直線部）
     ]
 
 

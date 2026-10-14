@@ -14,7 +14,9 @@ RAIL = Material("rail", (46, 47, 49), noise=0.05, grime=0.12, scratch=0.003, str
 RAIL_SIDE = Material("rail_side", (46, 47, 49), noise=0.05, grime=0.12, scratch=0.003, stripe=4, stripe_faces=("east", "west"))
 RAIL_DOWN = Material("rail_down", (46, 47, 49), noise=0.05, grime=0.12, scratch=0.003, stripe=4, stripe_faces=("down",))
 PANEL = Material("panel", (36, 36, 38), noise=0.06, grime=0.10, scratch=0.001)   # レールカバー（樹脂）
-MAG = Material("mag", (74, 76, 68), noise=0.06, grime=0.16, scratch=0.006)
+MAG = Material("mag", (74, 76, 68), noise=0.06, grime=0.16, scratch=0.006)            # 旧: オリーブ寄りの灰（不評）
+MAG_USGI = Material("mag_usgi", (92, 96, 94), noise=0.05, grime=0.14, scratch=0.008)   # USGI アルミ弾倉（鈍い灰色の陽極酸化。傷で地金が出る）
+MAG_PMAG = Material("mag_pmag", (30, 30, 32), noise=0.05, grime=0.10, scratch=0.002)   # Magpul PMAG（黒い樹脂）
 RUBBER = Material("rubber", (24, 24, 24), noise=0.10, grime=0.08)
 CANVAS = Material("canvas", (150, 126, 82), noise=0.10, grime=0.18)   # 布（タン）
 BOX_LID = Material("box_lid", (30, 30, 32), noise=0.05, grime=0.12, scratch=0.002)

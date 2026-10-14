@@ -236,8 +236,17 @@ def lower_receiver(l=L):
     return lower_body(l) + trigger_guard(l)
 
 
+MAG_STYLE = "pmag"   # "usgi"（アルミ・灰色・縦リブ 4 本）/ "pmag"（Magpul PMAG・黒い樹脂・横の段と前後の背骨）
+
+
+def set_mag_style(style):
+    global MAG_STYLE
+    MAG_STYLE = style
+
+
 def magazine_stanag(l=L):
-    """STANAG 30 発弾倉（角張った箱形）。上は直線、マグウェルの下から半径一定で前へ反る（実物と同じ「バナナ」形）。"""
+    """STANAG 30 発弾倉（角張った箱形）。上は直線、マグウェルの下から半径一定で前へ反る（実物と同じ「バナナ」形）。
+    外観は MAG_STYLE で切り替える（本体の輪郭・寸法は共通。M249 の STANAG 版もこれを回して使う）。"""
     b = l.bore_y
     top = b - l.mag_top_below_bore
     split = top - l.mag_straight
@@ -260,11 +269,42 @@ def magazine_stanag(l=L):
     def p(s_n, s_d):
         return (cz + nb[0] * s_n + dn[0] * s_d, cy + nb[1] * s_n + dn[1] * s_d)
     plate = [p(half + 4, -2), p(half + 4, 6), p(-half - 4, 6), p(-half - 4, -2)]
-    return [
-        extrude_x(body, -11, 11, M.MAG),
-        extrude_x(plate, -13, 13, M.STEEL_DARK),
-        box(-11.6, split + 5, zc - 25, 11.6, top - 25, zc + 25, M.MAG),  # 側面のリブ（直線部）
+    def strip(o0, o1, i0=0, i1=None):
+        """中心線に沿った帯（前後方向のオフセット o0〜o1、index i0〜i1 の区間）の側面形。湾曲部にも追従する。"""
+        i1 = len(center) if i1 is None else i1
+        pts = [(cz_ + o1 * math.cos(t), cy_ - o1 * math.sin(t)) for (cz_, cy_), t in zip(center[i0:i1], tangents[i0:i1])]
+        pts += [(cz_ + o0 * math.cos(t), cy_ - o0 * math.sin(t)) for (cz_, cy_), t in zip(center[i0:i1], tangents[i0:i1])][::-1]
+        return pts
+
+    def band(i, w_along=1.8, extra=2.5):
+        """中心線上の点 i で、弾倉を一周する帯（側面形は中心線に直交する細い長方形）。"""
+        (cz_, cy_), t = center[i], tangents[i]
+        nb_ = (math.cos(t), -math.sin(t))            # 前後方向
+        dn_ = (-math.sin(t), -math.cos(t))           # 弾倉の長さ方向（下向き）
+        pts = []
+        for s_n, s_d in ((half + extra, -w_along), (half + extra, w_along), (-half - extra, w_along), (-half - extra, -w_along)):
+            pts.append((cz_ + nb_[0] * s_n + dn_[0] * s_d, cy_ + nb_[1] * s_n + dn_[1] * s_d))
+        return pts
+
+    # マグウェルに隠れる直線部（上 60mm）ではなく、見えている湾曲部に凹凸を置く
+    if MAG_STYLE == "usgi":
+        mat = M.MAG_USGI
+        out = [extrude_x(body, -11, 11, mat), extrude_x(plate, -13, 13, M.STEEL_DARK)]
+        for o in (-19.0, -6.5, 6.5, 19.0):            # 縦リブ 4 本（側面の補強の段。湾曲部にも沿う）
+            out.append(extrude_x(strip(o - 1.6, o + 1.6, 1), -12.2, 12.2, mat))
+        return out
+    mat = M.MAG_PMAG
+    out = [
+        extrude_x(body, -11.5, 11.5, mat),
+        extrude_x(plate, -13.5, 13.5, mat),            # フロアプレート（樹脂。本体より少し厚く、前後にはみ出す）
+        extrude_x(strip(-half - 1.5, -half + 3.5, 1), -12.6, 12.6, mat),   # 前の背骨
+        extrude_x(strip(half - 3.5, half + 1.5, 1), -12.6, 12.6, mat),     # 後ろの背骨
     ]
+    n = len(center)
+    for k in range(5):                                 # 側面の横の段（指掛かりの帯）。湾曲部に等間隔
+        i = 2 + int((n - 3) * k / 4)
+        out.append(extrude_x(band(i), -12.8, 12.8, mat))
+    return out
 
 
 def stock_m4(l=L):
