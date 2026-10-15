@@ -1,0 +1,44 @@
+{
+ "format_version": "1.8.0",
+ "animations": {
+  "animation.p90.idle": {
+   "loop": true,
+   "bones": {
+    "right_hand": {
+     "rotation": [
+      -108.0062,
+      -15.6506,
+      0.0
+     ],
+     "position": [
+      2.3213,
+      -13.7177,
+      5.4559
+     ],
+     "scale": [
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "left_hand": {
+     "rotation": [
+      -100.972,
+      55.7627,
+      0.0
+     ],
+     "position": [
+      4.1392,
+      -12.9326,
+      -2.897
+     ],
+     "scale": [
+      1.0,
+      1.0,
+      1.0
+     ]
+    }
+   }
+  }
+ }
+}

@@ -81,5 +81,6 @@ def build(P=P) -> tuple[Model, dict]:
         sight_line_y=(b + l.sight_h) * K,
         rear_sight_z=(l.upper_rear_z - 30 + 12) * K,   # アパーチャー板の位置（rear_sight の z+12）
         grip_center=px(tuple(center)),
+        support_z=(l.handguard_front_z + l.handguard_rear_z) / 2 * K,   # ハンドガードの中央
     )
     return m, parts

@@ -455,5 +455,5 @@ def build():
     from shapely.geometry import Polygon
     c = Polygon(O.GRIP["outer"]).centroid
     add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=SIGHT_Y * K,
-                 rear_sight_z=REAR_SIGHT_Z * K, grip_center=(0, c.y * K, c.x * K))
+                 rear_sight_z=REAR_SIGHT_Z * K, grip_center=(0, c.y * K, c.x * K), support_z=-192.0 * K)
     return m, parts

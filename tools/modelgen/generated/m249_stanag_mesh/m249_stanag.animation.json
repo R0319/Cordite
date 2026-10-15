@@ -1,0 +1,44 @@
+{
+ "format_version": "1.8.0",
+ "animations": {
+  "animation.m249_stanag.idle": {
+   "loop": true,
+   "bones": {
+    "right_hand": {
+     "rotation": [
+      -97.9196,
+      -17.4265,
+      0.0
+     ],
+     "position": [
+      1.8405,
+      -11.6886,
+      6.394
+     ],
+     "scale": [
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "left_hand": {
+     "rotation": [
+      -97.0019,
+      35.0201,
+      0.0
+     ],
+     "position": [
+      4.0,
+      -11.15,
+      -3.325
+     ],
+     "scale": [
+      1.0,
+      1.4045,
+      1.0
+     ]
+    }
+   }
+  }
+ }
+}

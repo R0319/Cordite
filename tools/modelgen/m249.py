@@ -736,5 +736,5 @@ def build(feed="belt"):
     from shapely.geometry import Polygon
     c = Polygon(O.GRIP["outer"]).centroid
     add_locators(m, muzzle=(0, b * K, l.muzzle_z * K), sight_line_y=l.sight_y * K,
-                 rear_sight_z=l.rear_sight_z * K, grip_center=(0, c.y * K, c.x * K))
+                 rear_sight_z=l.rear_sight_z * K, grip_center=(0, c.y * K, c.x * K), support_z=-264.0 * K)
     return m, parts

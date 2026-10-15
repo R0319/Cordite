@@ -433,5 +433,5 @@ def build():
     add("bullet", "ammo", (0, b, tip + 10.0), None, bullet)
 
     add_locators(m, muzzle=(0, b * K, BRAKE_Z[0] * K), sight_line_y=(RAIL_Y + 5.0) * K,
-                 rear_sight_z=RAIL_Z[1] * K, grip_center=(0, 60.0 * K, 60.0 * K))
+                 rear_sight_z=RAIL_Z[1] * K, grip_center=(0, 60.0 * K, 60.0 * K), support_z=-264.0 * K)
     return m, parts

@@ -1,0 +1,44 @@
+{
+ "format_version": "1.8.0",
+ "animations": {
+  "animation.ak_47.idle": {
+   "loop": true,
+   "bones": {
+    "right_hand": {
+     "rotation": [
+      -110.2527,
+      -17.0656,
+      0.0
+     ],
+     "position": [
+      2.0961,
+      -14.2031,
+      5.6444
+     ],
+     "scale": [
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "left_hand": {
+     "rotation": [
+      -104.8524,
+      34.9384,
+      0.0
+     ],
+     "position": [
+      4.0,
+      -13.0667,
+      -3.325
+     ],
+     "scale": [
+      1.0,
+      1.4452,
+      1.0
+     ]
+    }
+   }
+  }
+ }
+}

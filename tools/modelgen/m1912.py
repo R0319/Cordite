@@ -276,5 +276,5 @@ def build():
     add("bullet", "ammo", (0, b, BREECH_Z - 60.0), None, [])     # 散弾は描かない（位置だけ）
 
     add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=(SHIELD_R + b + 1.5) * K,
-                 rear_sight_z=20.0 * K, grip_center=(0, 30.0 * K, 45.0 * K))
+                 rear_sight_z=20.0 * K, grip_center=(0, 30.0 * K, 45.0 * K), support_z=-300.0 * K)
     return m, parts

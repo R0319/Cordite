@@ -1,0 +1,44 @@
+{
+ "format_version": "1.8.0",
+ "animations": {
+  "animation.awm.idle": {
+   "loop": true,
+   "bones": {
+    "right_hand": {
+     "rotation": [
+      -114.3945,
+      -17.5979,
+      0.0
+     ],
+     "position": [
+      2.0959,
+      -14.7562,
+      5.7172
+     ],
+     "scale": [
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "left_hand": {
+     "rotation": [
+      -104.383,
+      34.6951,
+      0.0
+     ],
+     "position": [
+      4.0,
+      -13.4,
+      -3.1583
+     ],
+     "scale": [
+      1.0,
+      1.4509,
+      1.0
+     ]
+    }
+   }
+  }
+ }
+}

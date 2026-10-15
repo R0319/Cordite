@@ -321,5 +321,5 @@ def build():
     add("mag_ammo", "magazin", (0, b, BREECH_Z - 50.0), None, c2 + h2)
 
     add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=FIXED_NOTCH_Y * K,
-                 rear_sight_z=BASE_Z[1] * K, grip_center=(0, 40.0 * K, 70.0 * K))
+                 rear_sight_z=BASE_Z[1] * K, grip_center=(0, 40.0 * K, 70.0 * K), support_z=-216.0 * K)
     return m, parts

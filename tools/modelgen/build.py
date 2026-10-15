@@ -1,6 +1,6 @@
 """
 生成の入口。  python3 build.py
-generated/<variant>/ に m4a1.geo.json・m4a1.png・m4a1_modelshot.png（インベントリ用アイコン）とプレビュー画像を出す。
+generated/<variant>/ に m4a1.geo.json・m4a1.png・m4a1.animation.json（腕の待機ポーズ）・m4a1_modelshot.png（インベントリ用アイコン）とプレビュー画像を出す。
 parts 版は parts/ に部品ごとの .geo.json も出す（Blockbench で単体確認・別銃への流用用）。
 """
 import json
@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from core import Model, bake, render, write_geo
+from rig import hold_animation, place_iron_view
 import ar15_mesh
 import m4a1_parts
 import m4a1_pixel
@@ -54,8 +55,11 @@ def build_variant(name, fn, density, stem):
     model, parts = fn()
     geo, tex, size = bake(model, density)
     d = OUT / name
+    place_iron_view(geo)
     write_geo(d / f"{stem}.geo.json", geo, size)
     tex.save(d / f"{stem}.png")
+    # 腕に銃を握らせる待機ポーズ（作者が待機アニメーションを作るまでの仮置き。無いと腕が真上に立ったまま映る）
+    (d / f"{stem}.animation.json").write_text(json.dumps(hold_animation(geo, stem, model.support_z), indent=1) + "\n")
     for view, (yaw, pitch) in VIEWS.items():
         render(geo, tex, yaw, pitch, width=300 if view == "front" else 900,
                background=(150, 160, 170, 255)).save(d / f"preview_{view}.png")

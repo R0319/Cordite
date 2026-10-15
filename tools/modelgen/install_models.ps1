@@ -3,7 +3,8 @@
   生成したモデルを作者の作業フォルダへ配置し、残す銃以外のモデルを作業フォルダの外へ退避する。
 
 .DESCRIPTION
-  1. 生成モデル（下の $Install）を -ModelsDir へコピーする（同名は上書き）。
+  1. 生成モデル（下の $Install）を -ModelsDir へコピーする（同名は上書き）。腕の待機ポーズ（<銃ID>.animation.json）は
+     作業フォルダに同名のファイルが無いときだけ置く（作者のアニメーションを上書きしない）。
   2. -ModelsDir 直下のファイル・フォルダのうち、名前が -Keep の銃ID で始まらないものを -ArchiveDir へ移動する。
      消さないので、退避フォルダから戻せる。
   -Apply を付けないと「何をするか」の一覧を表示するだけで、何も変更しない。
@@ -94,6 +95,16 @@ foreach ($i in $Install) {
         if (-not (Test-Path $src)) { throw "生成物が無い（python3 build.py を先に実行）: $src" }
         $copies += @{ Src = $src; Dst = (Join-Path $ModelsDir ($i.Id + $suffix)) }
         Write-Host "   $($i.Id + $suffix)"
+    }
+    # 腕の待機ポーズ（仮置きの idle）。作者のアニメーションがすでにあれば上書きしない（作者の制作物を消さない）
+    $anim = $i.Id + ".animation.json"
+    $src = Join-Path (Join-Path $gen $i.Dir) $anim
+    $dst = Join-Path $ModelsDir $anim
+    if (Test-Path $dst) {
+        Write-Host "   $anim は配置しない（作業フォルダにすでにある）"
+    } elseif (Test-Path $src) {
+        $copies += @{ Src = $src; Dst = $dst }
+        Write-Host "   $anim（仮の待機ポーズ）"
     }
 }
 
