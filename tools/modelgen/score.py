@@ -44,6 +44,8 @@ ROI_MM = 25.0                       # 写真の影絵はモデルの外形から
 # 写真のトレースの設定（trace_<銃>.py の Silhouette の引数と同じにする）: (モジュール, 左右反転, 閾値, ぼかし)
 PHOTO = {
     "mp5_mesh": ("trace_mp5", False, 200, 0.6),
+    "g3a3_mesh": ("trace_g3", True, 225, 0.6),
+    "hk416_mesh": ("trace_hk416", False, 128, 0.5),       # --photo は trace_hk416.py が書き出した影絵
     "m24_mesh": ("trace_m24", False, 200, 0.6),
     "p90_mesh": ("trace_p90", False, 200, 0.6),
     "m1912_mesh": ("trace_m1912", False, 165, 1.0),

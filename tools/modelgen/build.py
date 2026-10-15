@@ -22,6 +22,8 @@ import awm
 import m79
 import m2
 import m3_tripod
+import g3a3
+import hk416
 
 OUT = Path(__file__).parent / "generated"
 VARIANTS = {
@@ -42,6 +44,8 @@ VARIANTS = {
     "m79_mesh": (m79.build, 8, "m79"),                                        # M79 グレネードランチャー
     "m2_mesh": (m2.build, 8, "m2"),                                           # ブローニング M2HB 重機関銃
     "m3_tripod_mesh": (m3_tripod.build, 8, "m3_tripod"),                      # M2 の三脚（銃と同じ座標で重ねて置く）
+    "g3a3_mesh": (g3a3.build, 8, "g3a3"),                                     # H&K G3A3（固定ストック）
+    "hk416_mesh": (hk416.build, 8, "hk416"),                                  # H&K HK416 D14.5RS
 }
 def _with_detail(level):
     ar15_mesh.set_detail(level)
