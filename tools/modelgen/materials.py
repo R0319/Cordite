@@ -28,6 +28,13 @@ MP5_STEEL = Material("mp5_steel", (36, 36, 37), noise=0.05, grime=0.16, scratch=
                      wear=0.22, wear_color=(100, 100, 98), edge_wear=0.45, dust=0.10)
 MP5_MAG = Material("mp5_mag", (40, 41, 44), noise=0.05, grime=0.18, scratch=0.014,
                    wear=0.26, wear_color=(104, 104, 102), edge_wear=0.45, dust=0.12)
+# M24 SWS の材質（使い込まれた感: MP5 と同じ汚し。ストックはざらついた塗装で埃が乗りやすい）
+M24_STOCK = Material("m24_stock", (50, 52, 52), noise=0.10, grime=0.16, scratch=0.006,
+                     wear=0.22, wear_color=(84, 86, 84), edge_wear=0.4, dust=0.2)
+M24_STEEL = Material("m24_steel", (34, 34, 36), noise=0.05, grime=0.16, scratch=0.010,
+                     wear=0.25, wear_color=(96, 96, 94), edge_wear=0.5, dust=0.1)
+M24_BOLT = Material("m24_bolt", (92, 92, 90), noise=0.05, grime=0.12, scratch=0.016,
+                    wear=0.15, wear_color=(140, 140, 136), dust=0.05)          # ボルト（明るい鋼）
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
