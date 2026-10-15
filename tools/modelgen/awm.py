@@ -53,8 +53,6 @@ HALF_ACTION = 24.0
 HALF_GRIP = 16.0
 HALF_BUTT = 21.0
 HALF_PAD = 22.5
-STOCK_BEVEL = 4.0            # ストックの角の丸み（トリガーの穴の下の縁 5.4mm に収まる大きさ。穴の縁は HOLE_BEVEL）
-HOLE_BEVEL = 1.2
 FOLD = [(400.0, -60.0), (400.0, 300.0), (105.0, 300.0), (105.0, 97.0), (100.0, 75.0), (93.0, 54.0), (79.0, -60.0)]
 HINGE_PIVOT = (HALF_ACTION, 115.0, 105.0)   # 折りたたみの蝶番の軸（左側面の縦の軸。X, Y, Z）
 
@@ -82,12 +80,32 @@ def _parts_of(g):
 
 
 # ---------------------------------------------------------------- ストック
+# 実物（AWM・G22 の写真）: グリップは断面が楕円に近い丸い握り（手のひらの膨らみ）、親指の穴・床尾の縁も大きく丸い。
+# 先台・受け部の下は平らな側面で角だけ丸い。トリガーガードはストックと一体だが細い輪。
+# 以前は全体を平らな板の角を 4mm 丸めただけで、グリップが角張っていた（作者の指摘「グリップとストックの作り込みが甘い」）。
+# トリガーガードの下の縁（5.4mm）が丸みの大きさを縛っていたので、ガードを別の部品に分け、本体は M24 と同じく
+# 膨らませる作り（inflate_x）で場所ごとに丸みを変える。
+STOCK_H = 16.0              # 膨らませる量（丸みの半径の上限＝グリップの半幅）
+GRIP_R = 14.0               # グリップの丸み（ほぼ丸い断面）
+GUARD_CUT = [(-38.0, 40.0), (21.0, 40.0), (21.0, 86.0), (-38.0, 86.0)]   # 本体から切り出すトリガーガードの範囲
+HALF_GUARD = 12.0
+PALM = (55.0, 42.0, 1.6)    # 手のひらの膨らみ（中心 Z, Y と、半幅の増し）
+FOREND_GROOVE = (-395.0, -60.0, 126.0, 129.5)   # 先台の横の長い溝（G22 の写真。前後 z, 上下 y）
+SCREWS = [(73.0, 113.0, 3.4), (5.0, 112.0, 4.2), (-44.0, 108.0, 3.4), (-159.0, 104.0, 3.4), (-270.0, 112.0, 3.4),
+          (-377.0, 112.0, 3.4), (63.0, 33.0, 3.4)]                      # ストックの前のボルトの頭（写真）
+BUTT_SCREWS = [(239.0, 113.0, 3.4), (201.0, 113.0, 6.5), (125.0, 113.0, 3.4), (274.0, 60.0, 3.4), (191.0, 60.0, 3.4)]
+
+
 def stock_half(z, y):
-    """ストック（シャーシ）の半幅。先台 → 受け部の下 → グリップ → 床尾。"""
+    """ストック（シャーシ）の半幅。先台 → 受け部の下 → グリップ（手のひらの膨らみ） → 床尾。"""
     if z < -40.0:
         w = _lerp(HALF_FOREND, HALF_ACTION, (z + 200.0) / 160.0)
     elif z < 110.0:
         w = HALF_ACTION if y > 100.0 else _lerp(HALF_GRIP, HALF_ACTION, (y - 70.0) / 30.0)
+        pz, py, pw = PALM
+        d = math.hypot((z - pz) / 30.0, (y - py) / 35.0)
+        if y < 100.0 and d < 1.0:
+            w += pw * (1.0 - d * d)
     else:
         w = _lerp(HALF_ACTION, HALF_BUTT, (z - 110.0) / 60.0)
     return w
@@ -99,36 +117,90 @@ def _stock_pieces():
     fold = Polygon(FOLD)
     front = max(_parts_of(g.difference(fold)), key=lambda q: q.area)
     rear = max(_parts_of(g.intersection(fold)), key=lambda q: q.area)
-    return front, rear
+    guard = max(_parts_of(front.intersection(Polygon(GUARD_CUT))), key=lambda q: q.area)
+    body = max(_parts_of(front.difference(Polygon(GUARD_CUT))), key=lambda q: q.area)
+    return body, guard, rear
 
 
-def _rounded(q, half_fn, bevel, mat, steps=3):
-    q = q.simplify(0.3)
-    return extrude_x_rounded(_ring(q), [list(h.coords)[:-1] for h in q.interiors], half_fn, bevel, mat, steps=steps,
-                             hole_bevel=HOLE_BEVEL)
+def _dense(q, step=10.0):
+    """輪郭を間隔 step 以下に点を足す（側面の平らな面を格子点で分けるとき、輪郭の点が疎だと三角形が外へはみ出すため）。"""
+    import shapely
+    return _ring(shapely.segmentize(q.simplify(0.3), step))
+
+
+def _near(z, y, line, tol=0.6):
+    from shapely.geometry import LineString, Point
+    return LineString(line).distance(Point(z, y)) < tol
+
+
+def _body_radius(z, y, nz, ny):
+    """ストックの前（本体）の丸み: 切り口（折りたたみの継ぎ目・ガードの切り出し）は小さく、グリップは大きく。"""
+    if _near(z, y, FOLD[2:]) or _near(z, y, GUARD_CUT + GUARD_CUT[:1]):
+        return 1.5
+    if 20.0 < z < 110.0 and y < 98.0:
+        return GRIP_R
+    if ny > 0.6:
+        return 3.0               # 上の面（受け部が載る）
+    if ny < -0.5:
+        return 8.0               # 先台・弾倉の前後の下の縁
+    return 5.0
+
+
+def _butt_radius(z, y, nz, ny):
+    if _near(z, y, FOLD[2:]):
+        return 1.5
+    if ny > 0.6:
+        return 4.0               # 上の面（ほお当ての下）
+    if ny < -0.5:
+        return 10.0              # 床尾の下の縁
+    return 9.0                   # 親指の穴の後ろの縁・床尾の後ろ
 
 
 def stock():
-    """ストックの前（先台・受け部の下・グリップ）。トリガーの穴が開いている。折りたたみの蝶番で床尾と分かれる。"""
-    front, _ = _stock_pieces()
+    """ストックの前（先台・受け部の下・グリップ）とトリガーガード・折りたたみの蝶番・ボルトの頭・先台の溝。"""
+    body, guard, _ = _stock_pieces()
     hinge = _poly(O.HINGE).simplify(0.3)
-    out = [_rounded(front, stock_half, STOCK_BEVEL, STOCK_MAT),
+    width = lambda z, y, f: stock_half(z, y) / STOCK_H
+    out = [inflate_x(_dense(body), STOCK_H, STOCK_MAT, steps=4, width_fn=width, radius_at=_body_radius,
+                     cap_grid=14.0),
+           extrude_x_rounded(_ring(guard.simplify(0.3)), [list(h.coords)[:-1] for h in guard.simplify(0.3).interiors],
+                             lambda z, y: HALF_GUARD, 2.0, STOCK_MAT, steps=2),
            extrude_x_beveled(_ring(hinge), -HALF_ACTION - 1.5, HALF_ACTION + 1.5, 1.5, STEEL_BLACK, steps=1)]
     # 先台の上の銃身の溝（実物は銃身が浮いている溝。上面の銃身の両脇を暗くして溝に見せる）
     for s in (1, -1):
         xa, xb = sorted((s * 13.0, s * 17.0))
         out.append(box(xa, 145.3, -409.0, xb, 145.7, -205.0, M.BORE))
+    z0, z1, y0, y1 = FOREND_GROOVE
+    for s in (1, -1):
+        w = stock_half((z0 + z1) / 2, (y0 + y1) / 2)
+        xa, xb = sorted((s * (w - 0.3), s * (w + 0.25)))
+        out.append(box(xa, y0, z0, xb, y1, z1, M.AWM_STOCK_DARK))
+    out += _screws(SCREWS, stock_half)
+    return out
+
+
+def _screws(points, half_fn):
+    out = []
+    for z, y, r in points:
+        w = half_fn(z, y)
+        for s in (1, -1):
+            xa, xb = sorted((s * (w - 0.5), s * (w + 0.7)))
+            out.append(x_cyl(z, y, r, xa, xb, STEEL_BLACK, n=10))
     return out
 
 
 def butt():
     """床尾（ボーン butt。蝶番で左へ折りたためる）: ストックの後ろ・ほお当て・床尾板（ゴム）。"""
-    _, rear = _stock_pieces()
+    _, _, rear = _stock_pieces()
     cheek = _poly(O.CHEEK).simplify(0.3)
     pad = _poly(O.BUTT_PAD).simplify(0.3)
-    return [_rounded(rear, stock_half, STOCK_BEVEL, STOCK_MAT),
-            extrude_x_beveled(_ring(cheek), -HALF_BUTT + 3.0, HALF_BUTT - 3.0, 3.0, STEEL_BLACK, steps=2),
-            extrude_x_beveled(_ring(pad), -HALF_PAD, HALF_PAD, 3.5, M.RUBBER, steps=2)]
+    width = lambda z, y, f: stock_half(z, y) / STOCK_H
+    out = [inflate_x(_dense(rear), STOCK_H, STOCK_MAT, steps=4, width_fn=width, radius_at=_butt_radius,
+                     cap_grid=14.0),
+           extrude_x_beveled(_ring(cheek), -HALF_BUTT + 3.0, HALF_BUTT - 3.0, 3.0, STEEL_BLACK, steps=2),
+           extrude_x_beveled(_ring(pad), -HALF_PAD, HALF_PAD, 3.5, M.RUBBER, steps=2)]
+    out += _screws(BUTT_SCREWS, lambda z, y: stock_half(z, y))
+    return out
 
 
 # ---------------------------------------------------------------- 受け部・銃身

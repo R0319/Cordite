@@ -57,6 +57,7 @@ M1912_WOOD = Material("m1912_wood", (96, 40, 26), noise=0.08, grime=0.14, scratc
 # Accuracy International AWM の材質（ストックはオリーブ色の樹脂塗装のアルミ・樹脂。作者の指定。使い込まれた感の汚し）
 AWM_STOCK = Material("awm_stock", (82, 90, 62), noise=0.08, grime=0.16, scratch=0.006,
                      wear=0.22, wear_color=(112, 118, 92), edge_wear=0.4, dust=0.16)
+AWM_STOCK_DARK = Material("awm_stock_dark", (52, 58, 40), noise=0.06, grime=0.14)   # 先台の溝の影
 AWM_STEEL = Material("awm_steel", (32, 32, 34), noise=0.05, grime=0.16, scratch=0.010,
                      wear=0.22, wear_color=(96, 96, 94), edge_wear=0.45, dust=0.08)
 AWM_BOLT = Material("awm_bolt", (120, 120, 116), noise=0.05, grime=0.12, scratch=0.016,
