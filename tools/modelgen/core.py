@@ -827,8 +827,13 @@ def _face_dims(c: Cube, face: str) -> tuple[float, float]:
             "up": (sx, sz), "down": (sx, sz)}[face]
 
 
+SHADE = True    # テクスチャに陰影（隙間の遮蔽・角の明るさ）を焼き込み、汚れ・擦れを 3D の位置から塗る（texbake.py）
+
+
 def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
-    """面ごとの UV 矩形を割り当て、(geo.json の dict, テクスチャ Image, テクスチャ一辺) を返す。"""
+    """面ごとの UV 矩形を割り当て、(geo.json の dict, テクスチャ Image, テクスチャ一辺) を返す。
+    SHADE なら、汚れ・擦れ・埃は区画ごとには塗らず、書き出した形から texbake が 3D の位置で塗る（区画の継ぎ目で
+    模様が途切れてまだらに見えたため）。"""
     items = []  # (h, w, bone_idx, cube_idx, face)
     for bi, b in enumerate(model.bones):
         for ci, c in enumerate(b.cubes):
@@ -858,15 +863,21 @@ def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
 
     rng = random.Random(seed)
     img = np.zeros((size, size, 4), dtype=np.uint8)
+    mats: list[Material] = []
+    mat_map = np.full((size, size), -1, dtype=np.int32)       # テクセルごとの材質（texbake 用）
     uvs: dict[tuple[int, int, str], tuple[int, int, int, int]] = {}
     for (h, w, bi, ci, f), (u, v) in placed.items():
         el = model.bones[bi].cubes[ci]
+        if el.mat not in mats:
+            mats.append(el.mat)
+        mat_map[v:v + h, u:u + w] = mats.index(el.mat)
         if isinstance(f, tuple):
             mode = el.chart_edge.get(f[1])
-            _paint(img, u, v, w, h, el.mat, rng, "mesh_rows" if mode == "rows" else "mesh" if mode else "mesh_flat")
+            _paint(img, u, v, w, h, el.mat, rng, "mesh_rows" if mode == "rows" else "mesh" if mode else "mesh_flat",
+                   deferred=SHADE)
             uvs[(bi, ci, f[1])] = (u, v, f[2], f[3])
             continue
-        _paint(img, u, v, w, h, el.mat, rng, f)
+        _paint(img, u, v, w, h, el.mat, rng, f, deferred=SHADE)
         uvs[(bi, ci, f)] = (u, v, w, h)
 
     geo_bones = []
@@ -894,7 +905,11 @@ def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
                             for f in c.faces for (u, v, w, h) in [uvs[(bi, ci, f)]]}
                 jb["cubes"].append(jc)
         geo_bones.append(jb)
-    return geo_bones, Image.fromarray(img, "RGBA"), size
+    tex = Image.fromarray(img, "RGBA")
+    if SHADE:
+        import texbake
+        tex = texbake.finish(geo_bones, tex, mat_map, mats, seed)
+    return geo_bones, tex, size
 
 
 def _poly_mesh(meshes, bi, uvs, density, size):
@@ -999,8 +1014,9 @@ def _value_noise(nr: np.random.Generator, h: int, w: int, cell: int) -> np.ndarr
     return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
 
 
-def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
+def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str, deferred=False):
     """面 1 枚の矩形を塗る。下塗り色 × (細かいゆらぎ × 汚れのむら × 傷 × 縁 × 縞 × 点)。
+    deferred=True なら汚れのむら・擦れ・角の擦れ・埃は塗らない（texbake が 3D の位置で塗る）。
     面ごとの縁取り（edge）は「分解できない場所にも継ぎ目が入る」ため、材質の既定では使わない
     （部品の継ぎ目は形状そのものの段差と陰影で見せる）。"""
     base = np.array(mat.color, dtype=np.float32)
@@ -1008,7 +1024,7 @@ def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
     k = np.ones((h, w), dtype=np.float32)
     if mat.noise:
         k *= 1.0 + nr.uniform(-1, 1, (h, w)) * mat.noise
-    if mat.grime and w >= 4 and h >= 4:
+    if mat.grime and w >= 4 and h >= 4 and not deferred:
         # 大小 2 つの周期を重ねる（大きなむら＋小さな染み）。暗い側へ寄せて「汚れ」にする
         n = 0.7 * _value_noise(nr, h, w, max(4, min(w, h) // 3)) + 0.3 * _value_noise(nr, h, w, 3)
         k *= 1.0 - mat.grime * (0.6 + 0.4 * n) * (n > -0.2)
@@ -1034,18 +1050,18 @@ def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
         m = (xx % mat.dots == mat.dots // 2) & (yy % mat.dots == mat.dots // 2) & (xx > 0) & (xx < w - 1) & (yy > 0) & (yy < h - 1)
         k[m] *= 0.25
     c = base[None, None, :] * k[:, :, None]
-    if mat.wear and w >= 4 and h >= 4:
+    if mat.wear and w >= 4 and h >= 4 and not deferred:
         n = 0.6 * _value_noise(nr, h, w, max(3, min(w, h) // 4)) + 0.4 * _value_noise(nr, h, w, 2)
         m = np.clip((n - (1.0 - 1.6 * mat.wear)) * 2.5, 0, 1) * 0.75          # 擦れた斑（明るい下地が覗く）
         c = c * (1 - m[:, :, None]) + np.array(mat.wear_color, np.float32)[None, None, :] * k[:, :, None] * m[:, :, None]
-    if mat.edge_wear and face == "mesh_rows" and h >= 3 and w >= 3:
+    if mat.edge_wear and face == "mesh_rows" and h >= 3 and w >= 3 and not deferred:
         e = np.zeros((h, w), np.float32)
         brk = _value_noise(nr, 2, w, 2)                                      # 縁に沿って途切れさせる（線にしない）
         e[0, :] = np.clip(brk[0] * 1.5 + 0.2, 0, 1)
         e[h - 1, :] = np.clip(brk[1] * 1.5 + 0.2, 0, 1)
         e *= mat.edge_wear
         c = c * (1 - e[:, :, None]) + np.array(mat.wear_color, np.float32)[None, None, :] * 1.15 * e[:, :, None]
-    if mat.dust and w >= 4 and h >= 4:
+    if mat.dust and w >= 4 and h >= 4 and not deferred:
         n = _value_noise(nr, h, w, max(3, min(w, h) // 3))
         m = np.clip(n * 0.8 + 0.25, 0, 1) * mat.dust                         # 白っぽく濁ったむら
         c = c * (1 - m[:, :, None]) + np.array(mat.dust_color, np.float32)[None, None, :] * m[:, :, None]

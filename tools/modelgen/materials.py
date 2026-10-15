@@ -135,19 +135,20 @@ PX_BRASS = Material("px_brass", (200, 158, 70))
 PX_COPPER = Material("px_copper", (190, 112, 70))
 
 
-# --- ゲーム内の見え方への補正（作者の実機確認: 「テクスチャが暗い・まだら」）。
-# 黒い仕上げの下塗り色（28〜48）はゲームの光でほぼ真っ黒になり、形が読めなかった。また、黒い下地に明るい「塗装の擦れの斑」
-# （wear）・埃（dust）・汚れのむら（grime）を散らすと、色の差が大きくて斑点に見えた。暗い材質を持ち上げ、斑・むらは弱め、
-# 角の擦れ（edge_wear。部品の輪郭が読める）だけ残す。銃口・穴の奥（BORE）と刻印の色は変えない。
+# --- ゲーム内の見え方への補正（作者の実機確認: 「テクスチャが暗い・まだら」「全体的にテクスチャが気になる」）。
+# 黒い仕上げの下塗り色（28〜48）はゲームの光でほぼ真っ黒になり、形が読めなかった。暗い材質は持ち上げる（texbake が
+# 隙間を暗く焼き込むので、平らな面はやや明るめでよい）。面の中の明暗は、1 テクセルごとのゆらぎ・傷・擦れの斑のような
+# 「形と関係ない模様」を弱め、texbake の「形から決まる陰影」（隙間の遮蔽・角の明るさ）に任せる。8 テクセル/px では
+# 1 テクセルが 3mm あり、テクセル単位の模様はゲーム内で砂のような斑点に見えた。銃口・穴の奥（BORE）と刻印の色は変えない。
 def _game_ready(m):
     from dataclasses import replace
     if m.name in ("bore",) or m.name.startswith("mark_"):
         return m
     c = m.color
     if max(c) < 75:                                   # 黒・暗い灰の仕上げ
-        c = tuple(int(round(v * 0.7 + 26)) for v in c)
-    return replace(m, color=c, noise=m.noise * 0.8, grime=m.grime * 0.55, scratch=m.scratch * 0.7,
-                   wear=m.wear * 0.3, dust=m.dust * 0.35)
+        c = tuple(int(round(v * 0.75 + 34)) for v in c)
+    return replace(m, color=c, noise=m.noise * 0.45, grime=m.grime * 0.55, scratch=m.scratch * 0.35,
+                   wear=m.wear * 0.15, dust=m.dust * 0.35)
 
 
 for _n, _m in list(globals().items()):
