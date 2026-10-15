@@ -8,7 +8,10 @@ Bedrock Edition 形式（.geo.json）の銃モデルをスクリプトから生�
 - render() は BedrockGeometryLoader と同じ回転規則で描画するプレビュー（実機を見られない代わりの確認手段）
 - メッシュ（MeshPart）はボーンの poly_mesh として出力する。形式は Blockbench の Meshy プラグイン
   （Shadowkitten47/Meshy）の書き出しに合わせる: positions は銃全体の共通座標（キューブの origin と同じ座標系）、
-  normalized_uvs=true、UV の V は下端基準（1 - v）、polys は 4 頂点（三角形は先頭頂点を 4 つ目に重ねる）
+  UV はテクスチャ上の画素の座標で V は上端基準（normalized_uvs=false。Cordite のローダーと、ゲーム内で確認済みの防具の
+  生成ツールに合わせた。以前は Meshy の書き方の 0〜1・下端基準だったが、ローダーは V を反転しないのでメッシュが
+  上下逆の透明な所を拾って消えていた）、polys は 4 頂点（三角形は先頭頂点を 4 つ目に重ねる）。
+  法線は部品ごとに外向きにそろえる（_outward_sign）
 """
 from __future__ import annotations
 
@@ -895,7 +898,7 @@ def bake(model: Model, density: float, seed: int = 1, max_size: int = 1024):
 
 
 def _poly_mesh(meshes, bi, uvs, density, size):
-    pm = {"normalized_uvs": True, "positions": [], "normals": [], "uvs": [], "polys": []}
+    pm = {"normalized_uvs": False, "positions": [], "normals": [], "uvs": [], "polys": []}
     nmap, umap = {}, {}
 
     def idx(table, key, val):
@@ -907,26 +910,64 @@ def _poly_mesh(meshes, bi, uvs, density, size):
     for ci, m in meshes:
         base = len(pm["positions"])
         pm["positions"].extend([[_r(c) for c in v] for v in m.verts])
+        sign = _outward_sign(m)
         for fi, f in enumerate(m.faces):
             if m.normals is not None:
                 ns = m.normals[fi]
             else:
-                p = [np.array(m.verts[i]) for i in f]
-                n = np.cross(p[1] - p[0], p[2] - p[0])
-                n = n / (np.linalg.norm(n) + 1e-12)
-                ns = [tuple(n)] * len(f)
+                ns = [_newell(m.verts, f)] * len(f)
+            ns = [tuple(sign * c for c in nv) for nv in ns]
+            ns = [nv if sum(c * c for c in nv) > 1e-12 else _newell(m.verts, f) for nv in ns]   # 長さ 0 の法線を出さない
             u0, v0, s0, t0 = uvs[(bi, ci, m.charts[fi])]
             poly = []
             for k, vi in enumerate(f):
                 nn = tuple(round(float(c), 4) + 0.0 for c in ns[k])
                 s, t = m.chart_uv[fi][k]
-                uv = (round((u0 + (s - s0) * density) / size, 5),
-                      round(1 - (v0 + (t - t0) * density) / size, 5))
+                uv = (round(u0 + (s - s0) * density, 4), round(v0 + (t - t0) * density, 4))   # 画素・上端基準
                 poly.append([base + vi, idx(nmap, nn, ("normals", list(nn))), idx(umap, uv, ("uvs", list(uv)))])
             while len(poly) < 4:
                 poly.append(poly[0])
             pm["polys"].append(poly)
     return pm
+
+
+def _newell(verts, f):
+    """多角形の法線（Newell の方法。先頭の 3 頂点が一直線に並んでいても求まる）。巻き方向の外積と同じ向き。
+    面積が 0 なら (0, 1, 0)。"""
+    n = np.zeros(3)
+    for k in range(len(f)):
+        a, b = np.array(verts[f[k]], dtype=float), np.array(verts[f[(k + 1) % len(f)]], dtype=float)
+        n += np.array([(a[1] - b[1]) * (a[2] + b[2]), (a[2] - b[2]) * (a[0] + b[0]), (a[0] - b[0]) * (a[1] + b[1])])
+    ln = np.linalg.norm(n)
+    return tuple(n / ln) if ln > 1e-12 else (0.0, 1.0, 0.0)
+
+
+def _outward_sign(m):
+    """部品の法線を外向きにそろえるための符号（+1 / -1）。押し出し系は巻き方向の外積が内向きの決まり
+    （ローダーが X 反転で巻き順を戻すため）なので、面法線をそのまま書くと内向きになり、ゲーム内では光の当たり方が逆に
+    なる（上面が暗い）。法線の向きで測った体積 Σ 面積×(重心−部品の中心)·法線 が負なら、その部品の法線を全部反転する。
+    回転体のように最初から外向きの法線を持つ部品は +1 のまま。平らな 1 枚の板などで体積がほぼ 0 なら変えない。"""
+    V = np.array(m.verts, dtype=float)
+    if len(V) == 0:
+        return 1.0
+    ctr = V.mean(0)
+    vol, scale = 0.0, 0.0
+    for fi, f in enumerate(m.faces):
+        p = V[f]
+        for k in range(1, len(f) - 1):
+            cr = np.cross(p[k] - p[0], p[k + 1] - p[0])
+            area = 0.5 * np.linalg.norm(cr)
+            if area < 1e-12:
+                continue
+            if m.normals is not None:
+                n = np.array(m.normals[fi][0], dtype=float)
+                n = n / (np.linalg.norm(n) + 1e-12)
+            else:
+                n = cr / (2 * area)
+            c = (p[0] + p[k] + p[k + 1]) / 3 - ctr
+            vol += area * float(c @ n)
+            scale += area * float(np.linalg.norm(c))
+    return -1.0 if vol < -1e-3 * max(scale, 1e-9) else 1.0
 
 
 def _shelf_pack(items, size):
@@ -1119,7 +1160,8 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
                 uvl = []
                 for c in uniq:
                     u, v = pm["uvs"][c[2]]
-                    uvl.append((u, 1 - v) if pm.get("normalized_uvs") else (u / tw, 1 - v / th))
+                    # Bedrock の 0〜1 の UV は下端基準、画素の UV は上端基準
+                    uvl.append((u, 1 - v) if pm.get("normalized_uvs") else (u / tw, v / th))
                 pts = place(pts)
                 nrm = None
                 if smooth and pm.get("normals"):
