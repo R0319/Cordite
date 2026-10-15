@@ -58,7 +58,8 @@ LEAF_PIVOT = (-232.0, 116.0)   # 照尺の枠の軸（Z, Y）。写真で枠の�
 LEAF_W = 40.0               # 枠の幅（FM 23-31 図 9-7 の枠の縦横比 0.34 × 写真の枠の高さ 118mm）
 LEAF_TOP = 241.0            # 起こしたときの枠の上の端（写真）
 CARRIER_Y = (199.0, 206.0)  # 照門の台（写真の位置。昇降ねじで上下する）
-LEAF_FOLD_DEG = -90.0       # 既定の姿勢（前へ倒す）。起こすとき rear_sight を +90°
+LEAF_FOLD_DEG = -90.0       # 既定の姿勢（前へ倒す）。起こすとき rear_sight を -90°（+90 だと銃身へ潜る）
+SCREW_R, SCREW_GAP = 1.25, -0.3             # 昇降ねじ: 太さ 2.5mm の丸棒、左の縦棒との隙間（負は食い込み。隙間が空くと二重線に見える。作者「この線はなに？」）
 BASE_Z = (-248.0, -224.0)   # 照尺の台（左右調整の台）の前後
 BASE_Y = (105.0, 124.0)
 FIXED_NOTCH_Y = 127.0       # 台の固定照門の切り欠きの底（照尺を倒したときの照準線）
@@ -234,10 +235,10 @@ def leaf_sight():
     out.append(_bar(-w, w, LEAF_TOP - 6.0, LEAF_TOP, zf, zr))                 # 上の横棒
     out.append(_bar(-w, w, py - 4.0, py + 4.0, zf + 1.0, zr - 1.0))            # 下の横棒（軸）
     out.append(x_cyl(pz, py, 2.5, -w - 1.0, w + 1.0, BLUED, n=8))             # 軸のピン
-    out.append(_bar(w - 9.0, w - 6.5, py + 4.0, LEAF_TOP - 6.0, pz - 1.2, pz + 1.2))   # 昇降ねじ（左の縦棒の内側）
-    out.append(lathe(w - 7.75, pz, [(LEAF_TOP - 1.0, 0.5), (LEAF_TOP - 1.0, 5.0), (LEAF_TOP + 4.0, 5.0),
-                                    (LEAF_TOP + 4.0, 0.5)], 12, BLUED))        # 上の歯車（Y 方向の軸）
-    out[-1] = _swap_yz(out[-1])
+    sx = w - 4.5 - SCREW_GAP - SCREW_R       # 昇降ねじの中心（左の縦棒の内側に沿わせる。離すと正体不明の線に見える）
+    out.append(_swap_yz(lathe(sx, pz, [(py + 4.0, SCREW_R), (LEAF_TOP - 6.0, SCREW_R)], 8, BLUED)))  # 昇降ねじ（丸棒）
+    out.append(_swap_yz(lathe(sx, pz, [(LEAF_TOP - 1.0, 0.5), (LEAF_TOP - 1.0, 5.0), (LEAF_TOP + 4.0, 5.0),
+                                       (LEAF_TOP + 4.0, 0.5)], 12, BLUED)))     # 上の歯車（Y 方向の軸）
     cy0, cy1 = CARRIER_Y
     out.append(_bar(-w + 4.5, w - 4.5, cy0, cy1, zf - 1.0, zr + 1.0))          # 照門の台
     out.append(_bar(-3.0, 3.0, cy1, cy1 + 4.0, pz - 1.5, pz + 1.5))            # 照門（穴の開いた小さな板）
