@@ -267,10 +267,43 @@ def muzzle():
                   cap0=False, cap1=False)]
 
 
+# ガスチューブ（実物の写真で確認: 米国防総省「AK-47 type II Part DM-ST-89-01131.jpg」、2.55px/mm）。
+# 図面のトレース GAS は銃身の上に載った 1 枚の板だったが、実物はガスブロックより後ろで銃身から離れた丸い管で、
+# 管と銃身の間に背景が抜ける。管の後ろの端には上ハンドガードの前端を包む金具（カップ）、その前に細長い穴が 4 つ
+GAS_BLOCK_REAR_Z = -384.0                  # ガスブロック（図面の斜めの部分）の後ろの端。これより後ろは管
+GAS_TUBE_Y, GAS_TUBE_R = 157.6, 9.4        # 管の中心の高さ・半径（写真: 太さ 18.8mm、銃身との隙間 6.7mm）
+GAS_COLLAR_Z = (-412.0, -388.0)            # ガスブロックの銃身を抱く輪の前後（図面のブロックの前端〜斜めの部分の下）
+GAS_COLLAR_R = 11.5                        # 輪の半径（銃身の半径 8.5mm より 3mm 太い。写真で銃身より一回り太い）
+GAS_TUBE_REAR_Z = -296.0                   # 管の後ろの端（上ハンドガードの中に隠れる）
+GAS_CUP = (-328.0, -310.0, 11.2)           # 金具（Z の前・後ろ、半径）。後ろの 2mm は木の前端（Z -312、丸く絞られている）に被さる
+GAS_VENTS = [-356.0, -348.0, -340.0, -332.5]   # 側面の細長い穴の中心 Z（写真。長さ 5.5mm・幅 2.2mm）
+
+
 def gas():
-    """ガスチューブ〜ガスブロック（図面の側面形。断面は丸める）と、ガスブロックの下の突起。"""
-    return [extrude_x_beveled(O.GAS["outer"], -HALF_GAS, HALF_GAS, 9.0, STEEL_BLACK, steps=3),
-            *outline_parts(O.GAS_LUG, -7.0, 7.0, STEEL_BLACK, bevel=2.0)]
+    """ガスブロック（図面の側面形の前の部分。断面は丸める）・その下の突起と、後ろへ延びる丸いガスチューブ・
+    上ハンドガードの前端を包む金具・チューブ側面の穴。"""
+    from shapely.geometry import Polygon, box as sbox
+    blk = Polygon(O.GAS["outer"]).intersection(sbox(-500.0, 0.0, GAS_BLOCK_REAR_Z, 300.0))
+    out = [extrude_x_beveled(list(blk.exterior.coords)[:-1], -HALF_GAS, HALF_GAS, 6.0, STEEL_BLACK, steps=3),   # 丸め 6mm（短く切ったので 9mm だと潰れる）
+           *outline_parts(O.GAS_LUG, -7.0, 7.0, STEEL_BLACK, bevel=2.0)]
+    # ガスブロックの下の輪（銃身を抱く。銃身の穴 → ブロック → 管とガスが通るので、横から見て銃身と管の間がつながる）
+    c0, c1 = GAS_COLLAR_Z
+    out.append(lathe(0, BORE_Y, [(c0, GAS_COLLAR_R), (c1, GAS_COLLAR_R)], ar15_mesh.N_MID, STEEL_BLACK))
+    y, r = GAS_TUBE_Y, GAS_TUBE_R
+    out.append(lathe(0, y, [(GAS_BLOCK_REAR_Z - 3.0, r), (GAS_TUBE_REAR_Z, r)], ar15_mesh.N_MID, STEEL_BLACK))
+    z0, z1, rc = GAS_CUP
+    out.append(lathe(0, y, [(z0, r + 0.2), (z0 + 1.5, rc), (z1, rc), (z1, r + 0.2)], ar15_mesh.N_MID, STEEL_BLACK))
+    # 金具の下は下ハンドガードの上の縁（Y 145）まで延ばす（写真では下ハンドガードの前の金具に載っていて隙間が無い）
+    out.append(box(-(rc - 1.5), 144.0, z0 + 1.5, rc - 1.5, y, z1, STEEL_BLACK))
+    for z in GAS_VENTS:                    # 穴（暗い長円の板を左右の面に。管の中心より 3mm 上）
+        ts = [math.pi * (k / 6 - 0.5) for k in range(7)]          # -90°〜90°
+        hole = ([(z + 1.65 + 1.1 * math.cos(t), y + 3.0 + 1.1 * math.sin(t)) for t in ts] +     # 前後の半円
+                [(z - 1.65 - 1.1 * math.cos(t), y + 3.0 - 1.1 * math.sin(t)) for t in ts])
+        xs = math.sqrt(r * r - 3.0 * 3.0)
+        for sg in (1, -1):
+            xa, xb = sorted((sg * (xs - 0.6), sg * (xs + 0.15)))
+            out.append(extrude_x(hole, xa, xb, M.BORE))
+    return out
 
 
 def cleaning_rod():
