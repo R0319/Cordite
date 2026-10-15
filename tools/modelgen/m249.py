@@ -140,6 +140,24 @@ def arc_ring(cx, cy, z0, z1, r_in, r_out, a0, a1, mat, n=10):
     return MeshPart(verts, faces, mat).finalize()
 
 
+def slotted_flash_hider(cy, z_front, z_rear, r_out, r_in, z_slot, slot_angles, slot_deg, mat, ribs=(), n_ring=None):
+    """溝付きの消炎器（G3・HK416 など）: 後ろの筒・前の縁の輪の間を、溝（貫通。中の暗い穴が見える）を残した棒でつなぐ。
+    z_front < z_slot[0] < z_slot[1] < z_rear（銃口が -Z）。slot_angles は溝の中心の向き [度]（0 が +X＝左、90 が上）、
+    slot_deg は溝の幅 [度]。ribs=((z0, z1, 出っ張り), ...) は後ろの筒の周りの帯。"""
+    s0, s1 = z_slot
+    n = n_ring or ar15_mesh.N_MID
+    out = [ring_z(cy, z_front, s0, r_in, r_out, mat, n=n), ring_z(cy, s1, z_rear, r_in, r_out, mat, n=n)]
+    cuts = sorted(a % 360.0 for a in slot_angles)
+    for i, a in enumerate(cuts):                       # 溝と溝の間の棒（部分的な輪）
+        b0 = a + slot_deg / 2
+        b1 = cuts[(i + 1) % len(cuts)] - slot_deg / 2 + (360.0 if i == len(cuts) - 1 else 0.0)
+        out.append(arc_ring(0.0, cy, s0, s1, r_in, r_out, b0, b1, mat, n=max(2, int((b1 - b0) / 15))))
+    out.append(lathe(0.0, cy, [(z_front + 1.0, r_in - 0.3), (z_rear, r_in - 0.3)], n, M.BORE, cap0=True, cap1=False))
+    for z0, z1, h in ribs:
+        out.append(lathe(0.0, cy, [(z0, r_out + h), (z1, r_out + h)], n, mat))
+    return out
+
+
 def cartridge(x, y, z_tip, n=None):
     """5.56×45mm 実包（回転体）: 縁・抽筒溝・テーパーの胴・肩・首、弾頭は先細り。全長 57.4mm、薬莢 44.7mm。
     n は周の分割数（既定 N_SMALL）。"""

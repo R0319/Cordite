@@ -18,6 +18,9 @@ python3 build.py m4a1_parts   # 1方式だけ
 | `ar15_mesh.py` | 上のメッシュ版。丸・曲線の部品だけ `poly_mesh`（Meshy プラグイン互換）へ置き換え |
 | `score.py` | 作成後の自動採点（要確認の候補を出す。合否ではない）: 写真の影絵との一致率と輪郭のずれ（`--photo`）、6 方向の影絵で部品の間に背景が細く抜けている所、放射状の浅い折れ目（筋）、面の数、ボーン。`--pose` で可動部を動かした姿勢でも見る。`python3 score.py m79_mesh --photo <写真> --pose rear_sight:-90:0:0 --img-dir <出力先>` / `python3 score.py --all` |
 | `inspect_views.py` | 確認用描画: 6 方向の一覧、真横写真への輪郭の重ね合わせ（写真と重ねた画像はリポジトリに入れない） |
+| `m2.py` / `trace_m2.py` / `m3_tripod.py` | M2 重機関銃（教範の写真をトレース）と M3 三脚（銃と同じ座標） |
+| `g3a3.py` / `trace_g3.py` | G3A3（作者提供の真横写真をトレース。MP5 と同じ作りの受け部・照準器） |
+| `hk416.py` / `trace_hk416.py` | HK416 D14.5RS（作者提供の三面図の線画を影絵にしてトレース。AR-15 と同じ規格の部品は `ar15_mesh` を `HKLayout` で流用） |
 | `sights.py` | 照準器の共通部品（誇張の目安・穴の抜けた照門・デフォルトのアイアンサイト `iron_sight`） |
 | `rig.py` | コードが参照するロケーター・腕プレースホルダと、一人称の配置（トリガー基準の式）・腕の待機ポーズ（`<銃ID>.animation.json`） |
 | `m4a1_parts.py` | A: パーツ組立版 M4A1 |

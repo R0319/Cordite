@@ -44,11 +44,14 @@ ROI_MM = 25.0                       # 写真の影絵はモデルの外形から
 # 写真のトレースの設定（trace_<銃>.py の Silhouette の引数と同じにする）: (モジュール, 左右反転, 閾値, ぼかし)
 PHOTO = {
     "mp5_mesh": ("trace_mp5", False, 200, 0.6),
+    "g3a3_mesh": ("trace_g3", True, 225, 0.6),
+    "hk416_mesh": ("trace_hk416", False, 128, 0.5),       # --photo は trace_hk416.py が書き出した影絵
     "m24_mesh": ("trace_m24", False, 200, 0.6),
     "p90_mesh": ("trace_p90", False, 200, 0.6),
     "m1912_mesh": ("trace_m1912", False, 165, 1.0),
     "awm_mesh": ("trace_awm", True, 205, 0.8),        # 左側面の写真（a4）
     "m79_mesh": ("trace_m79", False, 200, 0.6),
+    "m2_mesh": ("trace_m2", False, 128, 0.8),         # trace_m2.py の第 2 引数で書き出した前処理済みの写真
 }
 CODE_BONES = ("muzzle_flash", "idle_view", "iron_view", "ammo", "right_hand", "left_hand")
 PART_BONES = ("receiver", "trigger", "magazin", "mag_ammo", "bolt", "charging_handle", "selector", "mag_release")
