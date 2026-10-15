@@ -37,7 +37,7 @@ HALF_GRIP = 15.0
 HALF_GUARD = 7.0
 HALF_MAG = 12.0         # 弾倉 24mm
 HALF_HG = 20.0          # ハンドガード（前 40mm → 後ろ 46mm に width_fn で広げる）
-HALF_BUTT = 24.0        # 床尾板 48mm
+HALF_BUTT = 15.5        # 床尾板 31mm（作者提供の三面図の後面図で受け部との比を測った。以前の 48mm は後ろから見て板に見えた）
 ROD_X = 13.0            # ストックの棒の中心の左右位置（左右 2 本）
 ROD_HALF = 4.5
 
