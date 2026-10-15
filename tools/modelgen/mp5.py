@@ -12,7 +12,7 @@ import math
 import ar15_mesh
 import materials as M
 import mp5_outline as O
-from ak47 import _clip, _split_lr, _yr, _zr
+from ak47 import _clip, _yr, _zr
 from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe
 from m249 import outline_parts, rotated, x_cyl, y_cyl
 from rig import add_locators
@@ -21,6 +21,7 @@ import ar15_parts
 K = 1.0 / ar15_parts.MM_PER_PX
 STEEL_BLACK = M.STEEL_DARK
 POLY = M.POLYMER
+RCV_MAT = M.MP5_RECEIVER   # 受け部・チューブ（写真では樹脂部品とほとんど同じ黒っぽい色）
 
 BORE_Y = 153.5          # 銃身の軸（写真の銃口の上下の中点）
 SIGHT_Y = 205.0         # 照準線（照星のポストの先端＝フードのリングの中心の少し下）
@@ -31,7 +32,6 @@ FRONT_POST_Z = -285.0   # 照星のポスト（リングの中心）
 
 # 左右の半幅
 HALF_RECEIVER = 17.0    # 受け部 34mm
-RECEIVER_BEVEL = 4.5    # 受け部の角の丸め（排莢口の上の帯 約 10mm に収まる大きさ）
 HALF_HOUSING = 16.0     # トリガーハウジング（樹脂）32mm
 HALF_GRIP = 15.0
 HALF_GUARD = 7.0
@@ -50,28 +50,89 @@ STOCK_TRAVEL = 120.0    # ストックを縮めたときの前進量（HK 公表
 
 
 # ---------------------------------------------------------------- 受け部
+def extrude_z(section, z0, z1, mat):
+    """断面 section=[(x, y), ...]（単純多角形）を Z 方向 z0〜z1 に押し出す（extrude_x の向き違い）。
+    面の向きの決まりは extrude_x と同じ（外積が内向き）。"""
+    from core import MeshPart, _area2, _triangulate
+    pts = list(section)
+    if _area2(pts) < 0:
+        pts.reverse()
+    n = len(pts)
+    verts = [(x, y, z0) for x, y in pts] + [(x, y, z1) for x, y in pts]
+    faces, charts, cuv = [], [], []
+    s_ = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        seg = math.dist(pts[i], pts[j])
+        faces.append([i, n + i, n + j, j])
+        charts.append(0)
+        cuv.append([(s_, 0), (s_, z1 - z0), (s_ + seg, z1 - z0), (s_ + seg, 0)])
+        s_ += seg
+    for tri in _triangulate(pts):
+        faces.append(list(tri))
+        charts.append(None)
+        cuv.append(None)
+        faces.append([n + tri[0], n + tri[2], n + tri[1]])
+        charts.append(None)
+        cuv.append(None)
+    return MeshPart(verts, faces, mat, None, charts, cuv, {0: "rows"}).finalize()
+
+
+RCV_BOTTOM = 130.0       # 受け部の断面の下端（トリガーハウジング・ハンドガードの中に隠れる）
+RCV_TOP_R = 15.0         # 上の角の丸み（実物の断面は上がほぼ半円。作者の指摘「角張ったところは弾倉ぐらい」）
+RCV_GROOVE = (142.5, 156.5, 1.8)   # 側面の長い溝（上下の範囲・深さ。写真の暗い帯 Y 140〜160）
+RCV_GROOVE_Z = (-80.0, 77.0)       # 溝のある前後の範囲（写真）
+
+
+def _rcv_section(groove=True, port=False):
+    """受け部の断面（X, Y）。上の角を RCV_TOP_R で丸め、側面に溝、port=True で右側面に排莢口の窓の切り欠き。"""
+    h, top, r = HALF_RECEIVER, _yr(O.RECEIVER)[1], RCV_TOP_R
+    g0, g1, gd = RCV_GROOVE
+    yc = top - r
+
+    def arc(cx, a0, a1, n=9):
+        return [(cx + r * math.cos(math.radians(a0 + (a1 - a0) * k / n)),
+                 yc + r * math.sin(math.radians(a0 + (a1 - a0) * k / n))) for k in range(n + 1)]
+
+    def side(sgn, upward):
+        pts = [(sgn * h, RCV_BOTTOM), (sgn * h, g0 - 1.5)]
+        if groove:
+            pts += [(sgn * (h - gd), g0), (sgn * (h - gd), g1), (sgn * h, g1 + 1.5)]
+        pts.append((sgn * h, yc))
+        return pts if upward else pts[::-1]
+
+    left = side(1, True) + arc(h - r, 0.0, 90.0)
+    if not port:
+        right = arc(-(h - r), 90.0, 180.0) + side(-1, False)
+    else:
+        py0, py1 = PORT_Y
+        a_cut = math.degrees(math.asin((py1 - yc) / r))           # 排莢口の上の縁で丸みを切る角度
+        right = arc(-(h - r), 90.0, 180.0 - a_cut, 7)
+        right += [(0.0, py1), (0.0, py0), (-h, py0)]
+        right += [p for p in side(-1, False) if p[1] < py0]
+    pts = []
+    for p in left + right:                          # 側面の端と丸みの端が同じ点になるので、重なりを除く
+        if not pts or math.dist(pts[-1], p) > 1e-6:
+            pts.append(p)
+    if math.dist(pts[0], pts[-1]) <= 1e-6:
+        pts.pop()
+    return pts
+
+
 def receiver():
-    """受け部（板金の筒。上の角を大きく丸める）。右側面に排莢口（奥は暗い面、間をボルトが動く）。"""
+    """受け部（板金の筒）。断面（上が丸く、側面に長い溝）を前後に押し出して作る。右側面の排莢口は、その区間だけ
+    窓を切り欠いた断面にする（前後の区間の端面が窓の前後の壁になる）。奥は暗い面、間をボルトが動く。"""
     h = HALF_RECEIVER
-    bev = RECEIVER_BEVEL
-    # 上の角を丸める（実物の断面は上が丸い）。丸めは全周に掛かるので、下の縁はトリガーハウジング・
-    # ハンドガードの中へ差し込み、下の角の丸めが継ぎ目の溝として見えないようにする
-    y_bottom, y_top = _yr(O.RECEIVER)
-    outer = [(z, y - bev - 1.0 if y <= y_bottom + 0.5 else y) for z, y in O.RECEIVER["outer"]]
-    # 排莢口は側面の途中の窓（上の縁につながらない）。押し出しの輪郭は穴を持てないので、右半分は窓を上の縁まで
-    # 切り欠き、窓の上に細い帯（前後に丸めの幅だけ重ね、上面を 0.25mm・側面を 0.1mm 下げて重なりの面のちらつきを防ぐ）を載せる
+    z_front, z_rear = _zr(O.RECEIVER)
     pz0, pz1 = PORT_Z
-    out = _split_lr(outer, [(pz0, PORT_Y[0], pz1, 400.0)], h, bev, M.RECEIVER, 3)
-    cap = _clip(outer, pz0 - bev - 0.5, PORT_Y[1], pz1 + bev + 0.5, y_top - 0.25)
-    out += [extrude_x_beveled(p, -h + 0.1, 0.0, bev, M.RECEIVER, steps=3, round1=False) for p in cap]   # 側面も 0.1mm 内側
-    out.append(box(-0.3, PORT_Y[0] - 0.3, PORT_Z[0], 9.0, PORT_Y[1] + 0.3, PORT_Z[1], M.BORE))   # 排莢口の奥
-    # 右側面の長い押し出しの段（写真の暗い帯 Y 140〜160。浅い溝を暗い帯で表す）: 両側面
-    for s in (1, -1):
-        xa, xb = sorted((s * (h - 0.2), s * (h + 0.15)))
-        out.append(box(xa, 141.0, -80.0, xb, 158.0, 77.0, STEEL_BLACK))
-    # 後端キャップ＋ストックの受けと止め金
-    out += outline_parts(O.STOCK_LATCH, -h + 1.0, h - 1.0, M.RECEIVER, bevel=1.5)
-    # 照門の台を載せる爪（上面の前後 2 か所の小さな突起。写真）は省略し、上面に照門・照星の台座だけ置く
+    gz0, gz1 = RCV_GROOVE_Z
+    out = [extrude_z(_rcv_section(groove=False), z_front, pz0, RCV_MAT),
+           extrude_z(_rcv_section(groove=True, port=True), pz0, pz1, RCV_MAT),
+           extrude_z(_rcv_section(groove=True), pz1, gz1, RCV_MAT),
+           extrude_z(_rcv_section(groove=False), gz1, z_rear, RCV_MAT)]
+    out.append(box(-0.3, PORT_Y[0] - 0.3, pz0, 9.0, PORT_Y[1] + 0.3, pz1, M.BORE))   # 排莢口の奥
+    # 後端キャップ＋ストックの受けと止め金（丸みのある樹脂・金属。角を大きく丸める）
+    out += outline_parts(O.STOCK_LATCH, -h + 1.0, h - 1.0, RCV_MAT, bevel=5.0, steps=3)
     return out
 
 
@@ -80,7 +141,7 @@ def cocking_tube():
     zs = [p[0] for p in O.COCKING_TUBE["outer"]]
     z0, z1 = min(zs), max(zs)
     yc, r = 183.6, 7.6
-    out = [lathe(0, yc, [(z0, r), (z1 + 4.0, r)], ar15_mesh.N_MID, M.RECEIVER)]
+    out = [lathe(0, yc, [(z0, r), (z1 + 4.0, r)], ar15_mesh.N_MID, RCV_MAT)]
     out.append(box(r - 1.5, yc - 1.8, CH_SLOT_Z[0], r + 0.2, yc + 1.8, CH_SLOT_Z[1], M.BORE))   # 溝（左）
     return out
 
@@ -102,7 +163,7 @@ def rear_sight():
     """照門（作者提供の写真）: 受け部の上面にねじで留めた台と、その上の回転ドラム（ローレット刻み。
     穴の大きさの違う照門が周りに並ぶ）。ドラムは軸が後ろへ傾いている（写真の側面でも傾いた形）。"""
     base = _clip(O.REAR_SIGHT["outer"], 0.0, 0.0, 200.0, 200.0)
-    out = [extrude_x_beveled(p, -9.0, 9.0, 1.0, STEEL_BLACK, steps=1) for p in base]
+    out = [extrude_x_beveled(p, -9.0, 9.0, 2.5, STEEL_BLACK, steps=2) for p in base]
     out.append(x_cyl(66.0, 196.0, 2.2, -9.6, 9.6, M.STEEL, n=8))        # 台の十字ねじ（写真）
     drum = [y_cyl(0.0, REAR_SIGHT_Z, 9.0, 197.0, 210.0, STEEL_BLACK, n=14),
             lathe(0.0, 204.0, [(REAR_SIGHT_Z + 8.6, 1.6), (REAR_SIGHT_Z + 9.3, 1.6)], 8, M.BORE)]   # 後ろ向きの照門の穴
@@ -114,7 +175,7 @@ def front_sight():
     """照星（作者提供の写真）: 銃身を抱く台・塔・その上のリングのフード（銃身の向きに貫く輪）・中のポスト・
     左側面の丸いドラム（ポストの上下調整）。台・塔の側面形はトレース。"""
     o = O.FRONT_SIGHT["outer"]
-    out = [extrude_x_beveled(p, -11.0, 11.0, 2.0, STEEL_BLACK, steps=1) for p in _clip(o, -400.0, 0.0, 0.0, 196.0)]
+    out = [extrude_x_beveled(p, -11.0, 11.0, 4.5, STEEL_BLACK, steps=2) for p in _clip(o, -400.0, 0.0, 0.0, 196.0)]
     zc, yc = FRONT_POST_Z, 208.0
     out.append(lathe(0.0, yc, [(zc - 3.5, 12.0), (zc + 3.5, 12.0)], 16, STEEL_BLACK, cap0=False, cap1=False))   # リング外側
     out.append(lathe(0.0, yc, [(zc + 3.5, 8.6), (zc - 3.5, 8.6)], 16, STEEL_BLACK, cap0=False, cap1=False))     # 内側
@@ -157,21 +218,23 @@ def handguard():
         return 1.0 + 0.15 * (z - z0) / (z1 - z0)         # 前 40mm → 後ろ 46mm
 
     def radius(nz, ny):
-        if ny > 0.6 or abs(nz) > 0.6:
-            return 1.5
-        return 14.0 if ny < -0.4 else 5.0
+        if abs(nz) > 0.6:
+            return 1.5                     # 前後の端面（受け部・照星に付く）
+        if ny > 0.6:
+            return 7.0                     # 上の縁もチューブの両脇で丸める（写真）
+        return 14.0 if ny < -0.4 else 6.0
     return [inflate_x(O.HANDGUARD["outer"], HALF_HG, POLY, steps=4, width_fn=width, radius_fn=radius)]
 
 
 # ---------------------------------------------------------------- 下部（樹脂のハウジング）
 def lower_housing():
-    out = [extrude_x_beveled(O.LOWER_HOUSING["outer"], -HALF_HOUSING, HALF_HOUSING, 2.0, POLY, steps=2)]
+    out = [extrude_x_beveled(O.LOWER_HOUSING["outer"], -HALF_HOUSING, HALF_HOUSING, 6.0, POLY, steps=3)]
     # 押しピン（写真の丸）: 後ろ 1 本・前（弾倉口の後ろ）2 本、両側面
     for z, y, r in ((92.8, 127.4, 4.0), (-58.0, 116.0, 3.5), (-58.0, 98.0, 3.0)):
         for s in (1, -1):
             xa, xb = sorted((s * (HALF_HOUSING - 0.5), s * (HALF_HOUSING + 1.0)))
             out.append(x_cyl(z, y, r, xa, xb, STEEL_BLACK, n=10))
-    out += [extrude_x_beveled(p, -HALF_GUARD, HALF_GUARD, 1.0, POLY, steps=1)
+    out += [extrude_x_beveled(p, -HALF_GUARD, HALF_GUARD, 2.5, POLY, steps=2)
             for p in [O.TRIGGER_GUARD["outer"]]]
     return out
 
@@ -212,10 +275,10 @@ def stock():
     """伸縮ストック（ボーン stock。前へ STOCK_TRAVEL 動かすと縮む）: 左右 2 本の棒と床尾板（後ろの面に刻み）。"""
     out = []
     for s in (1, -1):
-        out += [extrude_x_beveled(p, s * ROD_X - ROD_HALF, s * ROD_X + ROD_HALF, 1.5, STEEL_BLACK, steps=1)
+        out += [extrude_x_beveled(p, s * ROD_X - ROD_HALF, s * ROD_X + ROD_HALF, 3.5, STEEL_BLACK, steps=2)
                 for p in [O.STOCK_RODS["outer"]]]
     # 床尾板は前後に薄い（下のほうで 15mm 程度）ので膨らませずに角を丸めて押し出す
-    out.append(extrude_x_beveled(O.STOCK_BUTT["outer"], -HALF_BUTT, HALF_BUTT, 5.0, POLY, steps=2))
+    out.append(extrude_x_beveled(O.STOCK_BUTT["outer"], -HALF_BUTT, HALF_BUTT, 8.0, POLY, steps=3))
     return out
 
 
