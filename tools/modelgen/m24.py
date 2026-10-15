@@ -166,17 +166,47 @@ def safety():
 
 
 # ---------------------------------------------------------------- 引き金まわり・弾倉
+# トリガーガードとトリガーの中心線と半幅 (Z, Y, r)。写真の暗い画素の幅を行ごと・列ごとに読んだ（半値幅）。
+# 銀色に光って薄くしか写らないガードの底は、灰色の帯の中心を読んだ。細すぎる所は見える太さとして半幅 1.0 以上にする。
+# ガードは後ろの脚が細く、前の脚はストックへ向けて末広がり（前の幅が広い Remington 700 のガード）。
+# 底は Y 25.6 でほぼ平ら、前の下の角の内側に弾倉の底板の留め金（ボーン mag_release）がある
+GUARD_PATH = [(5.6, 57.5, 3.4), (3.2, 53.0, 4.2), (3.4, 50.0, 2.4), (4.1, 46.0, 1.2), (4.4, 41.0, 1.2), (3.8, 36.0, 1.1),
+              (2.6, 33.5, 1.1), (0.8, 31.0, 1.1), (-2.0, 28.8, 1.1), (-5.5, 27.2, 1.1), (-9.5, 26.2, 1.2),
+              (-14.0, 25.8, 1.3), (-20.0, 25.6, 1.3), (-26.0, 25.9, 1.3), (-32.0, 26.5, 1.3), (-36.0, 27.5, 1.4),
+              (-40.0, 29.0, 1.6), (-44.0, 31.2, 1.8), (-47.0, 34.0, 2.0), (-49.0, 37.5, 2.1), (-50.3, 41.0, 2.2),
+              (-51.0, 45.0, 2.4), (-51.1, 48.0, 3.3), (-51.0, 50.5, 4.4), (-50.5, 53.0, 5.6), (-50.5, 57.5, 7.5)]
+# トリガーは根元（ストックの中）が太く、すぐ細い刃になって後ろへ膨らみ、先が前へ戻る
+TRIGGER_PATH = [(-10.5, 58.0, 2.6), (-8.8, 53.5, 2.0), (-6.5, 50.5, 1.2), (-4.7, 47.5, 1.0), (-3.7, 44.0, 1.0),
+                (-3.7, 40.5, 1.0), (-4.4, 37.5, 1.0), (-5.5, 35.5, 0.9)]
+FLOORPLATE_LATCH = (-41.0, 31.0)   # 留め金の中心（写真の暗い突起 Z -37.5〜-44、Y 28.5〜33.5）
+
+
+def _stroke(path, quad_segs=6):
+    """中心線 (Z, Y, 半幅) を、太さの変わる帯（側面形）にする。隣り合う 2 点の円の凸包をつなぐ。"""
+    from shapely.geometry import Point
+    from shapely.ops import unary_union
+    circles = [Point(z, y).buffer(r, quad_segs=quad_segs) for z, y, r in path]
+    g = unary_union([circles[i].union(circles[i + 1]).convex_hull for i in range(len(circles) - 1)])
+    return list(g.simplify(0.12).exterior.coords)[:-1]
+
+
 def trigger_guard():
-    """トリガーガード（写真では銀色に光って輪郭が途切れるので、写真から読んだ線を太さ 5mm の帯にする）。"""
-    from shapely.geometry import LineString
-    path = [(13.0, 58.0), (9.0, 38.0), (0.0, 28.0), (-38.0, 28.0), (-48.0, 38.0), (-52.0, 58.0)]
-    g = LineString(path).buffer(2.5, cap_style=2, join_style=1)
-    return [extrude_x_beveled(list(g.simplify(0.2).exterior.coords)[:-1], -5.0, 5.0, 1.0, STEEL_BLACK, steps=1)]
+    """トリガーガード（底の平らな輪。前の脚が末広がり）。写真では銀色に光って輪郭が途切れるので、
+    読んだ中心線と半幅の帯にする。以前は角張った台形で、写真の丸い輪と違っていた（作者の指摘「トリガーがおかしい」）。"""
+    return [extrude_x_beveled(_stroke(GUARD_PATH), -5.0, 5.0, 0.5, STEEL_BLACK, steps=1)]
+
+
+def floorplate_latch():
+    """弾倉の底板の留め金（ボーン mag_release。ガードの前の下の角の内側の突起。押すと底板が開く）。"""
+    z, y = FLOORPLATE_LATCH
+    return [extrude_x_beveled(_stroke([(z + 1.5, y, 2.4), (z - 1.5, y - 0.5, 2.4)]), -3.0, 3.0, 0.5, STEEL_BLACK,
+                              steps=1)]
 
 
 def trigger():
-    return [extrude_x_beveled([(4.0, 58.5), (-4.0, 58.5), (-3.0, 48.0), (-1.0, 40.0), (3.0, 34.0), (5.5, 35.0),
-                               (2.5, 42.0), (2.0, 50.0)], -3.0, 3.0, 0.8, STEEL_BLACK, steps=1)]
+    """トリガー（ストックの下から垂れる、細く湾曲した刃。写真: 根元 Z -10 から後ろへ膨らみ、先は前へ戻る）。
+    以前はほぼまっすぐの短い板だった。"""
+    return [extrude_x_beveled(_stroke(TRIGGER_PATH), -3.5, 3.5, 0.4, STEEL_BLACK, steps=1)]
 
 
 def floorplate():
@@ -223,6 +253,8 @@ def build():
     add("selector", "receiver", (-RCV_R + 2.0, 105.0, SAFETY_Z), "safety", safety())
     add("lower_receiver", "receiver", (0, 58.0, 0), "trigger_guard", trigger_guard())
     add("trigger", "root", (0, 58.0, 0), "trigger", trigger())
+    add("mag_release", "lower_receiver", (0, FLOORPLATE_LATCH[1], FLOORPLATE_LATCH[0] - 3.0), "floorplate_latch",
+        floorplate_latch())
     add("stock", "root", (0, b, 0), "stock", stock())
     add("butt", "stock", (0, 45.0, 276.0), "butt", butt())          # 床尾（長さ調整で前後させる）
 
