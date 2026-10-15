@@ -17,6 +17,7 @@ import mp5
 import m24
 import p90
 import m1912
+import awm
 
 OUT = Path(__file__).parent / "generated"
 VARIANTS = {
@@ -33,6 +34,7 @@ VARIANTS = {
     "m24_mesh": (m24.build, 8, "m24"),                                        # M24 SWS（M700 系）
     "p90_mesh": (p90.build, 8, "p90"),                                        # FN P90 TR
     "m1912_mesh": (m1912.build, 8, "m1912"),                                  # Winchester M1912 トレンチガン
+    "awm_mesh": (awm.build, 8, "awm"),                                        # Accuracy International AWM
 }
 def _with_detail(level):
     ar15_mesh.set_detail(level)

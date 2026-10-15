@@ -1,0 +1,8 @@
+{
+ "cubes": 25,
+ "mesh_faces": 3415,
+ "bones": 30,
+ "texture": 512,
+ "texels_per_px": 8,
+ "parts": 10
+}
