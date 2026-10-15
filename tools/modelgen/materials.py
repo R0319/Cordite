@@ -45,6 +45,15 @@ P90_STEEL = Material("p90_steel", (30, 30, 31), noise=0.05, grime=0.16, scratch=
 P90_GUIDE = Material("p90_guide", (96, 94, 88), noise=0.05, grime=0.16, scratch=0.010, dust=0.06)   # 横の灰色の棒
 P90_MAG = Material("p90_mag", (60, 56, 50), noise=0.06, grime=0.12, scratch=0.006, dust=0.08)      # 煙色の半透明樹脂
 P90_MAG_CAP = Material("p90_mag_cap", (40, 38, 36), noise=0.05, grime=0.12, scratch=0.004)
+# Winchester Model 12 トレンチガンの材質（黒染めの鋼は青みのある黒、ストック・先台は赤みのある胡桃材。使い込まれた感の汚し）
+M1912_BLUED = Material("m1912_blued", (30, 32, 40), noise=0.05, grime=0.14, scratch=0.010,
+                       wear=0.25, wear_color=(96, 98, 104), edge_wear=0.5, dust=0.06)
+M1912_STEEL = Material("m1912_steel", (36, 36, 40), noise=0.05, grime=0.14, scratch=0.010,
+                       wear=0.2, wear_color=(100, 100, 100), edge_wear=0.4, dust=0.06)
+M1912_BOLT = Material("m1912_bolt", (150, 148, 140), noise=0.05, grime=0.12, scratch=0.016,
+                      wear=0.15, wear_color=(176, 174, 168), dust=0.04)     # ボルト（排莢口から見える明るい鋼）
+M1912_WOOD = Material("m1912_wood", (96, 40, 26), noise=0.08, grime=0.14, scratch=0.004,
+                      wear=0.2, wear_color=(128, 70, 44), edge_wear=0.3, dust=0.06)
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
