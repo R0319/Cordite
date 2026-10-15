@@ -1,0 +1,53 @@
+"""
+M24 SWS の側面形を真横写真（右側面・ストックを少し伸ばした状態、2100×445px）からトレースし、
+m24_outline.py（座標データ）を書き出す。
+
+  python3 trace_m24.py <右側面の写真.jpg>
+
+写真: Wikimedia Commons「M24 Rifle (7414626896).jpg」（パブリックドメイン。米軍の写真）。リポジトリには入れない。
+縮尺は銃身の見えている長さ（24in=610mm から受け部の中の約 20mm を引いた 590mm）で合わせた 1.76px/mm。
+この縮尺で銃口の太さは 21.6mm（実物のヘビーバレルの銃口 約 22mm）、全長は 1136mm。床尾の伸ばした分（棒が見えている
+約 45mm）を引くと 1091mm で、公表の全長 1092mm（縮めた状態）と合う。
+写真の x=655 がトリガー（Z=0）、y=345 がグリップ底面（Y=0）。銃口が右（+x）なので左右反転しない。
+スコープ（アタッチメント扱い）は範囲から外して取り除く。
+銀色のトリガーガードとスコープの台（輪の台座と重なる）は写真が白く飛んで輪郭が途切れるので、トレースせず
+m24.py で写真から読んだ寸法で作る。
+"""
+import sys
+from pathlib import Path
+
+from photo_trace import Silhouette
+
+K, X0, Y0 = 1.76, 655.0, 345.0
+BORE_Y = 112.8          # 銃身の軸（写真の銃口の上下の中点）
+
+
+def rect(z0, z1, y0, y1):
+    return [(z0, y0), (z1, y0), (z1, y1), (z0, y1)]
+
+
+# ストックの上の縁（これより下がストック、上が受け部・銃身・スコープ台）。写真で読んだ線
+STOCK_TOP = [(276.0, 99.0), (100.0, 99.0), (40.0, 103.0), (12.0, 106.0), (-205.0, 106.0), (-215.0, 110.5),
+             (-503.0, 110.5)]       # 前の端は先台の先（それより前は銃身）
+
+REGIONS = {
+    "butt_pad": (rect(310.0, 350.0, -40.0, 100.0), ()),                 # 床尾板（ゴム）
+    "stock": ([(276.0, -40.0)] + STOCK_TOP + [(-503.0, -40.0)],
+              (rect(-58.0, 16.0, 15.0, 57.0), rect(195.0, 260.0, -40.0, -14.0), rect(-470.0, -430.0, 50.0, 69.0))),
+    "bolt_shroud": (rect(-24.0, 10.0, 104.0, 127.0), ()),               # ボルトの後ろの覆い（ボルトと一緒に下がる）
+    "front_sight": (rect(-775.0, -738.0, 120.0, 135.0), ()),           # 銃口の照星の台
+}
+
+
+def main(photo):
+    sil = Silhouette(photo, K, X0, Y0, flip=False, thr=200, blur=0.6)
+    out = ['"""M24 SWS の側面形（trace_m24.py が写真から書き出した座標。手で編集しない）。単位 mm、(Z, Y)。"""', ""]
+    for name, (region, minus) in REGIONS.items():
+        out.append(f"{name.upper()} = {sil.part(region, minus=minus)!r}")
+    out.append(f"BARREL_R = {sil.radius_profile(-505.0, -792.0, BORE_Y, step=4.0, band=16.0)!r}")
+    Path(__file__).with_name("m24_outline.py").write_text("\n".join(out) + "\n", encoding="utf-8")
+    print("wrote m24_outline.py")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])
