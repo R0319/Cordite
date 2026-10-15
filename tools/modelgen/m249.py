@@ -189,6 +189,11 @@ def clip_y(o, y0, y1):
 # ---------------------------------------------------------------- 受け部
 # 左側面の留め具（写真から。z, y, 半径）。右側面も同じ位置に置く（右側面の写真は無い）
 POCKET = (-128.0, -54.0, 150.0, 7.0)   # 給弾部の下の空間（前端 z, 後端 z, 底の高さ, 左右の壁の厚さ）
+PORT = (-124.0, -62.0, 121.0, 140.0)   # 右側面の排莢口（前後 z, 上下 y）。下の縁はボックスの上面（Y 119.5）の上
+PORT_COVER_OPEN = True                 # 排莢口のカバーの既定の姿勢（実物は一度ボルトが動くと開いたまま。閉じると排莢が突き抜ける）
+CH_Z = (-150.0, -136.0)                # コッキングハンドルの付け根の前後（閉＝前の位置）
+CH_TRAVEL_MAX = 150.0                  # ハンドルを引ける量の上限（ガイドレールの後端 Z +20 まで。🟡 実物の値は未確認）
+BOLT_LEN = 140.0                       # ボルト（＋オペレーティングロッド）の見える部分の長さ。前進しても後ろが給弾部の下に残る長さ
 RIVETS = [(98.0, 172.0, 2.0), (30.0, 172.0, 2.0), (-37.0, 172.0, 2.0), (50.0, 141.0, 2.0), (-27.0, 141.0, 2.0)]
 PINS = [(118.0, 178.0, 5.0), (106.0, 170.0, 3.5), (110.0, 145.0, 3.5), (90.0, 152.0, 3.5), (115.0, 122.0, 4.5),
         (30.0, 122.0, 2.5), (-8.0, 121.0, 2.5), (-118.0, 175.0, 3.0)]
@@ -209,12 +214,12 @@ def receiver(l=L):
     out = [
         *outline_parts(_with_notch(O.RECEIVER, l.feed_z[0] + 3, l.feed_z[1] - 2, *l.feed_gap), h - wall, h,
                        M.RECEIVER),                                             # 左の壁（弾帯の入口を開ける）
-        *outline_parts(O.RECEIVER, -h, -h + wall, M.RECEIVER),
+        *outline_parts(_with_notch(O.RECEIVER, *PORT), -h, -h + wall, M.RECEIVER),   # 右の壁（排莢口を開ける）
         extrude_x(list(inner.exterior.coords)[:-1], -h + wall, h - wall, M.RECEIVER),   # 中央部（給弾部を切り欠く）
+        box(-h + wall - 0.3, PORT[2], PORT[0], -h + wall, PORT[3], PORT[1], M.BORE),   # 排莢口の奥（暗い）
         box(-h + wall, pfloor, pz0, h - wall, pfloor + 0.4, pz1, M.BORE),          # 空間の底（暗い）
         ring_z(b, pz0 - 0.5, pz0 + 0.5, 3.6, 12.0, M.STEEL),                    # 前の壁: 薬室の口
         lathe(0, b, [(pz0 - 0.4, 3.6), (pz0 + 0.6, 3.6)], ar15_mesh.N_SMALL, M.BORE),
-        box(-9, b - 10, pz1 - 0.6, 9, b + 10, pz1, M.STEEL),                   # 後ろの壁: ボルトの面
         # 側面の段（写真の横の筋）: 中ほどの張り出しと、上下の細い溝
         box(h, 157, -50, h + 1.5, 161, l.rcv_rear_z - 4, M.RECEIVER),
         box(-h - 1.5, 157, -50, -h, 161, l.rcv_rear_z - 4, M.RECEIVER),
@@ -253,13 +258,43 @@ def right_side(l=L):
     h = l.rcv_half
     return [
         box(-h - 3, 160, -150, -h, 168, 20, M.RECEIVER),                       # ガイドレール
-        box(-h - 6, 158, -150, -h - 3, 170, -136, STEEL_BLACK),                # 取っ手の付け根
-        box(-h - 18, 161, -147, -h - 6, 167, -139, STEEL_BLACK),               # 取っ手の腕（横へ出る）
-        y_cyl(-h - 15, -143, 5.0, 128, 166, M.POLYMER),                       # つまみ（下を向く。拡大写真）
         box(-h - 0.3, 186, -122, -h, 196, -66, M.BORE),                        # リンク排出口
-        box(-h - 1.5, 116, -124, -h, 140, -62, M.RECEIVER),                    # 排莢口のダストカバー（閉）
-        lathe(-h - 1.5, 116, [(-124, 1.8), (-62, 1.8)], ar15_mesh.N_SMALL, STEEL_BLACK),   # ダストカバーの軸
     ]
+
+
+def charging_handle(l=L):
+    """コッキングハンドル（ボーン charging_handle）: 右側面のガイドレールの上を前後に滑る（非往復式。引いて
+    ボルトを後ろに掛けたら前へ戻す）。以前は受け部と同じボーンに入っていて動かせなかった。"""
+    h = l.rcv_half
+    z0, z1 = CH_Z
+    zc = (z0 + z1) / 2
+    return [
+        box(-h - 6, 158, z0, -h - 3, 170, z1, STEEL_BLACK),                    # 取っ手の付け根（レールに被さる）
+        box(-h - 18, 161, z0 + 3, -h - 6, 167, z1 - 3, STEEL_BLACK),           # 取っ手の腕（横へ出る）
+        y_cyl(-h - 15, zc, 5.0, 128, 166, M.POLYMER),                         # つまみ（下を向く。拡大写真）
+    ]
+
+
+def port_cover(l=L, open_=None):
+    """排莢口のダストカバー（ボーン port_cover。軸＝排莢口の下の縁に沿った Z 軸）。
+    開くと外へ 90° 倒れて水平になる（ボックスの上面のすぐ上）。閉じるには軸まわりに 90° 起こす。"""
+    h = l.rcv_half
+    open_ = PORT_COVER_OPEN if open_ is None else open_
+    z0, z1, y0, y1 = PORT
+    hx, hy = -h - 0.8, y0 - 0.5
+    height = y1 - y0 + 2.0
+    plate = (box(hx - height, hy - 1.5, z0 - 1, hx, hy, z1 + 1, M.RECEIVER) if open_
+             else box(-h - 1.5, hy, z0 - 1, -h, hy + height, z1 + 1, M.RECEIVER))
+    return [plate, lathe(hx, hy, [(z0 - 2, 1.8), (z1 + 2, 1.8)], ar15_mesh.N_SMALL, STEEL_BLACK)]
+
+
+def bolt(l=L):
+    """ボルト（ボーン bolt）: オープンボルトなので撃てる状態ではボルトは後ろ（給弾部の下の空間の後端に面が来る）。
+    撃つと前進して薬室の口（POCKET の前端）まで行く。給弾部を開けると上から見える。"""
+    b = l.bore_y
+    pz1 = POCKET[1]
+    return [box(-9, b - 10, pz1 - 0.6, 9, b + 10, pz1 - 0.6 + BOLT_LEN, M.STEEL),
+            lathe(0, b, [(pz1 - 1.2, 3.0), (pz1 - 0.5, 3.0)], ar15_mesh.N_SMALL, M.BORE)]   # 撃針の穴
 
 
 def magwell(l=L):
@@ -547,8 +582,23 @@ def stanag_mag(l=L):
     class _ML(ar15_parts.Layout):
         bore_y = py + 14.0
         mag_center_z = l.mag_center_z
+    return _tilt_mag(ar15_mesh.magazine_stanag(_ML()), l)
+
+
+def stanag_rounds(l=L):
+    """STANAG 弾倉の中の弾（mag_ammo）: M4A1 と同じ 2 発を、弾倉と同じように傾ける。"""
+    px, py = l.mag_pivot
+
+    class _ML(ar15_parts.Layout):
+        bore_y = py + 14.0
+        mag_center_z = l.mag_center_z
+    return _tilt_mag(ar15_mesh.magazine_rounds(_ML()), l)
+
+
+def _tilt_mag(items, l=L):
+    px, py = l.mag_pivot
     parts = []
-    for p in ar15_mesh.magazine_stanag(_ML()):
+    for p in items:
         if not isinstance(p, MeshPart):     # キューブ（側面のリブ）は同じ寸法のメッシュに置き換えて一緒に傾ける
             (x0, y0, z0), (sx, sy, sz) = p.origin, p.size
             p = extrude_x([(z0, y0), (z0 + sz, y0), (z0 + sz, y0 + sy), (z0, y0 + sy)], x0, x0 + sx, p.mat)
@@ -661,14 +711,16 @@ def build(feed="belt"):
     add("front_sight_post", "front_sight_base", (0, l.sight_y, sum(l.fs_z) / 2), None, front_sight_post())
     add("carry_handle", "barrel", (0, l.handle_pivot[1], l.handle_pivot[0]), "carry_handle", carry_handle())  # Z 軸まわりに回す
     add("muzzle", "root", (0, b, l.barrel_end_z), "flash_hider", flash_hider())
-    add("bolt", "root", (0, b, l.breech_z + 40), None, [])
+    add("bolt", "root", (0, b, l.breech_z + 40), "bolt", bolt())
+    add("charging_handle", "receiver", (-l.rcv_half - 6, 164.0, sum(CH_Z) / 2), "charging_handle", charging_handle())
+    add("port_cover", "receiver", (-l.rcv_half - 0.8, PORT[2] - 0.5, (PORT[0] + PORT[1]) / 2), "port_cover", port_cover())
 
     if feed == "belt":
         add("magazin", "root", (sum(l.box_x) / 2, l.box[3], sum(l.box[:2]) / 2), "ammo_box", ammo_box())
         add("mag_ammo", "magazin", (0.0, l.feed_y, -90), "belt", belt())
     else:
         add("magazin", "root", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), "magazine_stanag", stanag_mag())
-        add("mag_ammo", "magazin", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), None, [])
+        add("mag_ammo", "magazin", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), None, stanag_rounds())
 
     tip = l.breech_z - 57.4                     # 薬室内の実包（排莢クリップの起点）
     case, bullet = ar15_parts.cartridge_556(z_tip=tip, y=b)

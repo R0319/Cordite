@@ -1,0 +1,105 @@
+{
+ "format_version": "1.21.0",
+ "minecraft:geometry": [
+  {
+   "description": {
+    "identifier": "geometry.floorplate",
+    "texture_width": 64,
+    "texture_height": 64,
+    "visible_bounds_width": 4,
+    "visible_bounds_height": 4,
+    "visible_bounds_offset": [
+     0,
+     1,
+     0
+    ]
+   },
+   "bones": [
+    {
+     "name": "floorplate",
+     "pivot": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "cubes": [
+      {
+       "origin": [
+        -0.5417,
+        2.3125,
+        -6.25
+       ],
+       "size": [
+        1.0833,
+        0.1458,
+        3.9583
+       ],
+       "uv": {
+        "north": {
+         "uv": [
+          32,
+          32
+         ],
+         "uv_size": [
+          9,
+          2
+         ]
+        },
+        "south": {
+         "uv": [
+          41,
+          32
+         ],
+         "uv_size": [
+          9,
+          2
+         ]
+        },
+        "west": {
+         "uv": [
+          18,
+          0
+         ],
+         "uv_size": [
+          32,
+          2
+         ]
+        },
+        "east": {
+         "uv": [
+          0,
+          32
+         ],
+         "uv_size": [
+          32,
+          2
+         ]
+        },
+        "up": {
+         "uv": [
+          0,
+          0
+         ],
+         "uv_size": [
+          9,
+          32
+         ]
+        },
+        "down": {
+         "uv": [
+          9,
+          0
+         ],
+         "uv_size": [
+          9,
+          32
+         ]
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

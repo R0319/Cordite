@@ -38,6 +38,13 @@ class Material:
     dots: int = 0               # >0 なら側面・上下面に周期 dots テクセルの暗い点（放熱孔など）
     grime: float = 0.0          # 低周波の汚れ（面の中で明暗がゆっくり変わる。0〜1 の振幅）
     scratch: float = 0.0        # 傷の密度（テクセル面積あたりの本数。細く明るい/暗い筋）
+    # 使い込まれた感（作者の指摘「もうちょい汚しや使い込まれた感がほしい」）。0 なら何もしない（乱数も引かない
+    # ので、使っていない材質のテクスチャは変わらない）
+    wear: float = 0.0           # 塗装の擦れ: 面の一部が wear_color（下地）へ寄る斑の量（0〜1）
+    wear_color: tuple = (96, 96, 94)
+    edge_wear: float = 0.0      # 角の擦れ: 押し出しの端（部品の外周の縁）の 1 テクセルが途切れ途切れに下地の色へ寄る量
+    dust: float = 0.0           # 埃: 白っぽく濁ったむらの量（0〜1）
+    dust_color: tuple = (128, 122, 108)
 
 
 # ---------------------------------------------------------------- 形状
@@ -683,7 +690,23 @@ def _paint(img, u, v, w, h, mat: Material, rng: random.Random, face: str):
         yy, xx = np.mgrid[0:h, 0:w]
         m = (xx % mat.dots == mat.dots // 2) & (yy % mat.dots == mat.dots // 2) & (xx > 0) & (xx < w - 1) & (yy > 0) & (yy < h - 1)
         k[m] *= 0.25
-    c = np.clip(base[None, None, :] * k[:, :, None], 0, 255).astype(np.uint8)
+    c = base[None, None, :] * k[:, :, None]
+    if mat.wear and w >= 4 and h >= 4:
+        n = 0.6 * _value_noise(nr, h, w, max(3, min(w, h) // 4)) + 0.4 * _value_noise(nr, h, w, 2)
+        m = np.clip((n - (1.0 - 1.6 * mat.wear)) * 2.5, 0, 1) * 0.75          # 擦れた斑（明るい下地が覗く）
+        c = c * (1 - m[:, :, None]) + np.array(mat.wear_color, np.float32)[None, None, :] * k[:, :, None] * m[:, :, None]
+    if mat.edge_wear and face == "mesh_rows" and h >= 3 and w >= 3:
+        e = np.zeros((h, w), np.float32)
+        brk = _value_noise(nr, 2, w, 2)                                      # 縁に沿って途切れさせる（線にしない）
+        e[0, :] = np.clip(brk[0] * 1.5 + 0.2, 0, 1)
+        e[h - 1, :] = np.clip(brk[1] * 1.5 + 0.2, 0, 1)
+        e *= mat.edge_wear
+        c = c * (1 - e[:, :, None]) + np.array(mat.wear_color, np.float32)[None, None, :] * 1.15 * e[:, :, None]
+    if mat.dust and w >= 4 and h >= 4:
+        n = _value_noise(nr, h, w, max(3, min(w, h) // 3))
+        m = np.clip(n * 0.8 + 0.25, 0, 1) * mat.dust                         # 白っぽく濁ったむら
+        c = c * (1 - m[:, :, None]) + np.array(mat.dust_color, np.float32)[None, None, :] * m[:, :, None]
+    c = np.clip(c, 0, 255).astype(np.uint8)
     img[v:v + h, u:u + w, :3] = c
     img[v:v + h, u:u + w, 3] = 255
 
@@ -744,7 +767,9 @@ _FACE_UV = [(0, 0), (1, 0), (1, 1), (0, 1)]
 def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 900,
            ss: int = 2, background=(0, 0, 0, 0), skip_bones=("right_hand", "left_hand"),
            fixed=None) -> Image.Image:
-    """正射影で描画する。yaw=90 で左側面（+X 側から -X を見る）。背景は既定で透明。
+    """正射影で描画する。yaw=90 で右側面（銃口が右）、yaw=-90 で左側面（銃口が左）、yaw=0 で後ろから。背景は既定で透明。
+    ゲーム内と同じ見え方にするため、描く前に X を反転する（Bedrock の座標は +X が左・-X が右。右手系のまま描くと
+    鏡に映した像になり、後ろから見たときに左右の部品が逆に見えていた）。
     fixed=(倍率, x0, y0, 幅, 高さ) を渡すと自動の拡大縮小をやめ、画面座標 = (x*倍率 + x0, y0 - y*倍率) で描く
     （写真との重ね合わせ用）。"""
     texa = np.asarray(tex.convert("RGBA"), dtype=np.float32)
@@ -821,7 +846,7 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
         W, H, scale = fw * ss, fh * ss, fs * ss
         off = np.array([fx0 * ss, H - fy0 * ss])
     else:
-        allp = np.concatenate([q[0] for q in quads]) @ view.T
+        allp = (np.concatenate([q[0] for q in quads]) * np.array([-1.0, 1.0, 1.0])) @ view.T
         lo, hi = allp[:, :2].min(0), allp[:, :2].max(0)
         span = hi - lo
         W = width * ss
@@ -832,7 +857,9 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
     color[:] = background
     depth = np.full((H, W), -1e9, dtype=np.float32)
 
+    mirror = np.array([-1.0, 1.0, 1.0])
     for pts, uvs in quads:
+        pts = pts * mirror                      # X 反転（ゲーム内の見え方。上の説明）
         vp = pts @ view.T
         n = np.cross(pts[1] - pts[0], pts[-1] - pts[0])
         nn = np.linalg.norm(n)

@@ -30,10 +30,15 @@ def line_mask(path, box, upscale=4, red_thr=95, erase=()):
     return m
 
 
-def blueprint_silhouette(path, box, upscale=4, red_thr=95, erase=(), seeds=()):
-    """seeds は拡大後の座標（線に囲まれているが実際は抜けている場所の 1 点）。"""
+def blueprint_silhouette(path, box, upscale=4, red_thr=95, erase=(), seeds=(), close=0):
+    """seeds は拡大後の座標（線に囲まれているが実際は抜けている場所の 1 点）。
+    close > 0 なら、線を close 画素だけ太らせてから外を塗り、銃の影絵を同じだけ細らせて戻す。解像度の低い図面で
+    輪郭線が途切れていると、外からの塗りが部品の内側へ入り込む（中が抜けた影絵になる）のを防ぐ。"""
+    from PIL import ImageFilter
     m = line_mask(path, box, upscale, red_thr, erase)
     img = Image.fromarray(np.where(m, 0, 255).astype(np.uint8), "L")
+    if close:
+        img = img.filter(ImageFilter.MinFilter(2 * close + 1))      # 線（黒）を太らせる
     w, h = img.size
     pad = Image.new("L", (w + 2, h + 2), 255)
     pad.paste(img, (1, 1))
@@ -43,4 +48,7 @@ def blueprint_silhouette(path, box, upscale=4, red_thr=95, erase=(), seeds=()):
             ImageDraw.floodfill(pad, (sx + 1, sy + 1), 128, thresh=10)
     a = np.asarray(pad)[1:-1, 1:-1]
     gun = a != 128
-    return Image.fromarray(np.where(gun, 0, 255).astype(np.uint8), "L"), m
+    out = Image.fromarray(np.where(gun, 0, 255).astype(np.uint8), "L")
+    if close:
+        out = out.filter(ImageFilter.MaxFilter(2 * close + 1))      # 太らせたぶん影絵（黒）を細らせて戻す
+    return out, m
