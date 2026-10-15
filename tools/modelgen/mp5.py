@@ -19,9 +19,9 @@ from rig import add_locators
 import ar15_parts
 
 K = 1.0 / ar15_parts.MM_PER_PX
-STEEL_BLACK = M.STEEL_DARK
-POLY = M.POLYMER
-RCV_MAT = M.MP5_RECEIVER   # 受け部・チューブ（写真では樹脂部品とほとんど同じ黒っぽい色）
+STEEL_BLACK = M.MP5_STEEL  # 小物の鋼（使い込まれた感のある材質。materials の MP5_*）
+POLY = M.MP5_POLY
+RCV_MAT = M.MP5_RECEIVER_W  # 受け部・チューブ（写真では樹脂部品とほとんど同じ黒っぽい色）
 
 BORE_Y = 153.5          # 銃身の軸（写真の銃口の上下の中点）
 SIGHT_Y = 205.0         # 照準線（照星のポストの先端＝フードのリングの中心の少し下）
@@ -75,7 +75,8 @@ def extrude_z(section, z0, z1, mat):
         faces.append([n + tri[0], n + tri[2], n + tri[1]])
         charts.append(None)
         cuv.append(None)
-    return MeshPart(verts, faces, mat, None, charts, cuv, {0: "rows"}).finalize()
+    # 帯の端（z0・z1）は受け部を前後に分けたつなぎ目で、実物の角ではないので「角の擦れ」を描かない（"rows" にしない）
+    return MeshPart(verts, faces, mat, None, charts, cuv, {0: "band"}).finalize()
 
 
 RCV_BOTTOM = 130.0       # 受け部の断面の下端（トリガーハウジング・ハンドガードの中に隠れる）
@@ -332,17 +333,17 @@ def magazine():
     from shapely.geometry import box as sbox
     body, (zf, zr) = _mag_body()
     solid = body.intersection(sbox(-400.0, -200.0, 0.0, MAG_TOP_Y - MAG_SHELL + 0.5))
-    out = [extrude_x_beveled(list(solid.exterior.coords)[:-1], -HALF_MAG, HALF_MAG, 1.2, M.MAG_AK, steps=1)]
+    out = [extrude_x_beveled(list(solid.exterior.coords)[:-1], -HALF_MAG, HALF_MAG, 1.2, M.MP5_MAG, steps=1)]
     y0, w, h = MAG_TOP_Y - MAG_SHELL, MAG_WALL, HALF_MAG
     for s in (1, -1):
         xa, xb = sorted((s * (h - w), s * h))
-        out.append(box(xa, y0, zf, xb, MAG_TOP_Y, zr, M.MAG_AK))
-    out += [box(-h, y0, zf, h, MAG_TOP_Y, zf + w, M.MAG_AK), box(-h, y0, zr - w, h, MAG_TOP_Y, zr, M.MAG_AK)]
+        out.append(box(xa, y0, zf, xb, MAG_TOP_Y, zr, M.MP5_MAG))
+    out += [box(-h, y0, zf, h, MAG_TOP_Y, zf + w, M.MP5_MAG), box(-h, y0, zr - w, h, MAG_TOP_Y, zr, M.MP5_MAG)]
     lx, lt, ll = MAG_LIP
     for s in (1, -1):
         xa, xb = sorted((s * lx, s * (h - w + 0.3)))
         out.append(extrude_x([(zr - ll, MAG_TOP_Y - lt), (zr - w + 0.3, MAG_TOP_Y - lt), (zr - w + 0.3, MAG_TOP_Y),
-                              (zr - ll + 3.0, MAG_TOP_Y)], xa, xb, M.MAG_AK))
+                              (zr - ll + 3.0, MAG_TOP_Y)], xa, xb, M.MP5_MAG))
     out += [box(-h + w, y0, zf + w, h - w, y0 + 1.0, zr - w, M.FOLLOWER),
             box(-h + w, y0 + 1.0, zf + 5.0, -0.5, y0 + 3.0, zr - 4.0, M.FOLLOWER)]
     # 底板（一回り大きい）
@@ -351,7 +352,7 @@ def magazine():
     bottom = min(pts, key=lambda p: p[1])
     plate = body.intersection(sbox(-400.0, -200.0, 0.0, bottom[1] + 6.0)).buffer(0.8, join_style=2)
     plate = max(getattr(plate, "geoms", [plate]), key=lambda q: q.area)
-    out.append(extrude_x_beveled(list(plate.simplify(0.2).exterior.coords)[:-1], -h - 0.8, h + 0.8, 0.8, M.MAG_AK,
+    out.append(extrude_x_beveled(list(plate.simplify(0.2).exterior.coords)[:-1], -h - 0.8, h + 0.8, 0.8, M.MP5_MAG,
                                  steps=1))
     return out
 

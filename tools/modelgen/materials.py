@@ -19,6 +19,15 @@ MAG_USGI = Material("mag_usgi", (92, 96, 94), noise=0.05, grime=0.14, scratch=0.
 MAG_AK = Material("mag_ak", (44, 44, 46), noise=0.05, grime=0.14, scratch=0.006)     # AK の鋼製弾倉（黒染め）
 MAG_PMAG = Material("mag_pmag", (30, 30, 32), noise=0.05, grime=0.10, scratch=0.002)   # Magpul PMAG（黒い樹脂）
 MP5_RECEIVER = Material("mp5_receiver", (48, 50, 54), noise=0.05, grime=0.12, scratch=0.004)   # MP5 の受け部（黒に近い灰色の塗装。写真）
+# MP5 の材質（使い込まれた感: 塗装の擦れ・角の擦れ・埃）。他の銃の材質は変えない
+MP5_RECEIVER_W = Material("mp5_receiver_w", (48, 50, 54), noise=0.05, grime=0.18, scratch=0.012,
+                          wear=0.35, wear_color=(104, 106, 108), edge_wear=0.55, dust=0.12)
+MP5_POLY = Material("mp5_poly", (38, 38, 40), noise=0.06, grime=0.14, scratch=0.004,
+                    wear=0.25, wear_color=(70, 70, 70), edge_wear=0.35, dust=0.16)
+MP5_STEEL = Material("mp5_steel", (36, 36, 37), noise=0.05, grime=0.16, scratch=0.010,
+                     wear=0.22, wear_color=(100, 100, 98), edge_wear=0.45, dust=0.10)
+MP5_MAG = Material("mp5_mag", (40, 41, 44), noise=0.05, grime=0.18, scratch=0.014,
+                   wear=0.26, wear_color=(104, 104, 102), edge_wear=0.45, dust=0.12)
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
