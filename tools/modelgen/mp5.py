@@ -37,9 +37,9 @@ HALF_GRIP = 15.0
 HALF_GUARD = 7.0
 HALF_MAG = 12.0         # 弾倉 24mm
 HALF_HG = 20.0          # ハンドガード（前 40mm → 後ろ 46mm に width_fn で広げる）
-HALF_BUTT = 15.5        # 床尾板 31mm（作者提供の三面図の後面図で受け部との比を測った。以前の 48mm は後ろから見て板に見えた）
-ROD_X = 13.0            # ストックの棒の中心の左右位置（左右 2 本）
-ROD_HALF = 4.5
+HALF_BUTT = 13.0        # 床尾板 26mm（作者提供の三面図の後面図: 後端キャップの約 0.65 倍。48mm は板に、31mm でもまだ太く見えた）
+ROD_X = 10.0            # ストックの棒の中心の左右位置（左右 2 本）
+ROD_HALF = 3.5          # 棒の厚さ 7mm（作者の指摘「ストックが少し太い」）
 
 # 右側面の排莢口（写真の暗い角の丸い長方形）と、その奥で動くボルト
 PORT_Z = (-81.0, -42.0)
@@ -230,6 +230,7 @@ def handguard():
 def lower_housing():
     out = [extrude_x_beveled(O.LOWER_HOUSING["outer"], -HALF_HOUSING, HALF_HOUSING, 6.0, POLY, steps=3)]
     # 押しピン（写真の丸）: 後ろ 1 本・前（弾倉口の後ろ）2 本、両側面
+    out += selector_marks()
     for z, y, r in ((92.8, 127.4, 4.0), (-58.0, 116.0, 3.5), (-58.0, 98.0, 3.0)):
         for s in (1, -1):
             xa, xb = sorted((s * (HALF_HOUSING - 0.5), s * (HALF_HOUSING + 1.0)))
@@ -240,6 +241,20 @@ def lower_housing():
 
 
 SELECTOR_PIVOT = (13.8, 114.0)    # セレクターの軸（写真の S-E-F の文字の中心）
+
+
+SELECTOR_MARKS = ((20.3, 123.2, M.MARK_WHITE), (22.3, 114.7, M.MARK_RED), (15.8, 106.3, M.MARK_RED))
+# セレクターの表記（写真: 白い S、赤い E・F）。Z, Y と色。文字は 1 テクセル（約 3mm）より細かいので、文字の位置に色の印を置く
+
+
+def selector_marks():
+    """セレクターの表記の色の印（ハウジングの両側面に貼る薄い板）。MP5 の見た目の特徴（作者の指摘）。"""
+    out = []
+    for z, y, mat in SELECTOR_MARKS:
+        for s in (1, -1):
+            xa, xb = sorted((s * (HALF_HOUSING - 0.1), s * (HALF_HOUSING + 0.15)))
+            out.append(box(xa, y - 2.6, z - 2.2, xb, y + 2.6, z + 2.2, mat))
+    return out
 
 
 def selector():
