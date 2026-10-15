@@ -20,7 +20,7 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ModelsDir,
     [string] $ArchiveDir = "",
-    [string[]] $Keep = @("glock", "m1911", "ak_47", "m4a1", "m249", "m249_stanag", "mp5", "m24", "p90", "m1912", "awm"),   # ak_47 は別の作業（生成モデル）で作り直し中なので残す
+    [string[]] $Keep = @("glock", "m1911", "ak_47", "m4a1", "m249", "m249_stanag", "mp5", "m24", "p90", "m1912", "awm", "m79"),   # ak_47 は別の作業（生成モデル）で作り直し中なので残す
     [switch] $Apply
 )
 $ErrorActionPreference = "Stop"
@@ -37,7 +37,8 @@ $Install = @(
     @{ Dir = "m24_mesh";         Id = "m24" },
     @{ Dir = "p90_mesh";         Id = "p90" },
     @{ Dir = "m1912_mesh";       Id = "m1912" },
-    @{ Dir = "awm_mesh";         Id = "awm" }
+    @{ Dir = "awm_mesh";         Id = "awm" },
+    @{ Dir = "m79_mesh";         Id = "m79" }
 )
 
 if (-not (Test-Path $ModelsDir -PathType Container)) { throw "作業フォルダが見つからない: $ModelsDir" }
