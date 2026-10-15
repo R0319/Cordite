@@ -20,14 +20,16 @@ MAG_AK = Material("mag_ak", (44, 44, 46), noise=0.05, grime=0.14, scratch=0.006)
 MAG_PMAG = Material("mag_pmag", (30, 30, 32), noise=0.05, grime=0.10, scratch=0.002)   # Magpul PMAG（黒い樹脂）
 MP5_RECEIVER = Material("mp5_receiver", (48, 50, 54), noise=0.05, grime=0.12, scratch=0.004)   # MP5 の受け部（黒に近い灰色の塗装。写真）
 # MP5 の材質（使い込まれた感: 塗装の擦れ・角の擦れ・埃）。他の銃の材質は変えない
-MP5_RECEIVER_W = Material("mp5_receiver_w", (48, 50, 54), noise=0.05, grime=0.18, scratch=0.012,
+# 色は作者提供の写真で測った値に寄せる（作者の指摘「MP5 の本体のディテール・テクスチャ見直し」: 受け部は青みのある
+# 暗い鋼、トリガーハウジング・グリップ・ハンドガードは明るい灰色の樹脂の 2 色。全部を同じ黒にしていた）
+MP5_RECEIVER_W = Material("mp5_receiver_w", (28, 34, 42), noise=0.05, grime=0.18, scratch=0.012,
                           wear=0.35, wear_color=(104, 106, 108), edge_wear=0.55, dust=0.12)
-MP5_POLY = Material("mp5_poly", (38, 38, 40), noise=0.06, grime=0.14, scratch=0.004,
-                    wear=0.25, wear_color=(70, 70, 70), edge_wear=0.35, dust=0.16)
+MP5_POLY = Material("mp5_poly", (90, 94, 100), noise=0.06, grime=0.14, scratch=0.004,
+                    wear=0.25, wear_color=(104, 106, 110), edge_wear=0.35, dust=0.16)
 MP5_STEEL = Material("mp5_steel", (36, 36, 37), noise=0.05, grime=0.16, scratch=0.010,
                      wear=0.22, wear_color=(100, 100, 98), edge_wear=0.45, dust=0.10)
-MP5_MAG = Material("mp5_mag", (40, 41, 44), noise=0.05, grime=0.18, scratch=0.014,
-                   wear=0.26, wear_color=(104, 104, 102), edge_wear=0.45, dust=0.12)
+MP5_MAG = Material("mp5_mag", (92, 95, 100), noise=0.05, grime=0.18, scratch=0.014,
+                   wear=0.26, wear_color=(140, 142, 144), edge_wear=0.45, dust=0.12)
 # M24 SWS の材質（使い込まれた感: MP5 と同じ汚し。ストックはざらついた塗装で埃が乗りやすい）
 M24_STOCK = Material("m24_stock", (50, 52, 52), noise=0.10, grime=0.16, scratch=0.006,
                      wear=0.22, wear_color=(84, 86, 84), edge_wear=0.4, dust=0.2)

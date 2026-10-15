@@ -153,6 +153,10 @@ def receiver():
                 for a in range(0, 91, 15)]
         x_out = -h + 0.1 if sy < 0 else -h + 0.8          # 上の角は受け部の丸みの内側に収める
         out.append(extrude_x(pts, x_out, -PORT_INNER_X - 0.2, RCV_MAT))
+    top = _yr(O.RECEIVER)[1]
+    for z0, z1 in CLAW_BUMPS:
+        out.append(extrude_x_beveled([(z0, top - 3.0), (z1, top - 3.0), (z1 - 1.5, top + 2.5), (z0 + 1.5, top + 2.5)],
+                                     -5.0, 5.0, 1.0, RCV_MAT, steps=1))
     # 後端キャップ＋ストックの受けと止め金（丸みのある樹脂・金属。角を大きく丸める）
     out += outline_parts(O.STOCK_LATCH, -h + 1.0, h - 1.0, RCV_MAT, bevel=5.0, steps=3)
     return out
@@ -251,8 +255,25 @@ def handguard():
 
 
 # ---------------------------------------------------------------- 下部（樹脂のハウジング）
+# トリガーハウジングの側面の成形の凹凸（作者提供の写真を 3 倍に拡大して読んだ。Z, Y）: セレクターの周りの後ろが丸い
+# 盛り上がった板、その前上の三角、後ろの四角い台。どれも両側面に 0.8mm 盛り上げる
+HOUSING_PANEL = ([(14.0 + 21.0 * math.cos(math.radians(a)), 117.0 + 21.0 * math.sin(math.radians(a)))
+                  for a in range(-65, 66, 13)] + [(8.6, 135.9), (-45.8, 101.1)])
+HOUSING_TRIANGLE = [(-6.4, 130.8), (-38.3, 130.8), (-38.3, 116.1)]
+HOUSING_PAD = [(48.0, 112.5), (81.5, 112.5), (81.5, 135.5), (48.0, 135.5)]
+PANEL_T = 0.8
+CLAW_BUMPS = [(-36.6, -17.5)]     # 受け部の上のスコープの爪を掛ける突起（写真で照門の前に 1 つ見える。前後 z）
+
+
 def lower_housing():
+    from shapely.geometry import Polygon
     out = [extrude_x_beveled(O.LOWER_HOUSING["outer"], -HALF_HOUSING, HALF_HOUSING, 6.0, POLY, steps=3)]
+    for poly, r in ((HOUSING_PANEL, 3.0), (HOUSING_TRIANGLE, 2.5), (HOUSING_PAD, 3.0)):
+        g = Polygon(poly).buffer(-r).buffer(r, quad_segs=3)
+        pts = list(g.exterior.coords)[:-1]
+        for s_ in (1, -1):
+            xa, xb = sorted((s_ * (HALF_HOUSING - 0.4), s_ * (HALF_HOUSING + PANEL_T)))
+            out.append(extrude_x_beveled(pts, xa, xb, 0.4, POLY, steps=1))
     # 押しピン（写真の丸）: 後ろ 1 本・前（弾倉口の後ろ）2 本、両側面
     out += selector_marks()
     for z, y, r in ((92.8, 127.4, 4.0), (-58.0, 116.0, 3.5), (-58.0, 98.0, 3.0)):
@@ -276,7 +297,7 @@ def selector_marks():
     out = []
     for z, y, mat in SELECTOR_MARKS:
         for s in (1, -1):
-            xa, xb = sorted((s * (HALF_HOUSING - 0.1), s * (HALF_HOUSING + 0.15)))
+            xa, xb = sorted((s * (HALF_HOUSING + PANEL_T - 0.1), s * (HALF_HOUSING + PANEL_T + 0.15)))   # 盛り上がった板の上
             out.append(box(xa, y - 2.6, z - 2.2, xb, y + 2.6, z + 2.2, mat))
     return out
 
