@@ -45,7 +45,9 @@ ROD_HALF = 3.5          # 棒の厚さ 7mm（作者の指摘「ストックが�
 PORT_Z = (-81.0, -42.0)
 PORT_Y = (161.0, 181.0)
 PORT_CORNER_R = 7.0     # 排莢口の角の丸み（高さ 20mm に対して。実物はほぼ両端が半円の長穴）
-PORT_INNER_X = 11.0     # 排莢口から見えるボルトの側面の深さ（受け部の右側面から 6mm 奥）
+PORT_INNER_X = 15.0     # 排莢口から見えるボルトの側面（受け部の右側面から 2mm 奥。実物は板金のすぐ裏にボルトがあり、
+                        # 閉鎖時は排莢口がボルトで埋まって見える。6mm 奥だと暗い穴に見えた＝作者の指摘）
+BOLT_MAT = M.STEEL      # ボルト（受け部より明るい鋼。暗いと空洞と見分けがつかない）
 BOLT_TRAVEL_MAX = 70.0  # ボルトの後退量の上限（🟡 実物の値は未確認。ボルトの後端が受け部の後端を越えない長さを決める）
 CH_SLOT_Z = (-206.0, -126.0)   # コッキングハンドルの溝（チューブの左側面。前の端が閉鎖位置）
 STOCK_TRAVEL = 120.0    # ストックを縮めたときの前進量（HK 公表の全長 700→550mm の差は 150。写真の伸長位置からの量は 🟡 仮）
@@ -317,12 +319,17 @@ def bolt():
     rear = 100.0 - BOLT_TRAVEL_MAX
     zh = BOLT_FACE_Z + 22.0
     x_side = -PORT_INNER_X                                  # 排莢口から見えるボルトの平らな側面
-    return [lathe(0, BORE_Y, [(BOLT_FACE_Z, 8.5), (zh, 8.5)], ar15_mesh.N_MID, STEEL_BLACK),
-            # 本体: 排莢口の高さいっぱいの平らな側面を持つ角柱（以前は丸棒で、上面だけが明るい棚に見えた）
-            extrude_x_beveled([(zh, BORE_Y - 12.0), (rear, BORE_Y - 12.0), (rear, PORT_Y[1] + 2.0), (zh, PORT_Y[1] + 2.0)],
-                              x_side, -x_side, 1.0, STEEL_BLACK, steps=1),
+    y_top = PORT_Y[1] + 2.0
+    return [lathe(0, BORE_Y, [(BOLT_FACE_Z, 8.5), (zh, 8.5)], ar15_mesh.N_MID, BOLT_MAT),
+            # 本体: 平らな側面を持つ角柱（以前は丸棒で、上面だけが明るい棚に見えた）
+            extrude_x_beveled([(zh, BORE_Y - 12.0), (rear, BORE_Y - 12.0), (rear, y_top), (zh, y_top)],
+                              -11.0, 11.0, 1.0, BOLT_MAT, steps=1),
+            # 右側面の張り出し: 排莢口の高さだけ受け部の表面の 2mm 奥まで出し、閉鎖時に排莢口を埋める。
+            # 受け部の側面の溝（Y 156.5 まで）より上に限る（溝の底の面と重ならないように）
+            extrude_x_beveled([(zh, PORT_Y[0] - 2.0), (rear, PORT_Y[0] - 2.0), (rear, y_top), (zh, y_top)],
+                              x_side, -10.5, 0.8, BOLT_MAT, steps=1),
             # エキストラクター（側面の前寄りの細長い爪。写真で排莢口の中に見える）
-            box(x_side - 0.6, BORE_Y + 9.0, zh, x_side, BORE_Y + 13.0, zh + 24.0, M.STEEL)]
+            box(x_side - 0.5, PORT_Y[0] + 2.0, zh, x_side, PORT_Y[0] + 5.0, zh + 24.0, M.STEEL_DARK)]
 
 
 # ---------------------------------------------------------------- 弾倉
