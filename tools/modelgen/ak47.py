@@ -13,6 +13,8 @@ Y=0 グリップ底面、Z=0 トリガー、銃口 -Z。
 """
 import math
 
+import numpy as np
+
 import ar15_mesh
 import ar15_parts
 import materials as M
@@ -136,16 +138,103 @@ def selector():
     return out
 
 
+# ダストカバー（作者の指摘「ダストカバーの形」。米国防総省の AK-47 type II の写真で、天面の丸み・側面の盛り上がった帯・
+# 後ろのボタンを確かめた）
+COVER_SPLIT_Y = 152.0            # 下の平らな側面と、上の丸い天面の境（右側面の排莢口の上の縁）
+COVER_DOME_R = 11.0              # 天面の丸み（左右を楕円に丸める。写真で天面は平らな所の無い弧に見える）
+COVER_RIB = [(-118.0, 159.0), (-118.0, 154.0), (-115.5, 152.5), (-92.0, 152.5), (-89.0, 146.0), (-86.0, 141.5),
+             (71.0, 141.5), (74.0, 144.5), (74.5, 150.0), (72.5, 156.0), (69.0, 159.0)]
+COVER_RIB_T = 2.0                # 側面の帯の盛り上がり（プレスの補強。写真の明るい帯）
+COVER_BUTTON = (75.0, 82.0, 147.5, 154.5, 4.5)   # 後ろのボタン（リコイルスプリングのガイド。Z0, Z1, Y0, Y1, 半幅）
+
+
+def _cover_dome(up, half):
+    """ダストカバーの上の部分（COVER_SPLIT_Y より上）。up は側面形の上の部分（shapely）。"""
+    from shapely.geometry import LineString
+    z0, _, z1, _ = up.bounds
+    zs = list(np.linspace(z0, z1, 40))
+    sections = []
+    n_arc = 9
+    for z in zs:
+        zz = min(max(z, z0 + 1e-3), z1 - 1e-3)
+        hit = up.intersection(LineString([(zz, COVER_SPLIT_Y - 1), (zz, 400)]))
+        top = hit.bounds[3] if not hit.is_empty else COVER_SPLIT_Y + 1
+        d = max(0.5, min(COVER_DOME_R, top - COVER_SPLIT_Y - 0.5))
+        wall = top - d
+        pts = [(half, COVER_SPLIT_Y), (half, wall)]
+        for k in range(1, n_arc):
+            a = math.pi / 2 * k / n_arc
+            pts.append((half * math.cos(a), wall + d * math.sin(a)))
+        pts.append((0.0, top))
+        pts += [(-x, y) for x, y in reversed(pts[:-1])]
+        sections.append((z, pts))
+    return _loft(sections, M.RECEIVER)
+
+
+def _loft(sections, mat):
+    """断面 [(z, [(x, y)...])...]（点の数をそろえる。各断面は凸）を前後につないだ筒と、前後の蓋。側面は 1 枚の区画。"""
+    verts, faces, charts, cuv = [], [], [], []
+    n = len(sections[0][1])
+    for z, pts in sections:
+        verts += [(x, y, z) for x, y in pts]
+    per = [0.0]
+    p0 = sections[0][1]
+    for i in range(n - 1):
+        per.append(per[-1] + math.dist(p0[i], p0[i + 1]))
+    for j in range(len(sections) - 1):
+        za, zb = sections[j][0], sections[j + 1][0]
+        for i in range(n - 1):
+            a, b = j * n + i, j * n + i + 1
+            faces.append([a, b, b + n, a + n])
+            charts.append(0)
+            cuv.append([(per[i], za), (per[i + 1], za), (per[i + 1], zb), (per[i], zb)])
+    for j, flip in ((0, False), (len(sections) - 1, True)):
+        ring = [j * n + i for i in range(n)]
+        for k in range(1, n - 1):
+            f = [ring[0], ring[k], ring[k + 1]]
+            faces.append(f[::-1] if flip else f)
+            charts.append(None)
+            cuv.append(None)
+    return MeshPart(verts, faces, mat, None, charts, cuv, {0: "band"}).finalize()
+
+
 def dust_cover(rail=False):
-    """ダストカバー（板金の蓋）。図面の側面形を押し出し、上の角を大きく丸める。rail=True で上面にレール。"""
+    """ダストカバー（板金の蓋）。写真の特徴: 天面は左右いっぱいの丸い弧、側面には前後に長く盛り上がった帯（前の 2 割は
+    帯の下の縁が高い段になる）、後ろの傾いた端の下からリコイルスプリングのガイドのボタンが突き出る。
+    下の平らな側面は受け部の中へ 8mm 差し込み、少しだけ外へ張り出させる（実物のカバーは受け部の外側に被さって面一）。
+    右側面は排莢口とハンドルの溝の上の縁になるので、そこだけ下の縁を上げる（左右を X=0 で分けて作る）。
+    rail=True で上面にレール。"""
+    from shapely.geometry import Polygon, box as sbox
     o = O.DUST_COVER
-    # 下の縁は受け部の中へ 8mm 差し込み、少しだけ外へ張り出させる。丸めは全周に掛かるので、そのままだと
-    # 下の縁も内側へ丸まり、受け部との継ぎ目に溝ができる（実物のカバーは受け部の外側に被さって面一）
-    # 右側面は排莢口とハンドルの溝の上の縁になるので、そこだけ下の縁を上げる（左右を X=0 で分けて作る）
     y_bottom = _yr(o)[0]
-    outer = [(z, y - 8.0 if y <= y_bottom + 0.5 else y) for z, y in o["outer"]]
-    out = _split_lr(outer, [(PORT_Z[0], 0.0, PORT_Z[1], PORT_Y[1]), (SLOT_Z[0], 0.0, SLOT_Z[1], SLOT_Y[1])],
-                    HALF_RECEIVER + 0.4, 7.0, M.RECEIVER, 3)
+    half = HALF_RECEIVER + 0.4
+    # 側面形: 後ろの端の膨らみ（ボタン）は別の部品にするので、後ろの面を Z 77 の縦にする
+    outer = [(min(z, 77.0), y - 8.0 if y <= y_bottom + 0.5 else y) for z, y in o["outer"]]
+    g = Polygon(outer).buffer(0)
+    low = g.intersection(sbox(-1e3, -1e3, 1e3, COVER_SPLIT_Y))
+    up = g.intersection(sbox(-1e3, COVER_SPLIT_Y, 1e3, 1e3))
+    ring = lambda q: list(q.exterior.coords)[:-1]
+    low_pts = ring(low.simplify(0.05))
+    cuts = [(PORT_Z[0], 0.0, PORT_Z[1], PORT_Y[1]), (SLOT_Z[0], 0.0, SLOT_Z[1], SLOT_Y[1])]
+    out = [extrude_x(low_pts, 0.0, half, M.RECEIVER), extrude_x(_right_cut(low_pts, cuts), -half, 0.0, M.RECEIVER)]
+    # 天面: 前後の位置ごとに「縦の側面＋左右いっぱいの楕円の弧」の断面を並べてつなぐ。弧の高さは COVER_DOME_R、
+    # 後ろの傾いた所では天面が下がるので低くする（側面形の上の縁の高さに合わせる）
+    out.append(_cover_dome(up, half))
+    # 側面の盛り上がった帯（左右。右は排莢口・溝の上の縁より下を切る）
+    rib = Polygon(COVER_RIB)
+    rib_r = rib
+    for z0, y0, z1, y1 in cuts:
+        rib_r = rib_r.difference(sbox(z0 - 1.0, -1e3, z1 + 1.0, y1 + 0.5))
+    for s_, shape in ((1, rib), (-1, rib_r)):
+        for q in getattr(shape, "geoms", [shape]):
+            if q.area < 5:
+                continue
+            xa, xb = sorted((s_ * (half - 0.4), s_ * (half + COVER_RIB_T)))
+            out.append(extrude_x_beveled(ring(q.simplify(0.05)), xa, xb, 0.6, M.RECEIVER, steps=1))
+    # 後ろのボタン
+    bz0, bz1, by0, by1, bh = COVER_BUTTON
+    out.append(extrude_x_beveled([(bz0, by0), (bz1 - 1.0, by0), (bz1, by0 + 1.5), (bz1, by1 - 1.5), (bz1 - 1.0, by1),
+                                  (bz0, by1)], -bh, bh, 1.5, STEEL_BLACK, steps=2))
     z0, z1 = _zr(o)
     yt = _yr(o)[1]
     if rail:
