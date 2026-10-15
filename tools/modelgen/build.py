@@ -1,6 +1,6 @@
 """
 生成の入口。  python3 build.py
-generated/<variant>/ に m4a1.geo.json・m4a1.png・m4a1.animation.json（腕の待機ポーズ）・m4a1_modelshot.png（インベントリ用アイコン）とプレビュー画像を出す。
+generated/<variant>/ に m4a1.geo.json・m4a1.png・m4a1.animation.json（腕の待機ポーズ）・m4a1_modelshot.png（インベントリ用アイコン。斜めから見た立体）とプレビュー画像を出す。
 parts 版は parts/ に部品ごとの .geo.json も出す（Blockbench で単体確認・別銃への流用用）。
 """
 import json
@@ -55,6 +55,20 @@ def _with_detail(level):
         ar15_mesh.set_detail("full")
 
 
+ICON_VIEW = (45, 30)        # インベントリのアイコン: ブロックのアイテムと同じ向き（斜め後ろ上 45°・見下ろし 30°）。作者の指定
+ICON_GAMMA = 1.6            # アイコンの明るさの持ち上げ（16px では真横の暗い影絵になり、どの銃か見分けられなかった）
+
+
+def icon_image(geo, tex):
+    """インベントリのアイコン（<銃ID>_modelshot.png）: 斜めから見た立体を、保存した法線の陰影で描き、暗い所を持ち上げる。"""
+    import numpy as np
+    from PIL import Image
+    im = render(geo, tex, *ICON_VIEW, width=512, smooth=True)
+    a = np.asarray(im).astype(np.float32)
+    a[..., :3] = np.clip(((a[..., :3] / 255.0) ** (1.0 / ICON_GAMMA)) * 255.0, 0, 255)
+    return Image.fromarray(a.astype(np.uint8), "RGBA")
+
+
 VIEWS = {"side_left": (-90, 0), "side_right": (90, 0), "three_quarter": (-40, 22), "top": (-90, 89.9),
          "front": (0, 8)}
 
@@ -75,7 +89,7 @@ def build_variant(name, fn, density, stem):
     for view, (yaw, pitch) in VIEWS.items():
         render(geo, tex, yaw, pitch, width=300 if view == "front" else 900,
                background=(150, 160, 170, 255)).save(d / f"preview_{view}.png")
-    render(geo, tex, 90, 0, width=512).save(d / f"{stem}_modelshot.png")
+    icon_image(geo, tex).save(d / f"{stem}_modelshot.png")
     for pname, cubes in parts.items():
         pm = Model()
         pm.bone(pname, None, (0, 0, 0), cubes)
