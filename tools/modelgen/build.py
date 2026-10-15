@@ -25,6 +25,7 @@ import m3_tripod
 import g3a3
 import hk416
 import riot_shield
+import fiveseven
 
 OUT = Path(__file__).parent / "generated"
 VARIANTS = {
@@ -47,6 +48,7 @@ VARIANTS = {
     "m3_tripod_mesh": (m3_tripod.build, 8, "m3_tripod"),                      # M2 の三脚（銃と同じ座標で重ねて置く）
     "g3a3_mesh": (g3a3.build, 8, "g3a3"),                                     # H&K G3A3（固定ストック）
     "hk416_mesh": (hk416.build, 8, "hk416"),                                  # H&K HK416 D14.5RS
+    "five_seven_mesh": (fiveseven.build, 16, "five_seven"),                  # FN Five-seveN MK2（拳銃は小さいので密度を倍に）
     "riot_shield_mesh": (riot_shield.build, 16, "riot_shield"),               # ライオット兵の盾（1px = 62.5mm。riot_shield.py）
 }
 def _with_detail(level):
@@ -87,7 +89,7 @@ def build_variant(name, fn, density, stem):
     # 腕に銃を握らせる待機ポーズ（作者が待機アニメーションを作るまでの仮置き。無いと腕が真上に立ったまま映る）
     if is_gun:
         (d / f"{stem}.animation.json").write_text(
-            json.dumps(hold_animation(geo, stem, model.support_z, model.hands), indent=1) + "\n")
+            json.dumps(hold_animation(geo, stem, model.support_z, model.hands, getattr(model, "pistol", None)), indent=1) + "\n")
     for view, (yaw, pitch) in VIEWS.items():
         render(geo, tex, yaw, pitch, width=300 if view == "front" else 900,
                background=(150, 160, 170, 255)).save(d / f"preview_{view}.png")
