@@ -16,6 +16,7 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 import ak47_outline as O
 from core import MeshPart, Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, x_cyl
@@ -162,6 +163,11 @@ def front_trunnion():
 REAR_LEAF_HINGE = (-203.0, 175.5)      # 照尺の前の蝶番（図面の照門ブロックの前上の角）
 REAR_SLIDER_Z = (-194.0, -181.0)       # スライダー（図面の照尺の上の前寄りの膨らみ。「П」の位置）
 REAR_NOTCH_Z = (-140.0, -133.0)        # 照尺の後端の照門（図面の後ろの膨らみ。後端 -133）
+# 照門の切り欠きと照星のポストは見やすいように誇張する（実物は切り欠き 2.6mm・ポスト 2.2mm。sights の目安で
+# ADS の目からの距離で決める。トリガーは Z=0）
+_EYE = sights.eye_z(0.0, REAR_SIGHT_Z)
+NOTCH_HALF = sights.NOTCH_ANGLE * (_EYE - REAR_SIGHT_Z) / 2
+POST_HALF = sights.POST_ANGLE * (_EYE - FRONT_SIGHT_Z) / 2
 
 
 def rear_sight():
@@ -179,9 +185,9 @@ def rear_sight():
     out.append(x_cyl(zh, yh, 3.2, -11.6, 11.6, M.STEEL, n=12))                  # 蝶番のピン
     # 後端の照門: 左右 2 本の爪の間の切り欠きの底が照準線（SIGHT_Y）
     out.append(extrude_x_beveled([(nz0, 172.5), (nz1, 172.5), (nz1, SIGHT_Y), (nz0, SIGHT_Y)],
-                                 -7.0, 7.0, 0.5, STEEL_BLACK, steps=1))
+                                 -(NOTCH_HALF + 5.7), NOTCH_HALF + 5.7, 0.5, STEEL_BLACK, steps=1))
     for s in (1, -1):
-        x0, x1 = sorted((s * 1.3, s * 7.0))
+        x0, x1 = sorted((s * NOTCH_HALF, s * (NOTCH_HALF + 5.7)))
         out.append(extrude_x_beveled([(nz0, SIGHT_Y - 0.5), (nz1, SIGHT_Y - 0.5), (nz1, 184.0), (nz0 + 1.5, 184.0)],
                                      x0, x1, 0.5, STEEL_BLACK, steps=1))
     # スライダー（照尺を抱く箱）と左右のボタン
@@ -374,12 +380,12 @@ def front_sight():
     out += outline_parts({"outer": lower[0], "holes": [FRONT_WINDOW]}, -6.0, 6.0, STEEL_BLACK)
     for ear in _clip(o, -600.0, FRONT_EARS_Y - 0.5, -400.0, 300.0):
         for s in (1, -1):
-            x0, x1 = sorted((s * 3.0, s * 6.0))
+            x0, x1 = sorted((s * (POST_HALF + 1.2), s * (POST_HALF + 4.2)))   # ポストとの間 1.2mm
             out.append(extrude_x_beveled(ear, x0, x1, 0.8, STEEL_BLACK, steps=1))
     zd, yd, rd = FRONT_DRUM
     out.append(x_cyl(zd, yd, rd, -7.0, 7.0, STEEL_BLACK, n=16))
     out.append(x_cyl(zd, yd, 1.2, -7.4, 7.4, M.BORE, n=8))                      # ドラムの中心の穴（調整工具）
-    out.append(box(-1.1, yd + rd - 0.5, zd - 1.1, 1.1, SIGHT_Y, zd + 1.1, STEEL_BLACK))   # ポスト
+    out.append(sights.post(2 * POST_HALF, yd + rd - 0.5, SIGHT_Y, zd, STEEL_BLACK))       # ポスト（誇張）
     # 台: 銃身を抱く筒（銃口ナットと同じ太さ）＋図面の下の突起
     z0, z1 = _zr(O.FRONT_SIGHT_BASE)
     out.append(lathe(0, BORE_Y, [(z0, 12.0), (z1 - 1.0, 12.0)], ar15_mesh.N_MID, STEEL_BLACK))

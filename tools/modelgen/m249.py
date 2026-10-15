@@ -16,6 +16,7 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 from core import MeshPart, Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe
 from rig import add_locators
 import m249_outline as O
@@ -361,11 +362,9 @@ def rear_sight(l=L):
         *outline_parts(base, -13, 13, M.RECEIVER),
         *outline_parts(ears, 6, 11, M.RECEIVER),
         *outline_parts(ears, -11, -6, M.RECEIVER),
-        # アパーチャー板（中央に 3mm の穴）
-        box(-5, y0 + 6, z - 1, 5, sy - 1.5, z + 1, STEEL_BLACK),
-        box(-5, sy + 1.5, z - 1, 5, sy + 6, z + 1, STEEL_BLACK),
-        box(1.5, sy - 1.5, z - 1, 5, sy + 1.5, z + 1, STEEL_BLACK),
-        box(-5, sy - 1.5, z - 1, -1.5, sy + 1.5, z + 1, STEEL_BLACK),
+        # アパーチャー板（丸い穴。実物は 3mm、見やすいように誇張して ADS の目からの距離で決める。耳の間に収める）
+        *sights.aperture_plate(sy, z - 1, z + 1, sights.HOLE_ANGLE * (sights.eye_z(0.0, z) - z), y0 + 6,
+                               STEEL_BLACK, half_w=5.8, ears=False),
         # 左右の調整つまみ（拡大写真: 丸穴の板の外側にローレットのつまみ。右側は距離の数字入りのドラム）
         x_cyl(z + 15, sy + 2, 6.0, 11, 18, STEEL_BLACK, n=12),
         x_cyl(z - 12, y0 + 7, 6.0, 11, 18, STEEL_BLACK, n=12),
@@ -477,8 +476,10 @@ def front_sight(l=L):
 
 
 def front_sight_post(l=L):
+    """ポスト（実物は 2mm 角。見やすいように誇張し、ADS の目からの距離で幅を決める）。"""
     zc = sum(l.fs_z) / 2
-    return [box(-1, l.sight_y - 14, zc - 1, 1, l.sight_y, zc + 1, STEEL_BLACK)]
+    w = sights.POST_ANGLE * (sights.eye_z(0.0, l.rear_sight_z) - zc)
+    return [sights.post(w, l.sight_y - 14, l.sight_y, zc, STEEL_BLACK)]
 
 
 def gas_system(l=L):

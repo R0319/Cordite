@@ -45,11 +45,12 @@ LEFT_GRIP = 0.8                 # 左手の箱（厚さ 4px）の上面をハン
 SUPPORT_SKIP = ("magazin", "mag_ammo", "ammo", "bullet", "bipod_leg_l", "bipod_foot_l", "bipod_leg_r", "bipod_foot_r")
 
 
-def add_locators(m: Model, muzzle, sight_line_y, rear_sight_z, grip_center, support_z):
-    """support_z: 左手を添える前後位置 [px]（ハンドガード・ポンプ・先台の下）。"""
+def add_locators(m: Model, muzzle, sight_line_y, rear_sight_z, grip_center, support_z, eye_relief=None):
+    """support_z: 左手を添える前後位置 [px]（ハンドガード・ポンプ・先台の下）。
+    eye_relief: 照門から ADS の目までの距離 [px]（銃ごとに離したいとき。腰だめのカメラもその後ろへ下がる）。"""
     tz = m.get("trigger").pivot[2]
-    hip = (HIP_SIDE, sight_line_y + HIP_UP, tz + HIP_BEHIND)
-    iron_z = max(tz + IRON_BEHIND, rear_sight_z + IRON_MIN_RELIEF)
+    iron_z = max(tz + IRON_BEHIND, rear_sight_z + (IRON_MIN_RELIEF if eye_relief is None else eye_relief))
+    hip = (HIP_SIDE, sight_line_y + HIP_UP, max(tz + HIP_BEHIND, iron_z + IRON_MIN_ADVANCE))
     m.bone("muzzle_flash", "root", muzzle)
     # カメラ基準は idle_view を親、iron_view をその子（どちらも root の外。07-model-assets.md）
     m.bone("idle_view", None, hip)

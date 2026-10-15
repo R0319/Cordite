@@ -20,6 +20,7 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 import m79_outline as O
 from core import box, extrude_x, extrude_x_beveled, extrude_x_rounded, inflate_x, lathe
 from m249 import x_cyl
@@ -69,6 +70,12 @@ BASE_Y = (105.0, 124.0)
 FIXED_NOTCH_Y = 127.0       # 台の固定照門の切り欠きの底（照尺を倒したときの照準線）
 FRONT_Z = (-396.0, -379.5)  # 照星のガードの前後（写真に細かい目盛りを重ねて読んだ）
 FRONT_TOP = 130.5
+# 固定照門の切り欠きと照星の刃は見やすいように誇張する（実物は切り欠き 4mm・深さ 2.5mm、刃 2.4mm。
+# sights の目安で ADS の目からの距離で決める。トリガーは Z=0）
+_EYE = sights.eye_z(0.0, BASE_Z[1])
+NOTCH_HALF = sights.NOTCH_ANGLE * (_EYE - BASE_Z[1]) / 2
+NOTCH_DEPTH = 4.0
+BLADE_HALF = sights.POST_ANGLE * (_EYE - sum(FRONT_Z) / 2) / 2
 
 
 def _ring(q):
@@ -205,7 +212,7 @@ def front_sight():
         out.append(extrude_x(_ring(ear.simplify(0.1)), xa, xb, BLUED))
     zc = (z0 + z1) / 2
     blade = [(zc - 4.0, 104.0), (zc + 4.0, 104.0), (zc + 1.5, top - 2.5), (zc - 1.5, top - 2.5)]
-    out.append(extrude_x_beveled(blade, -1.2, 1.2, 0.3, BLUED, steps=1))
+    out.append(extrude_x_beveled(blade, -BLADE_HALF, BLADE_HALF, 0.3, BLUED, steps=1))
     out.append(box(-6.0, BORE_Y + BARREL_R - 2.5, z0, 6.0, 105.0, z1, BLUED))
     return out
 
@@ -217,9 +224,9 @@ def leaf_base():
     out = [box(-LEAF_W / 2, y0, z0, LEAF_W / 2, y1, z1, BLUED)]
     # 固定照門（後ろの端の 2 枚の耳の間の切り欠き）
     for s in (1, -1):
-        xa, xb = sorted((s * 2.0, s * 8.0))
-        out.append(box(xa, y1, z1 - 4.0, xb, FIXED_NOTCH_Y + 2.5, z1, BLUED))
-    out.append(box(-2.0, y1, z1 - 4.0, 2.0, FIXED_NOTCH_Y, z1, BLUED))
+        xa, xb = sorted((s * NOTCH_HALF, s * (NOTCH_HALF + 6.0)))
+        out.append(box(xa, y1, z1 - 4.0, xb, FIXED_NOTCH_Y + NOTCH_DEPTH, z1, BLUED))
+    out.append(box(-NOTCH_HALF, y1, z1 - 4.0, NOTCH_HALF, FIXED_NOTCH_Y, z1, BLUED))
     # 左右調整のつまみ（星形。6 枚の羽根を角柱で表す）
     zc, yc = -244.0, 117.0
     out.append(x_cyl(zc, yc, 6.0, -LEAF_W / 2 - 9.0, -LEAF_W / 2, BLUED, n=12))

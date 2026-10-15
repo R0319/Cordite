@@ -18,6 +18,7 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 import awm_outline as O
 from core import MeshPart, box, extrude_x, extrude_x_beveled, extrude_x_rounded, inflate_x, lathe
 from m249 import x_cyl
@@ -416,6 +417,10 @@ def build():
     add("muzzle", "root", (0, b, BRAKE_Z[0]), None, [])
     add("handguard", "root", (0, b, -330.0), None, [])
     add("rail_top", "root", (0, RAIL_Y + 5.0, sum(RAIL_Z) / 2), None, [])
+    # デフォルトのアイアンサイト（実銃に照準器は無い。折りたたみ式をレールの前後の端に載せる。
+    # サイトのアタッチメントを付けるとコードがこのボーンを描かない）
+    irons, sight_y = sights.default_irons(RAIL_Y + 5.0, RAIL_Z[1] - 13.0, RAIL_Z[0] + 11.0, trigger_z=4.0)
+    add("iron_sight", "root", (0, RAIL_Y + 5.0, RAIL_Z[1] - 13.0), "iron_sight", irons)
     add("rail_bottom", "root", (0, 100.0, -330.0), None, [])              # 先台の下（二脚）
     add("rail_side", "root", (HALF_FOREND, 125.0, -360.0), None, [])
 
@@ -432,6 +437,6 @@ def build():
     add("ammo", "root", (0, b, tip + 60.0), None, case)
     add("bullet", "ammo", (0, b, tip + 10.0), None, bullet)
 
-    add_locators(m, muzzle=(0, b * K, BRAKE_Z[0] * K), sight_line_y=(RAIL_Y + 5.0) * K,
-                 rear_sight_z=RAIL_Z[1] * K, grip_center=(0, 60.0 * K, 60.0 * K), support_z=-264.0 * K)
+    add_locators(m, muzzle=(0, b * K, BRAKE_Z[0] * K), sight_line_y=sight_y * K,
+                 rear_sight_z=(RAIL_Z[1] - 13.0) * K, grip_center=(0, 60.0 * K, 60.0 * K), support_z=-264.0 * K)
     return m, parts

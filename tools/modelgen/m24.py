@@ -16,6 +16,7 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 import m24_outline as O
 from core import Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, rotated, x_cyl
@@ -120,6 +121,9 @@ def receiver():
            extrude_z(_rcv_section(), pz1, RCV_REAR_Z, STEEL_BLACK)]
     # 安全装置（右側面の後ろ、覆いの下の小さなレバー）は selector ボーン
     return out
+
+
+IRON_REAR_Z, IRON_FRONT_Z = -50.0, -183.0   # 折りたたみ式の照準板・ポストの前後（スコープの後ろ・前の台座の上）
 
 
 def scope_base():
@@ -268,6 +272,10 @@ def build():
     add("muzzle", "root", (0, b, MUZZLE_Z), None, [])
     add("handguard", "root", (0, b, -350.0), None, [])
     add("rail_top", "root", (0, 133.5, -26.0), None, [])               # スコープはここに付く（アタッチメント）
+    # デフォルトのアイアンサイト（実銃はスコープ専用で照準器が無い。ゲームでは折りたたみ式を前後の台座に載せる。
+    # サイトのアタッチメントを付けるとコードがこのボーンを描かない）
+    irons, sight_y = sights.default_irons(133.5, IRON_REAR_Z, IRON_FRONT_Z)
+    add("iron_sight", "root", (0, 133.5, IRON_REAR_Z), "iron_sight", irons)
     add("rail_bottom", "root", (0, 66.0, -450.0), None, [])            # 先台の下の吊り輪の台座（二脚）
     add("rail_side", "root", (HALF_FOREND, 95.0, -350.0), None, [])
 
@@ -282,6 +290,6 @@ def build():
     add("ammo", "root", (0, b, tip + 50.0), None, case)
     add("bullet", "ammo", (0, b, tip + 8.0), None, bullet)
 
-    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=133.0 * K,
-                 rear_sight_z=-26.0 * K, grip_center=(0, 48.0 * K, 66.0 * K), support_z=-288.0 * K)
+    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=sight_y * K,
+                 rear_sight_z=IRON_REAR_Z * K, grip_center=(0, 48.0 * K, 66.0 * K), support_z=-288.0 * K)
     return m, parts

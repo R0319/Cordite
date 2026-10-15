@@ -21,7 +21,7 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ModelsDir,
     [string] $ArchiveDir = "",
-    [string[]] $Keep = @("glock", "m1911", "ak_47", "m4a1", "m249", "m249_stanag", "mp5", "m24", "p90", "m1912", "awm", "m79"),   # ak_47 は別の作業（生成モデル）で作り直し中なので残す
+    [string[]] $Keep = @("glock", "m1911", "ak_47", "m4a1", "m249", "m249_stanag", "mp5", "m24", "p90", "m1912", "awm", "m79"),
     [switch] $Apply
 )
 $ErrorActionPreference = "Stop"
@@ -31,6 +31,7 @@ $gen = Join-Path $PSScriptRoot "generated"
 # 配置するモデル: 生成フォルダ → ファイル名（銃ID）。簡略版（m4a1_mesh_lite）は出力名が m4a1 と重なるので、
 # 出力名を分けるまで対象外
 $Install = @(
+    @{ Dir = "ak_47_mesh";       Id = "ak_47" },   # 作業フォルダの旧版の AK を置き換える（作者了承済み）
     @{ Dir = "m4a1_mesh";        Id = "m4a1" },
     @{ Dir = "m249_mesh";        Id = "m249" },
     @{ Dir = "m249_stanag_mesh"; Id = "m249_stanag" },
