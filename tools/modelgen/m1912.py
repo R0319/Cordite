@@ -208,15 +208,49 @@ def heat_shield():
     return out
 
 
+# 着剣部（作者の指摘「M1912 のモデルを見直して」。競売カタログの写真を 3 倍に拡大して読んだ。Z, Y）: 銃身を包む筒、
+# その下の薄い板（ねじ 3 本。下の縁は大きな弧に抜け、前は鉤になって下がる）、前の下の着剣の突起、後ろで弾倉の筒の
+# 先を抱く留め具と、その下の板・負い紐の輪。それまではトレースの輪郭を幅 25mm の塊にしていて、金槌の頭のように見えた
+ADAPTER_Z = (-549.0, -649.0)     # 筒（放熱カバーの前から銃口まで）
+ADAPTER_SLEEVE_R = 12.0          # 筒の半径（写真の上の縁 Y 114.3）
+ADAPTER_PLATE = [(-553.0, 101.0), (-649.0, 101.0), (-649.0, 86.0), (-645.5, 80.0), (-642.6, 72.8), (-639.5, 72.5),
+                 (-637.5, 78.0), (-630.0, 86.9), (-611.0, 89.3), (-586.0, 90.1), (-576.0, 86.5), (-572.0, 82.0),
+                 (-572.0, 80.0), (-553.0, 80.0)]
+ADAPTER_PLATE_HALF = 5.0
+ADAPTER_SCREWS = (-564.3, -602.7, -640.2)   # Y 91.6
+ADAPTER_LUG = (-643.0, -657.4, 79.0, 5.0)   # 着剣の突起（前後 z, 中心 y, 半径）
+ADAPTER_CLAMP_Z = (-553.0, -572.0)          # 弾倉の筒の先を抱く留め具
+ADAPTER_TAB = (-551.0, -569.0, 48.6)        # 留め具の下の板（下の端 y）
+
+
 def adapter():
-    """着剣部（銃口と弾倉の筒の先をまとめて留める金具。下に着剣の爪と負い紐の環の台）。トレース。"""
-    from shapely.geometry import Polygon
-    g = Polygon(O.ADAPTER["outer"]).simplify(0.3)
+    """着剣部（銃口と弾倉の筒の先をまとめて留める金具）。上の説明の部品と、照準の玉。"""
+    z0, z1 = ADAPTER_Z
+    out = [lathe(0, BORE_Y, [(z1, ADAPTER_SLEEVE_R - 1.5), (z1 + 1.5, ADAPTER_SLEEVE_R), (z0, ADAPTER_SLEEVE_R)],
+                 ar15_mesh.N_MID, BLUED)]
+    h = ADAPTER_PLATE_HALF
+    out.append(extrude_x_beveled(ADAPTER_PLATE, -h, h, 1.2, BLUED, steps=1))
+    for z in ADAPTER_SCREWS:
+        for s_ in (1, -1):
+            xa, xb = sorted((s_ * (h - 0.3), s_ * (h + 0.7)))
+            out.append(x_cyl(z, 91.6, 2.6, xa, xb, M.M1912_STEEL, n=10))
+    lz0, lz1, ly, lr = ADAPTER_LUG
+    out.append(lathe(0, ly, [(lz1, lr - 1.0), (lz1 + 1.0, lr), (lz0, lr)], ar15_mesh.N_SMALL, BLUED))
+    cz0, cz1 = ADAPTER_CLAMP_Z
+    out.append(lathe(0, TUBE_Y, [(cz1, TUBE_R + 2.0), (cz0, TUBE_R + 2.0)], ar15_mesh.N_MID, BLUED))
+    tz0, tz1, ty = ADAPTER_TAB
+    out.append(extrude_x_beveled([(tz0, ty + 3.0), (tz0, TUBE_Y - 5.0), (tz1, TUBE_Y - 5.0), (tz1, ty + 3.0),
+                                  (tz1 + 2.0, ty), (tz0 - 2.0, ty)], -h, h, 1.0, BLUED, steps=1))
+    # 負い紐の輪（横に寝た針金の輪。側面からは細長く見える）
+    for xa, xb in ((-8.0, -6.0), (6.0, 8.0)):
+        out.append(box(xa, 65.0, -591.0, xb, 68.0, -560.0, M.M1912_STEEL))
+    out.append(box(-8.0, 65.0, -593.0, 8.0, 68.0, -589.0, M.M1912_STEEL))
+    # 照準の玉（誇張。筒の前の端の上に台を立てて載せる）
     r = BEAD_D / 2
-    return [extrude_x_beveled(_ring(g), -12.5, 12.5, 2.0, BLUED, steps=1),
-            box(-1.5, 115.0, BEAD_Z - 1.5, 1.5, SIGHT_Y - r, BEAD_Z + 1.5, BLUED),           # 玉の台（着剣部に埋める）
+    out += [box(-1.5, BORE_Y + ADAPTER_SLEEVE_R - 1.0, BEAD_Z - 1.5, 1.5, SIGHT_Y - r, BEAD_Z + 1.5, BLUED),
             lathe(0, SIGHT_Y - r, [(BEAD_Z - r, 0.01), (BEAD_Z - r * 0.7, r * 0.7), (BEAD_Z, r),
-                                   (BEAD_Z + r * 0.7, r * 0.7), (BEAD_Z + r, 0.01)], 10, M.BRASS)]   # 玉（真鍮）
+                                   (BEAD_Z + r * 0.7, r * 0.7), (BEAD_Z + r, 0.01)], 10, M.BRASS)]
+    return out
 
 
 # ---------------------------------------------------------------- ポンプ
@@ -228,7 +262,7 @@ def pump():
     pitch = (z1 - z0 - 22.0) / FOREND_GROOVES
     for i in range(FOREND_GROOVES):
         zc = z0 + 12.0 + (i + 0.5) * pitch
-        prof += [(zc - 1.6, r), (zc - 0.8, r - 1.6), (zc + 0.8, r - 1.6), (zc + 1.6, r)]
+        prof += [(zc - 2.4, r), (zc - 1.2, r - 2.6), (zc + 1.2, r - 2.6), (zc + 2.4, r)]   # 写真の深い溝
     prof += [(z1 - 6.0, r), (z1 - 2.0, r - 1.5), (z1, r - 4.0)]
     out = [lathe(0, FOREND_Y, prof, ar15_mesh.N_MID, WOOD)]
     for s in (1, -1):
