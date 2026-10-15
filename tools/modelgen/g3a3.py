@@ -18,7 +18,7 @@ import sights
 import g3_outline as O
 from ak47 import _clip, _yr, _zr
 from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
-from m249 import ring_z, rotated, x_cyl
+from m249 import ring_z, rotated, slotted_flash_hider, x_cyl
 from mp5 import _annulus_z, extrude_z
 from rig import add_locators
 
@@ -225,17 +225,15 @@ def front_sight():
 
 
 def barrel():
-    """銃身（ハンドガードの中は見えない）と銃口側（写真の太さの分布。先端は溝のある消炎器）。"""
+    """銃身（ハンドガードの中は見えない）と銃口側（写真の太さの分布）。先端の消炎器は溝付きの筒（写真: 前の縁は閉じ、
+    4 本の溝が貫通して中の暗い穴が見える。後ろに 2 本の帯）。"""
     prof = sorted(O.MUZZLE_R)
+    fh_rear = -566.0                                           # 消炎器の後ろの端（写真の太さが変わる所）
+    pipe = [(z, r) for z, r in prof if z > fh_rear]
     out = [lathe(0, BORE_Y, [(-500.0, 9.0), (BOLT_FACE_Z, 9.0)], ar15_mesh.N_MID, M.STEEL)]
-    out.append(lathe(0, BORE_Y, [(prof[0][0], 4.0)] + prof + [(prof[-1][0], 4.0)], ar15_mesh.N_MID, STEEL_BLACK,
-                     cap0=False, cap1=False))
-    out.append(lathe(0, BORE_Y, [(prof[0][0] - 0.2, 4.0), (prof[0][0] + 25.0, 4.0)], ar15_mesh.N_SMALL, M.BORE,
-                     cap0=False))
-    for k in range(4):                                         # 消炎器の溝（写真の光った切り欠き）
-        out += rotated([extrude_x([(-600.0, BORE_Y + 8.0), (-580.0, BORE_Y + 8.0), (-580.0, BORE_Y + 10.6),
-                                   (-600.0, BORE_Y + 10.6)], -1.2, 1.2, M.BORE)], "z", 45.0 + 90.0 * k,
-                       (0.0, BORE_Y, 0.0))
+    out.append(lathe(0, BORE_Y, [(fh_rear, pipe[0][1])] + pipe, ar15_mesh.N_MID, STEEL_BLACK))
+    out += slotted_flash_hider(BORE_Y, MUZZLE_Z, fh_rear, 10.2, 6.5, (-599.0, -577.0), (0, 90, 180, 270), 26.0,
+                               STEEL_BLACK, ribs=((-571.5, -569.0, 0.6), (-575.5, -573.0, 0.6)))
     return out
 
 
@@ -291,9 +289,10 @@ def selector():
     """セレクター（ボーン selector。左側面）: 丸い台と、表記を指すレバー。写真では S（安全）を指している。"""
     zc, yc = SELECTOR_PIVOT
     h = HALF_HOUSING
-    out = [x_cyl(zc, yc, 6.0, h - 0.5, h + 1.5, STEEL_BLACK, n=12)]
-    out.append(extrude_x([(zc - 3.0, yc), (zc + 3.0, yc), (zc + 24.0, yc + 15.0), (zc + 19.0, yc + 19.0)],
-                         h + 1.0, h + 2.8, STEEL_BLACK))
+    mat = RCV_MAT                                  # ハウジング（黒い鋼）より明るい塗装・角の擦れで見分けられるように（写真の光り）
+    out = [x_cyl(zc, yc, 6.0, h - 0.5, h + 1.5, mat, n=12)]
+    out.append(extrude_x_beveled([(zc - 3.5, yc), (zc + 3.5, yc - 1.0), (zc + 25.0, yc + 15.0), (zc + 19.0, yc + 20.0)],
+                                 h + 1.0, h + 3.2, 0.6, mat, steps=1))
     return out
 
 

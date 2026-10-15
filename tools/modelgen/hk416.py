@@ -20,7 +20,7 @@ import hk416_outline as O
 from ak47 import _clip, _yr, _zr
 from ar15_parts import Layout
 from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
-from m249 import rotated, x_cyl
+from m249 import rotated, slotted_flash_hider, x_cyl
 from mp5 import extrude_z
 from rig import add_locators
 
@@ -62,7 +62,7 @@ HG_Z = (-118.0, -351.0)                     # 本体の後ろ・前の端（図�
 HG_HALF = 21.0                              # 本体の半幅
 HG_TOP = RAIL_TOP - 9.0                     # 本体の上面（上のレールの首の付け根）
 HG_BOTTOM = _yr(O.HANDGUARD)[0] + 9.0       # 本体の下面（下のレールの首の付け根）
-HG_CORNER_R = 10.0                         # 本体の角の丸み（作者提供の写真: HK の部品は角が丸い）
+HG_CORNER_R = 4.0                          # 本体の角の丸み（HK416 は AR-15 系で角張った作り。作者の指摘で丸い HK の銃の例外）
 SIDE_RAIL_Y = BORE_Y + 1.5                  # 横のレールの中心（図面の縦の刻みの帯 Y 145〜169）
 HG_WINDOWS = ((-172.0, -203.0), (-215.0, -246.0), (-259.0, -291.0), (-302.0, -335.0))   # 横の長い穴（図面）
 HG_WINDOW_YS = ((BORE_Y - 13.5, BORE_Y - 10.5), (BORE_Y + 14.0, BORE_Y + 17.0))   # 横のレールの下・上（写真）
@@ -73,9 +73,9 @@ def lower():
     """HK416 の下部レシーバー（図面）: 本体・弾倉の受け（太い）・トリガーガード（細い）に分けて押し出す。
     ガードはグリップの前の面まで延び、中の穴は図面の線の内側。"""
     o = O.LOWER["outer"]
-    out = [extrude_x_beveled(p, -HALF_LOWER, HALF_LOWER, 3.5, M.RECEIVER, steps=2)
+    out = [extrude_x_beveled(p, -HALF_LOWER, HALF_LOWER, 2.0, M.RECEIVER, steps=2)
            for p in _clip(o, -41.0, 84.0, 100.0, 140.0)]
-    out += [extrude_x_beveled(p, -HALF_MAGWELL, HALF_MAGWELL, 3.5, M.RECEIVER, steps=2)
+    out += [extrude_x_beveled(p, -HALF_MAGWELL, HALF_MAGWELL, 2.0, M.RECEIVER, steps=2)
             for p in _clip(o, -130.0, 50.0, -40.0, 140.0)]
     out += [extrude_x_beveled(p, -HALF_GUARD, HALF_GUARD, 1.5, M.RECEIVER, steps=1)
             for p in _clip(o, -41.0, 50.0, 10.0, 84.5)]
@@ -119,8 +119,8 @@ def mag_release():
 # ---------------------------------------------------------------- ストック
 def stock():
     """HK のストック（図面）: 本体と床尾のゴム。バッファチューブに沿って伸縮する（ボーン stock）。"""
-    return [extrude_x_beveled(O.STOCK["outer"], -HALF_STOCK, HALF_STOCK, 9.0, M.POLYMER, steps=3),
-            extrude_x_beveled(O.BUTT["outer"], -HALF_BUTT, HALF_BUTT, 7.0, M.RUBBER, steps=3)]
+    return [extrude_x_beveled(O.STOCK["outer"], -HALF_STOCK, HALF_STOCK, 6.0, M.POLYMER, steps=3),
+            extrude_x_beveled(O.BUTT["outer"], -HALF_BUTT, HALF_BUTT, 4.0, M.RUBBER, steps=2)]
 
 
 # ---------------------------------------------------------------- ハンドガード
@@ -172,20 +172,17 @@ def handguard():
 
 # ---------------------------------------------------------------- 銃身
 def barrel():
-    """銃身（ハンドガードの中は見えない）と、図面の太さの分布の銃口側（ガスブロックの前・段・消炎器）。"""
+    """銃身（ハンドガードの中は見えない）と、図面の太さの分布の銃口側（ガスブロックの前・段）。先端の消炎器は溝付きの筒
+    （図面: 前の縁は閉じる。溝は側面の真ん中と斜め上に見える → 上半分と横に 5 本、下は閉じる）。"""
     b = BORE_Y
     prof = sorted(O.MUZZLE_R)
-    fh0 = -466.0                                               # 消炎器の根元（図面の太さが変わる所）
+    fh0 = -466.0                                               # 消炎器の後ろの端（図面の太さが変わる所）
     pipe = [(z, r) for z, r in prof if z > fh0]
-    fh = [(z, r) for z, r in prof if z <= fh0]
-    pipe.insert(0, (fh[-1][0], pipe[0][1]))                    # 銃身の先を消炎器の根元まで延ばす（間の隙間を無くす）
+    fh_r = max(r for z, r in prof if z <= fh0)
     out = [lathe(0, b, [(-366.0, 9.5), (L.bolt_face_z, 9.5)], P.N_MID, M.STEEL)]
-    out.append(lathe(0, b, pipe, P.N_MID, M.STEEL_DARK))
-    out.append(lathe(0, b, [(fh[0][0], 4.0)] + fh + [(fh[-1][0], 4.0)], P.N_MID, M.STEEL_DARK, cap0=False, cap1=False))
-    out.append(lathe(0, b, [(fh[0][0] - 0.2, 4.0), (fh[0][0] + 30.0, 4.0)], P.N_SMALL, M.BORE, cap0=False))
-    for k in range(4):                                         # 消炎器の溝
-        out += rotated([extrude_x([(fh[0][0] + 4.0, b + 9.0), (fh[0][0] + 26.0, b + 9.0), (fh[0][0] + 26.0, b + 12.6),
-                                   (fh[0][0] + 4.0, b + 12.6)], -1.4, 1.4, M.BORE)], "z", 45.0 + 90.0 * k, (0.0, b, 0.0))
+    out.append(lathe(0, b, [(fh0, pipe[0][1])] + pipe, P.N_MID, M.STEEL_DARK))
+    out += slotted_flash_hider(b, MUZZLE_Z, fh0, fh_r, 7.5, (-507.0, -482.0), (0, 45, 90, 135, 180), 18.0, M.STEEL_DARK,
+                               n_ring=16)
     return out
 
 
