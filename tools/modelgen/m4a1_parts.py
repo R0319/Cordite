@@ -29,6 +29,7 @@ def build(P=P) -> tuple[Model, dict]:
     m.bone("root", None, (0, 0, 0))
     add("receiver", "root", (0, b, 0), "upper_receiver", P.upper_receiver())
     add("lower_receiver", "receiver", (0, b + l.lower_bottom, 0), "lower_receiver", P.lower_receiver())
+    add("selector", "lower_receiver", (13.3, b + P.SELECTOR_PIVOT[1], P.SELECTOR_PIVOT[0]), "selector", P.selector())
     gp, _ = P.grip_frame()
     add("pistol_grip", "receiver", gp, "pistol_grip", P.pistol_grip())
     add("buffer_tube", "receiver", (0, b - 4, l.lower_rear_z), "buffer_tube", P.buffer_tube())
