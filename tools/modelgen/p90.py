@@ -1,0 +1,364 @@
+"""
+FN P90 TR（上面に長いレール、受け部の前の左右に短いレール）のパーツと組み立て（単位 mm、メッシュ版）。
+
+側面形は Wikimedia Commons の真横写真（右側面・FN Herstal の標準型、CC BY-SA 2.0）からトレースした輪郭
+（p90_outline.py ← trace_p90.py）。標準型は上に照準器（リングサイト）が付くので、受け部の上面は TR 型の写真
+（Commons「FN P90 PDW.jpg」CC0 ほか）から読んだ形に差し替えた（TR_*）。
+縮尺はレールの溝の間隔（10.0mm）で合わせ、全長 503mm（FN 公表 505mm）を確かめた。
+左右の幅は FN 公表の全幅 55mm を上限に、斜め前の写真から割合で読んだ推定（下の幅の関数・HALF_*）。上面図は無い。
+座標は他の銃と同じ: X=0 左右対称面（+X が左側面、-X が右側面）、Y=0 グリップの底、Z=0 トリガー、銃口 -Z。
+
+本体（ストック・グリップ・弾倉の受け）は 1 つの樹脂の塊で、親指の穴とトリガーの穴が貫通している。
+穴の縁まで丸めるため core.extrude_x_rounded（穴のある側面形を丸めて押し出す）で作る。
+排莢は下向き（グリップの中）で、ボルトは外から見えない。コッキングハンドルは受け部の左右の前の玉（ボーン
+charging_handle）で、横の棒（ガイド）に沿って後ろへ引く。
+"""
+import math
+
+import ar15_mesh
+import ar15_parts
+import materials as M
+import p90_outline as O
+from core import MeshPart, box, extrude_x, extrude_x_beveled, extrude_x_rounded, lathe
+from m249 import x_cyl, y_cyl
+from rig import add_locators
+
+K = 1.0 / ar15_parts.MM_PER_PX
+POLY = M.P90_POLY
+HOUSING_MAT = M.P90_HOUSING
+STEEL_BLACK = M.P90_STEEL
+
+BORE_Y = 102.3
+MUZZLE_Z = -166.3
+BOLT_FACE_Z = 97.7          # 薬室の後端（銃身 264mm を銃口から逆算。ブルパップなのでトリガーより後ろ）
+
+# 左右の半幅（全幅 55mm が上限。斜め前の写真で、ストックがいちばん幅広く、前のハンドストップが細い）
+HALF_STOCK = 27.5
+HALF_UPPER = 26.0           # 本体の上半分（弾倉の下）
+HALF_GRIP = 24.0            # 親指の穴のまわり
+HALF_TRIGGER = 19.0         # トリガーの穴のまわり
+HALF_FRONT = 17.5           # 前のハンドストップ
+HALF_UNDER_HOUSING = 23.0   # 受け部の下に隠れる所（受け部の側面と同じ面にしない）
+BODY_BEVEL = 7.0            # 本体の角の丸み（P90 は角の大きく丸い樹脂の塊。トリガーの穴の下の壁 15mm で 7 が上限）
+HALF_HOUSING = 26.0
+HALF_MAG = 22.0             # 弾倉 44mm（5.7×28mm 弾 40.5mm を横向きに収める）
+
+# 弾倉（写真）: 後ろの端は本体の段の前、前の端は受け部の前のブロックの手前
+MAG_Z = (-82.0, 181.0)
+MAG_Y = (117.0, 140.0)
+MAG_WALL = 2.5              # 上下の板・前後の端の厚さ
+MAG_RIBS = [160.0, 135.0, 110.0, 85.0, 60.0, 35.0, 10.0, -15.0, -40.0, -62.0]   # 側面の縦の補強（写真の縦の筋）
+MAG_CHANNEL = (60.0, -86.5, 116.0, 141.5)   # 受け部の中の弾倉の通り道（前後 z, 上下 y）
+ARM_Z = 17.0                # 受け部の後ろの腕（弾倉の横を覆う）の前の縁
+
+# TR 型の上面（写真「FN P90 PDW.jpg」の溝の間隔 4.45px/mm で読んだ）
+TR_TOP_Y = 175.0            # 受け部の上面（レールの台）
+TR_FRONT = [(-100.0, 175.0), (-121.5, 145.0)]   # 前の斜めの面
+TR_RAIL_Z = (-93.0, 42.0)   # 上面レールの前後
+SIDE_RAIL_Z = (-91.0, -67.0)   # 左右の短いレール（前の端）
+SIDE_RAIL_Y = 165.0
+
+# トリガーの穴の後ろ（写真でトリガーの側面が見える所）と、その下のセレクター（回転する円盤）
+TRIGGER_WELL = [(17.7, 82.2), (-8.0, 82.2), (-8.0, 52.5), (9.5, 52.5), (13.6, 54.4), (17.7, 62.6), (18.8, 73.5)]
+SELECTOR_C = (-1.0, 49.0)   # 円盤の中心 (Z, Y)
+SELECTOR_R = 15.0
+SELECTOR_SLOT = [(-3.0, 47.5), (-17.5, 47.5), (-17.5, 53.0), (-3.0, 53.0)]   # 前のつまみの所だけ（円盤は本体に埋まる）
+
+MAG_RELEASE = (181.5, 196.0, 117.5, 131.0)    # 弾倉止め（弾倉の後ろの左右のレバー。前後 z, 上下 y）
+ROTOR_BULGE = [(178.0, 118.0), (150.0, 118.0), (150.0, 110.0), (156.0, 104.0), (172.0, 103.0), (178.0, 108.0)]
+
+CH_ROD_Z = (-64.0, 18.0)    # コッキングハンドルのガイド（横の棒。写真の灰色の棒）
+CH_ROD_Y, CH_ROD_R = 96.5, 4.8
+CH_KNOB_Z = -78.0           # 玉（輪）の中心
+CH_TRAVEL_MAX = 75.0        # 玉を引ける量（🟡 実物の値は未確認。ガイドの後端を越えない）
+
+
+def _lerp(a, b, t):
+    return a + (b - a) * min(1.0, max(0.0, t))
+
+
+def body_half(z, y):
+    """本体の半幅。上半分（弾倉の下）と下半分（グリップ・穴のまわり）を高さで混ぜる。"""
+    if z >= 200.0:
+        up = HALF_STOCK
+    elif z >= 165.0:
+        up = _lerp(HALF_UPPER, HALF_STOCK, (z - 165.0) / 35.0)
+    elif z >= 60.0:
+        up = HALF_UPPER
+    else:
+        up = _lerp(HALF_UNDER_HOUSING, HALF_UPPER, (z - 50.0) / 10.0)
+    if z >= 215.0:
+        lo = HALF_STOCK
+    elif z >= 175.0:
+        lo = _lerp(HALF_GRIP, HALF_STOCK, (z - 175.0) / 40.0)
+    elif z >= 60.0:
+        lo = HALF_GRIP
+    elif z >= 20.0:
+        lo = _lerp(HALF_TRIGGER, HALF_GRIP, (z - 20.0) / 40.0)
+    elif z >= -15.0:
+        lo = HALF_TRIGGER
+    else:
+        lo = _lerp(HALF_FRONT, HALF_TRIGGER, (z + 50.0) / 35.0)
+    return _lerp(lo, up, (y - 86.0) / 10.0)
+
+
+def _poly(o):
+    from shapely.geometry import Polygon
+    return Polygon(o["outer"], o["holes"])
+
+
+def _parts_of(g):
+    return [q for q in getattr(g, "geoms", [g]) if q.geom_type == "Polygon" and q.area > 0.5]
+
+
+def _ring(q):
+    return list(q.exterior.coords)[:-1]
+
+
+# ---------------------------------------------------------------- 本体
+def body_shape():
+    """本体の側面形: トレース＋トリガーの穴の後ろ（トリガーの側面）とセレクターの溝を穴に足す。"""
+    from shapely.geometry import Polygon
+    g = _poly(O.BODY).difference(Polygon(TRIGGER_WELL)).difference(Polygon(SELECTOR_SLOT))
+    return max(_parts_of(g), key=lambda q: q.area)
+
+
+def body():
+    """本体（樹脂の 1 つの塊）。穴の縁まで BODY_BEVEL で丸め、場所ごとに body_half の厚み。
+    弾倉の後ろの下のふくらみ（回転式の給弾部の収まる所）は少し外へ出る。"""
+    g = body_shape()
+    out = [extrude_x_rounded(_ring(g), [list(h.coords)[:-1] for h in g.interiors], body_half, BODY_BEVEL, POLY,
+                             steps=3)]
+    hw = body_half(165.0, 112.0) + 1.2
+    out.append(extrude_x_beveled(ROTOR_BULGE, -hw, hw, 2.5, POLY, steps=2))
+    return out
+
+
+def butt_pad():
+    """床尾板（ゴム）。"""
+    return [extrude_x_beveled(O.BUTT_PAD["outer"], -HALF_STOCK, HALF_STOCK, 5.0, M.RUBBER, steps=2)]
+
+
+# ---------------------------------------------------------------- 受け部
+def housing_shape():
+    """受け部（照準器の枠・銃身の覆い）の側面形。標準型のトレースの上を TR 型の上面で置き換える。"""
+    from shapely.geometry import Polygon
+    g = _poly(O.HOUSING)
+    (fz0, fy0), (fz1, fy1) = TR_FRONT
+    clip = Polygon([(70.0, 0.0), (70.0, TR_TOP_Y), (fz0, fy0), (fz1, fy1), (-140.0, fy1), (-140.0, 0.0)])
+    g = g.intersection(clip)
+    # TR 型は上面の下が詰まっている（標準型は後ろに覗き窓）。弾倉の上のすき間の天井より上だけ埋める
+    fill = Polygon([(46.0, 158.0), (46.0, TR_TOP_Y), (fz0, fy0), (-110.0, 161.5), (-110.0, 158.0)])
+    return g.union(fill)
+
+
+def housing():
+    """受け部: 中央は弾倉の通り道を抜いた形、後ろの腕（Z ARM_Z より後ろ）は弾倉の横も覆う。"""
+    from shapely.geometry import box as sbox
+    g = housing_shape()
+    z0, z1, y0, y1 = MAG_CHANNEL
+    main = g.difference(sbox(z1, y0, z0, y1))
+    out = []
+    for q in _parts_of(main):
+        out.append(extrude_x_rounded(_ring(q), [list(h.coords)[:-1] for h in q.interiors],
+                                     lambda z, y: HALF_HOUSING, 1.5, HOUSING_MAT, steps=2))
+    arm = g.intersection(sbox(ARM_Z, y0, z0, y1))
+    for q in _parts_of(arm):
+        for s in (1, -1):
+            xa, xb = sorted((s * (HALF_MAG + 0.3), s * HALF_HOUSING))
+            out.append(extrude_x(_ring(q), xa, xb, HOUSING_MAT))
+    return out
+
+
+def rails():
+    """TR 型のレール: 上面の長いレール（規約の幅 1px・溝 0.5px）と、前の左右の短いレール。"""
+    (nw, nh), (hw, hh) = ar15_parts.RAS_NECK, ar15_parts.RAS_HEAD
+    z0, z1 = TR_RAIL_Z
+    y = TR_TOP_Y
+    out = [box(-nw / 2, y - 0.5, z0, nw / 2, y + nh, z1, M.RAIL),
+           box(-hw / 2, y + nh, z0, hw / 2, y + nh + hh, z1, M.RAIL)]
+    s0, s1 = SIDE_RAIL_Z
+    r0 = HALF_HOUSING - 0.5
+    for s in (1, -1):
+        xa, xb = sorted((s * r0, s * (r0 + nh + 0.5)))
+        out.append(box(xa, SIDE_RAIL_Y - nw / 2, s0, xb, SIDE_RAIL_Y + nw / 2, s1, M.RAIL_SIDE))
+        xa, xb = sorted((s * (r0 + nh + 0.5), s * (r0 + nh + 0.5 + hh)))
+        out.append(box(xa, SIDE_RAIL_Y - hw / 2, s0, xb, SIDE_RAIL_Y + hw / 2, s1, M.RAIL_SIDE))
+    return out
+
+
+def ch_guides():
+    """コッキングハンドルのガイド（左右の横の灰色の棒。受け部の側面の溝に半分埋まる）。"""
+    out = []
+    for s in (1, -1):
+        out.append(_z_rod(s * (HALF_HOUSING - 1.5), CH_ROD_Y, CH_ROD_R, CH_ROD_Z[0], CH_ROD_Z[1], M.P90_GUIDE))
+    return out
+
+
+def _z_rod(x, y, r, z0, z1, mat, n=10):
+    return lathe(x, y, [(z0, r), (z1, r)], n, mat)
+
+
+def barrel():
+    """消炎器（トレースの太さの分布）と、受け部の中に隠れる銃身。"""
+    prof = sorted(O.MUZZLE_R)                                  # Z 昇順（銃口側から）
+    prof = [(z, r) for z, r in prof if r < 13.0]
+    out = [lathe(0, BORE_Y, [(MUZZLE_Z, 3.0), (MUZZLE_Z, prof[0][1])] + prof + [(-110.0, prof[-1][1])],
+                 ar15_mesh.N_MID, STEEL_BLACK, cap0=False),
+           lathe(0, BORE_Y, [(MUZZLE_Z - 0.2, 2.9), (MUZZLE_Z + 20.0, 2.9)], ar15_mesh.N_SMALL, M.BORE, cap0=False)]
+    return out
+
+
+# ---------------------------------------------------------------- 引き金まわり
+def trigger_shape():
+    from shapely.geometry import Polygon
+    holes = [Polygon(h) for h in O.BODY["holes"]]
+    hole = min(holes, key=lambda h: h.centroid.distance(Polygon(TRIGGER_WELL).centroid))
+    g = Polygon(TRIGGER_WELL).difference(hole.buffer(0.4))
+    return max(_parts_of(g), key=lambda q: q.area)
+
+
+def trigger():
+    """トリガー（穴の後ろの幅の広い板。前の面は穴の縁に沿う）。"""
+    return [extrude_x_beveled(_ring(trigger_shape()), -8.0, 8.0, 1.5, STEEL_BLACK, steps=2)]
+
+
+def selector():
+    """セレクター（トリガーの下の回転する円盤。ボーン selector は Y 軸まわりに回す）と前のつまみ。"""
+    z, y = SELECTOR_C
+    return [y_cyl(0.0, z, SELECTOR_R, 47.0, 52.5, STEEL_BLACK, n=20),
+            box(-5.0, 47.5, z - SELECTOR_R - 3.0, 5.0, 52.0, z - SELECTOR_R + 2.0, STEEL_BLACK)]
+
+
+def mag_release():
+    """弾倉止め（弾倉の後ろの左右のレバー。本体の側面から少し出る）。"""
+    z0, z1, y0, y1 = MAG_RELEASE
+    hw = body_half((z0 + z1) / 2, (y0 + y1) / 2) + 1.0
+    prof = [(z0, y0), (z1, y0), (z1, y1), (z0, y1)]
+    return [extrude_x_beveled(prof, -hw, hw, 1.2, STEEL_BLACK, steps=1)]
+
+
+def charging_handle():
+    """コッキングハンドルの玉（左右。輪の形で、中央に穴）。ガイドに沿って後ろへ動く。"""
+    from shapely.geometry import Point, box as sbox
+    z, y = CH_KNOB_Z, CH_ROD_Y + 1.0
+    g = Point(z, y).buffer(9.0, quad_segs=6).union(sbox(z, y - 7.5, z + 14.0, y + 7.5))
+    out = []
+    for s in (1, -1):
+        xa, xb = sorted((s * (HALF_HOUSING - 0.5), s * (HALF_HOUSING + 5.5)))
+        out.append(extrude_x_beveled(_ring(g), xa, xb, 1.2, STEEL_BLACK, steps=1))
+        xo = s * (HALF_HOUSING + 5.5)
+        out.append(x_cyl(z, y, 4.0, *sorted((xo, xo + s * 0.3)), M.BORE))     # 輪の中の穴（暗い円）
+    return out
+
+
+# ---------------------------------------------------------------- 弾倉
+def magazine():
+    """50 発弾倉（半透明の樹脂。上面に乗る）: 上下の板・前後の端・側面の縦の補強だけを作り、側面は開けて
+    中の弾（横向きに 2 段）が見えるようにする（実物は半透明で弾が透けて見える）。"""
+    z0, z1 = MAG_Z
+    y0, y1 = MAG_Y
+    w, h = MAG_WALL, HALF_MAG
+    mat = M.P90_MAG
+    out = [extrude_x_beveled([(z0, y1 - w), (z1, y1 - w), (z1, y1), (z0 + 2.0, y1)], -h, h, 1.0, mat, steps=1),
+           extrude_x_beveled([(z0, y0), (z1, y0), (z1, y0 + w), (z0, y0 + w)], -h, h, 1.0, mat, steps=1),
+           # 後ろの端（黒い蓋）・前の端（掛け金の爪が上に出る）
+           extrude_x_beveled([(z1 - 9.0, y0), (z1, y0), (z1, y1), (z1 - 9.0, y1)], -h, h, 1.5, M.P90_MAG_CAP, steps=1),
+           extrude_x_beveled([(z0, y0), (z0 + 9.0, y0), (z0 + 9.0, y1), (z0 + 4.0, y1 + 3.0), (z0, y1 + 3.0)], -h, h,
+                             1.2, M.P90_MAG_CAP, steps=1)]
+    for zr in MAG_RIBS:
+        for s in (1, -1):
+            xa, xb = sorted((s * (h - 1.6), s * h))
+            out.append(box(xa, y0 + w, zr - 0.9, xb, y1 - w, zr + 0.9, mat))
+    # 送り板（空のとき前の端に見える）
+    out.append(box(-h + 1.0, y0 + w, z0 + 9.0, h - 1.0, y1 - w, z0 + 14.0, M.FOLLOWER))
+    # 中央の暗い仕切り（弾のすき間から向こう側の背景が透けないように。空のときは暗い中が見える）
+    out.append(box(-6.0, y0 + w, z0 + 14.0, 6.0, y1 - w, z1 - 9.0, M.P90_MAG_CAP))
+    return out
+
+
+def round_57_x(z, y):
+    """5.7×28mm 実包を横向き（X 方向、弾頭が +X＝左）に置く（弾倉の中）: 全長 40.5mm、薬莢 28.9mm、底 7.95mm。
+    煙色の弾倉越しに見えるので、色は暗くした材質（P90_ROUND_*）。"""
+    b = -20.25
+    case = [(b, 3.97), (b + 28.9 - 3.5, 3.97), (b + 28.9, 3.0)]
+    bullet = [(b + 28.9, 2.85), (b + 34.0, 2.7), (20.25, 0.6)]
+    out = []
+    swap = lambda v: (v[2], v[1], v[0])
+    for prof, mat, c0, c1 in ((case, M.P90_ROUND_CASE, True, False), (bullet, M.P90_ROUND_TIP, False, True)):
+        m = lathe(0, y, prof, 6, mat, cap0=c0, cap1=c1)
+        n_ = None if m.normals is None else [[swap(v) for v in f] for f in m.normals]
+        out.append(MeshPart([(v[2], v[1], v[0] + z) for v in m.verts], m.faces, m.mat, n_, m.charts, m.chart_uv,
+                            m.chart_edge))
+    return out
+
+
+def magazine_rounds():
+    """弾倉の中の弾（mag_ammo）: 横向きの弾を上下 2 段・半ピッチずらして 25 発ずつ（50 発）。"""
+    z0, z1 = MAG_Z
+    y0, y1 = MAG_Y
+    pitch = 8.4
+    out = []
+    for row, (yc, off) in enumerate(((y1 - MAG_WALL - 4.3, 0.0), (y0 + MAG_WALL + 4.3, pitch / 2))):
+        for i in range(25):
+            z = z0 + 16.0 + off + i * pitch
+            if z > z1 - 13.0:
+                break
+            out += round_57_x(z, yc)
+    return out
+
+
+def cartridge_57(z_tip, y, x=0.0):
+    """5.7×28mm 実包（薬室内。回転体）。"""
+    b = z_tip + 40.5
+    case = [(b, 3.97), (b - 1.0, 3.97), (b - 1.3, 3.5), (b - 2.2, 3.5), (b - 2.5, 3.97), (b - 25.4, 3.97),
+            (b - 28.9, 3.0)]
+    bullet = [(b - 28.9, 2.85), (b - 34.0, 2.7), (z_tip, 0.6)]
+    return ([lathe(x, y, case, ar15_mesh.N_SMALL, M.BRASS, cap0=True, cap1=False)],
+            [lathe(x, y, bullet, ar15_mesh.N_SMALL, M.COPPER, cap0=False, cap1=True)])
+
+
+# ---------------------------------------------------------------- 組み立て
+def build():
+    from core import Model
+    b = BORE_Y
+    m = Model()
+    parts: dict[str, list] = {}
+
+    def add(bone, parent, pivot_mm, part_name, items):
+        items = [c.scaled(K) for c in items]
+        if part_name:
+            parts[part_name] = items
+        return m.bone(bone, parent, tuple(v * K for v in pivot_mm), items)
+
+    m.bone("root", None, (0, 0, 0))
+    add("receiver", "root", (0, b, 0), "housing", housing() + rails() + ch_guides())
+    add("stock", "root", (0, 60.0, 100.0), "body", body() + butt_pad())
+    add("lower_receiver", "stock", (0, 60.0, 0), None, [])
+    add("selector", "lower_receiver", (0, SELECTOR_C[1], SELECTOR_C[0]), "selector", selector())
+    add("trigger", "root", (0, 82.0, 8.0), "trigger", trigger())
+    add("mag_release", "stock", (0, MAG_RELEASE[3], MAG_RELEASE[1]), "mag_release", mag_release())
+
+    add("barrel", "root", (0, b, BOLT_FACE_Z), "barrel", barrel())
+    add("chamber", "barrel", (0, b, BOLT_FACE_Z), None, [])
+    add("muzzle", "root", (0, b, MUZZLE_Z), None, [])
+    add("handguard", "root", (0, b, -60.0), None, [])
+    add("rail_top", "root", (0, TR_TOP_Y + 5.0, sum(TR_RAIL_Z) / 2), None, [])
+    add("rail_side", "root", (HALF_HOUSING + 5.0, SIDE_RAIL_Y, sum(SIDE_RAIL_Z) / 2), None, [])
+    add("rail_bottom", "root", (0, 40.0, -112.0), None, [])          # 下面レールは無い（前のハンドストップの下）
+
+    add("bolt", "root", (0, b, BOLT_FACE_Z), None, [])                # ボルトは外から見えない（位置だけ）
+    add("charging_handle", "receiver", (0, CH_ROD_Y, CH_KNOB_Z), "charging_handle", charging_handle())
+
+    zc = sum(MAG_Z) / 2
+    add("magazin", "root", (0, MAG_Y[0], zc), "magazine", magazine())
+    add("mag_ammo", "magazin", (0, sum(MAG_Y) / 2, zc), None, magazine_rounds())
+
+    tip = BOLT_FACE_Z - 40.5                                  # 薬室内の実包
+    case, bullet = cartridge_57(tip, b)
+    add("ammo", "root", (0, b, tip + 30.0), None, case)
+    add("bullet", "ammo", (0, b, tip + 6.0), None, bullet)
+
+    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=(TR_TOP_Y + 5.0) * K,
+                 rear_sight_z=TR_RAIL_Z[1] * K, grip_center=(0, 55.0 * K, 40.0 * K))
+    return m, parts

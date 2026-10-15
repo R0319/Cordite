@@ -35,6 +35,18 @@ M24_STEEL = Material("m24_steel", (34, 34, 36), noise=0.05, grime=0.16, scratch=
                      wear=0.25, wear_color=(96, 96, 94), edge_wear=0.5, dust=0.1)
 M24_BOLT = Material("m24_bolt", (92, 92, 90), noise=0.05, grime=0.12, scratch=0.016,
                     wear=0.15, wear_color=(140, 140, 136), dust=0.05)          # ボルト（明るい鋼）
+# FN P90 の材質（本体は黒に近い灰色の樹脂、受け部はさらに黒い。弾倉は煙色の半透明樹脂。MP5 と同じ汚し）
+P90_POLY = Material("p90_poly", (60, 61, 64), noise=0.06, grime=0.14, scratch=0.004,
+                    wear=0.22, wear_color=(78, 78, 78), edge_wear=0.35, dust=0.14)
+P90_HOUSING = Material("p90_housing", (32, 32, 34), noise=0.05, grime=0.14, scratch=0.008,
+                       wear=0.22, wear_color=(84, 84, 84), edge_wear=0.45, dust=0.10)
+P90_STEEL = Material("p90_steel", (30, 30, 31), noise=0.05, grime=0.16, scratch=0.010,
+                     wear=0.22, wear_color=(96, 96, 94), edge_wear=0.45, dust=0.08)
+P90_GUIDE = Material("p90_guide", (96, 94, 88), noise=0.05, grime=0.16, scratch=0.010, dust=0.06)   # 横の灰色の棒
+P90_MAG = Material("p90_mag", (60, 56, 50), noise=0.06, grime=0.12, scratch=0.006, dust=0.08)      # 煙色の半透明樹脂
+P90_ROUND_CASE = Material("p90_round_case", (124, 98, 56), noise=0.05, grime=0.10)   # 弾倉越しの薬莢（暗い真鍮）
+P90_ROUND_TIP = Material("p90_round_tip", (58, 54, 50), noise=0.05, grime=0.08)      # 弾倉越しの弾頭（SS190 の黒い先端）
+P90_MAG_CAP = Material("p90_mag_cap", (40, 38, 36), noise=0.05, grime=0.12, scratch=0.004)
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
