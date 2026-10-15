@@ -75,6 +75,34 @@ M79_FRAME = Material("m79_frame", (58, 60, 62), noise=0.06, grime=0.16, scratch=
                      wear=0.22, wear_color=(104, 106, 108), edge_wear=0.45, dust=0.08)
 M79_CASE = Material("m79_case", (150, 150, 146), noise=0.05, grime=0.10)        # 40mm の薬莢（アルミ）
 M79_GRENADE = Material("m79_grenade", (74, 82, 52), noise=0.05, grime=0.10)     # 擲弾の弾頭（オリーブ色）
+# M2 重機関銃の材質（パーカー処理の暗い灰緑の鋼、樹脂のグリップ、オリーブ色の弾薬箱。使い込まれた感の汚し）
+M2_STEEL = Material("m2_steel", (56, 58, 54), noise=0.06, grime=0.18, scratch=0.010,
+                    wear=0.22, wear_color=(100, 102, 96), edge_wear=0.45, dust=0.10)
+M2_GRIP = Material("m2_grip", (34, 32, 30), noise=0.06, grime=0.12, scratch=0.004, edge_wear=0.2)
+M2_CAN = Material("m2_can", (76, 82, 54), noise=0.06, grime=0.18, scratch=0.012,
+                  wear=0.2, wear_color=(110, 112, 96), edge_wear=0.5, dust=0.14)
+# G3A3 の材質（黒いリン酸塩処理の鋼の受け部・小物、オリーブ色の樹脂のハンドガード・グリップ・ストック。使い込まれた感の汚し）
+G3_RECEIVER = Material("g3_receiver", (40, 41, 44), noise=0.05, grime=0.16, scratch=0.010,
+                       wear=0.28, wear_color=(98, 100, 102), edge_wear=0.5, dust=0.10)
+G3_STEEL = Material("g3_steel", (32, 32, 34), noise=0.05, grime=0.16, scratch=0.010,
+                    wear=0.22, wear_color=(96, 96, 94), edge_wear=0.45, dust=0.08)
+G3_OD = Material("g3_od", (84, 96, 72), noise=0.07, grime=0.16, scratch=0.005,
+                 wear=0.2, wear_color=(110, 120, 98), edge_wear=0.35, dust=0.16)
+G3_OD_DARK = Material("g3_od_dark", (46, 54, 40), noise=0.05, grime=0.12)       # ハンドガードの凹み・ねじ穴の影
+G3_MAG = Material("g3_mag", (42, 43, 46), noise=0.05, grime=0.18, scratch=0.014,
+                  wear=0.26, wear_color=(104, 104, 102), edge_wear=0.45, dust=0.12)
+# HK416 の材質（黒いアルマイトの受け部・黒い樹脂。AR-15 から流用した部品の灰色の材質をこれに置き換える。使い込まれた感の汚し）
+HK_RECEIVER = Material("hk_receiver", (36, 37, 40), noise=0.05, grime=0.14, scratch=0.010,
+                       wear=0.25, wear_color=(92, 94, 98), edge_wear=0.5, dust=0.10)
+HK_POLY = Material("hk_poly", (30, 30, 32), noise=0.06, grime=0.12, scratch=0.004,
+                   wear=0.2, wear_color=(62, 62, 64), edge_wear=0.35, dust=0.14)
+HK_STEEL = Material("hk_steel", (28, 28, 30), noise=0.05, grime=0.16, scratch=0.010,
+                    wear=0.22, wear_color=(96, 96, 94), edge_wear=0.45, dust=0.08)
+# ライオット兵の盾（黒い防弾樹脂の板・縁と金具・覗き窓の暗いガラス）
+SHIELD_BODY = Material("shield_body", (40, 41, 44), noise=0.05, grime=0.12, scratch=0.006,
+                       wear=0.15, wear_color=(84, 86, 88), edge_wear=0.4, dust=0.12)
+SHIELD_RIM = Material("shield_rim", (30, 30, 32), noise=0.05, grime=0.12, scratch=0.006, edge_wear=0.4)
+SHIELD_GLASS = Material("shield_glass", (70, 84, 92), noise=0.02, grime=0.06)
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
@@ -98,3 +126,23 @@ PX_RAIL_DOWN = Material("px_rail_down", (54, 56, 60), stripe=2, stripe_dark=0.35
 PX_MAG = Material("px_mag", (82, 84, 76), edge=0.35, edge_min=3)
 PX_BRASS = Material("px_brass", (200, 158, 70))
 PX_COPPER = Material("px_copper", (190, 112, 70))
+
+
+# --- ゲーム内の見え方への補正（作者の実機確認: 「テクスチャが暗い・まだら」）。
+# 黒い仕上げの下塗り色（28〜48）はゲームの光でほぼ真っ黒になり、形が読めなかった。また、黒い下地に明るい「塗装の擦れの斑」
+# （wear）・埃（dust）・汚れのむら（grime）を散らすと、色の差が大きくて斑点に見えた。暗い材質を持ち上げ、斑・むらは弱め、
+# 角の擦れ（edge_wear。部品の輪郭が読める）だけ残す。銃口・穴の奥（BORE）と刻印の色は変えない。
+def _game_ready(m):
+    from dataclasses import replace
+    if m.name in ("bore",) or m.name.startswith("mark_"):
+        return m
+    c = m.color
+    if max(c) < 75:                                   # 黒・暗い灰の仕上げ
+        c = tuple(int(round(v * 0.7 + 26)) for v in c)
+    return replace(m, color=c, noise=m.noise * 0.8, grime=m.grime * 0.55, scratch=m.scratch * 0.7,
+                   wear=m.wear * 0.3, dust=m.dust * 0.35)
+
+
+for _n, _m in list(globals().items()):
+    if isinstance(_m, Material):
+        globals()[_n] = _game_ready(_m)

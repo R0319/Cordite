@@ -45,9 +45,10 @@ LEFT_GRIP = 0.8                 # 左手の箱（厚さ 4px）の上面をハン
 SUPPORT_SKIP = ("magazin", "mag_ammo", "ammo", "bullet", "bipod_leg_l", "bipod_foot_l", "bipod_leg_r", "bipod_foot_r")
 
 
-def add_locators(m: Model, muzzle, sight_line_y, rear_sight_z, grip_center, support_z, eye_relief=None):
+def add_locators(m: Model, muzzle, sight_line_y, rear_sight_z, grip_center, support_z, eye_relief=None, hands=None):
     """support_z: 左手を添える前後位置 [px]（ハンドガード・ポンプ・先台の下）。
-    eye_relief: 照門から ADS の目までの距離 [px]（銃ごとに離したいとき。腰だめのカメラもその後ろへ下がる）。"""
+    eye_relief: 照門から ADS の目までの距離 [px]（銃ごとに離したいとき。腰だめのカメラもその後ろへ下がる）。
+    hands: (右手の先, 左手の先) [px] を直接指定する（M2 のように両手で後ろのグリップを握る銃）。"""
     tz = m.get("trigger").pivot[2]
     iron_z = max(tz + IRON_BEHIND, rear_sight_z + (IRON_MIN_RELIEF if eye_relief is None else eye_relief))
     hip = (HIP_SIDE, sight_line_y + HIP_UP, max(tz + HIP_BEHIND, iron_z + IRON_MIN_ADVANCE))
@@ -60,6 +61,7 @@ def add_locators(m: Model, muzzle, sight_line_y, rear_sight_z, grip_center, supp
     for b in ARM_PLACEHOLDERS:
         m.raw_bone(b)
     m.support_z = support_z
+    m.hands = hands
 
 
 def _bottom_at(bones, z, half_x=1.0):
@@ -107,14 +109,21 @@ def place_iron_view(geo_bones):
     iv[2] = min(iv[2], round(hip[2] - IRON_MIN_ADVANCE, 4))
 
 
-def hold_animation(geo_bones, stem, support_z):
-    """腕に銃を握らせる待機ポーズ（idle）。作者が待機アニメーションを作るまでの仮置きで、腕のボーン以外は動かさない。"""
+def hold_animation(geo_bones, stem, support_z, hands=None):
+    """腕に銃を握らせる待機ポーズ（idle）。作者が待機アニメーションを作るまでの仮置きで、腕のボーン以外は動かさない。
+    hands を渡すと手先をその位置にし、肘は銃の中心に対して左右対称（手先の外 2.5px・カメラの 10px 下）に置く。"""
     by = {b["name"]: b for b in geo_bones}
     eye = np.array(by["idle_view"]["pivot"], float)
-    grip = np.array(by["thirdperson_hand"]["pivot"], float)
-    right_tip = grip + RIGHT_TIP
-    left_tip = np.array((LEFT_SIDE, _bottom_at(geo_bones, support_z) - 2.0 + LEFT_GRIP, support_z))
+    if hands:
+        right_tip, left_tip = (np.array(h, float) for h in hands)
+        right_elbow = np.array((right_tip[0] - 2.5, eye[1] - 10.0, eye[2] + 1.0))
+        left_elbow = np.array((left_tip[0] + 2.5, eye[1] - 10.0, eye[2] + 1.0))
+    else:
+        grip = np.array(by["thirdperson_hand"]["pivot"], float)
+        right_tip = grip + RIGHT_TIP
+        left_tip = np.array((LEFT_SIDE, _bottom_at(geo_bones, support_z) - 2.0 + LEFT_GRIP, support_z))
+        right_elbow, left_elbow = eye + RIGHT_ELBOW, eye + LEFT_ELBOW
     return {"format_version": "1.8.0", "animations": {f"animation.{stem}.idle": {"loop": True, "bones": {
-        "right_hand": _arm(by["right_hand"]["pivot"], right_tip, eye + RIGHT_ELBOW),
-        "left_hand": _arm(by["left_hand"]["pivot"], left_tip, eye + LEFT_ELBOW),
+        "right_hand": _arm(by["right_hand"]["pivot"], right_tip, right_elbow),
+        "left_hand": _arm(by["left_hand"]["pivot"], left_tip, left_elbow),
     }}}}

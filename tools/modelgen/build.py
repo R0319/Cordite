@@ -1,6 +1,6 @@
 """
 生成の入口。  python3 build.py
-generated/<variant>/ に m4a1.geo.json・m4a1.png・m4a1.animation.json（腕の待機ポーズ）・m4a1_modelshot.png（インベントリ用アイコン）とプレビュー画像を出す。
+generated/<variant>/ に m4a1.geo.json・m4a1.png・m4a1.animation.json（腕の待機ポーズ）・m4a1_modelshot.png（インベントリ用アイコン。斜めから見た立体）とプレビュー画像を出す。
 parts 版は parts/ に部品ごとの .geo.json も出す（Blockbench で単体確認・別銃への流用用）。
 """
 import json
@@ -20,6 +20,11 @@ import p90
 import m1912
 import awm
 import m79
+import m2
+import m3_tripod
+import g3a3
+import hk416
+import riot_shield
 
 OUT = Path(__file__).parent / "generated"
 VARIANTS = {
@@ -38,6 +43,11 @@ VARIANTS = {
     "m1912_mesh": (m1912.build, 8, "m1912"),                                  # Winchester M1912 トレンチガン
     "awm_mesh": (awm.build, 8, "awm"),                                        # Accuracy International AWM
     "m79_mesh": (m79.build, 8, "m79"),                                        # M79 グレネードランチャー
+    "m2_mesh": (m2.build, 8, "m2"),                                           # ブローニング M2HB 重機関銃
+    "m3_tripod_mesh": (m3_tripod.build, 8, "m3_tripod"),                      # M2 の三脚（銃と同じ座標で重ねて置く）
+    "g3a3_mesh": (g3a3.build, 8, "g3a3"),                                     # H&K G3A3（固定ストック）
+    "hk416_mesh": (hk416.build, 8, "hk416"),                                  # H&K HK416 D14.5RS
+    "riot_shield_mesh": (riot_shield.build, 16, "riot_shield"),               # ライオット兵の盾（1px = 62.5mm。riot_shield.py）
 }
 def _with_detail(level):
     ar15_mesh.set_detail(level)
@@ -45,6 +55,20 @@ def _with_detail(level):
         return m4a1_parts.build(ar15_mesh)
     finally:
         ar15_mesh.set_detail("full")
+
+
+ICON_VIEW = (45, 30)        # インベントリのアイコン: ブロックのアイテムと同じ向き（斜め後ろ上 45°・見下ろし 30°）。作者の指定
+ICON_GAMMA = 1.6            # アイコンの明るさの持ち上げ（16px では真横の暗い影絵になり、どの銃か見分けられなかった）
+
+
+def icon_image(geo, tex, view=ICON_VIEW):
+    """インベントリのアイコン（<銃ID>_modelshot.png）: 斜めから見た立体を、保存した法線の陰影で描き、暗い所を持ち上げる。"""
+    import numpy as np
+    from PIL import Image
+    im = render(geo, tex, *view, width=512, smooth=True)
+    a = np.asarray(im).astype(np.float32)
+    a[..., :3] = np.clip(((a[..., :3] / 255.0) ** (1.0 / ICON_GAMMA)) * 255.0, 0, 255)
+    return Image.fromarray(a.astype(np.uint8), "RGBA")
 
 
 VIEWS = {"side_left": (-90, 0), "side_right": (90, 0), "three_quarter": (-40, 22), "top": (-90, 89.9),
@@ -55,15 +79,23 @@ def build_variant(name, fn, density, stem):
     model, parts = fn()
     geo, tex, size = bake(model, density)
     d = OUT / name
-    place_iron_view(geo)
+    is_gun = hasattr(model, "support_z")             # 三脚など銃でない物は、カメラ・腕の待機ポーズを持たない
+    if is_gun:
+        place_iron_view(geo)
     write_geo(d / f"{stem}.geo.json", geo, size)
     tex.save(d / f"{stem}.png")
     # 腕に銃を握らせる待機ポーズ（作者が待機アニメーションを作るまでの仮置き。無いと腕が真上に立ったまま映る）
-    (d / f"{stem}.animation.json").write_text(json.dumps(hold_animation(geo, stem, model.support_z), indent=1) + "\n")
+    if is_gun:
+        (d / f"{stem}.animation.json").write_text(
+            json.dumps(hold_animation(geo, stem, model.support_z, model.hands), indent=1) + "\n")
     for view, (yaw, pitch) in VIEWS.items():
         render(geo, tex, yaw, pitch, width=300 if view == "front" else 900,
                background=(150, 160, 170, 255)).save(d / f"preview_{view}.png")
-    render(geo, tex, 90, 0, width=512).save(d / f"{stem}_modelshot.png")
+    if hasattr(model, "icon_model"):                 # 手に持つ向きと別の姿勢でアイコンを描く物（盾）
+        igeo, itex, _ = bake(model.icon_model(), density)
+        icon_image(igeo, itex, model.icon_view).save(d / f"{stem}_modelshot.png")
+    else:
+        icon_image(geo, tex).save(d / f"{stem}_modelshot.png")
     for pname, cubes in parts.items():
         pm = Model()
         pm.bone(pname, None, (0, 0, 0), cubes)

@@ -21,7 +21,7 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ModelsDir,
     [string] $ArchiveDir = "",
-    [string[]] $Keep = @("glock", "m1911", "ak_47", "m4a1", "m249", "m249_stanag", "mp5", "m24", "p90", "m1912", "awm", "m79"),
+    [string[]] $Keep = @("glock", "m1911", "ak_47", "m4a1", "m249", "m249_stanag", "mp5", "m24", "p90", "m1912", "awm", "m79", "m2", "g3a3", "hk416", "riot_shield"),
     [switch] $Apply
 )
 $ErrorActionPreference = "Stop"
@@ -40,7 +40,11 @@ $Install = @(
     @{ Dir = "p90_mesh";         Id = "p90" },
     @{ Dir = "m1912_mesh";       Id = "m1912" },
     @{ Dir = "awm_mesh";         Id = "awm" },
-    @{ Dir = "m79_mesh";         Id = "m79" }
+    @{ Dir = "m79_mesh";         Id = "m79" },
+    @{ Dir = "m2_mesh";          Id = "m2" },      # 三脚（m3_tripod_mesh）は銃ではないので配置しない（銃のモデルとして読み込まれる）
+    @{ Dir = "g3a3_mesh";        Id = "g3a3" },
+    @{ Dir = "hk416_mesh";       Id = "hk416" },
+    @{ Dir = "riot_shield_mesh"; Id = "riot_shield" }   # ライオット兵の盾（銃と同じ置き場所・読み込み。Cordite-dev soldier.md 11.3）
 )
 
 if (-not (Test-Path $ModelsDir -PathType Container)) { throw "作業フォルダが見つからない: $ModelsDir" }
