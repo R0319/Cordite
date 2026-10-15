@@ -18,6 +18,7 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 import p90_outline as O
 from core import box, extrude_x, extrude_x_beveled, extrude_x_rounded, lathe
 from m249 import x_cyl, y_cyl
@@ -45,7 +46,7 @@ HALF_MAG = 22.0             # 弾倉 44mm（5.7×28mm 弾 40.5mm を横向きに
 
 # 弾倉（写真）: 後ろの端は本体の段の前、前の端は受け部の前のブロックの手前
 MAG_Z = (-82.0, 181.0)
-MAG_Y = (117.0, 140.0)
+MAG_Y = (115.8, 140.0)           # 下は受け部の溝の底（116）にわずかに埋める（1mm 浮いて下に線が見えていた）
 MAG_WALL = 2.5              # 上下の板・前後の端の厚さ
 ROTOR_Z, ROTOR_R, ROTOR_H = 160.0, 19.0, 6.5   # 給弾ローター（弾倉の後ろの下。本体の後ろの下のふくらみの中に収まる）
 MAG_RIBS = [160.0, 135.0, 110.0, 85.0, 60.0, 35.0, 10.0, -15.0, -40.0, -62.0]   # 側面の縦の補強（写真の縦の筋）
@@ -320,6 +321,10 @@ def build():
     add("muzzle", "root", (0, b, MUZZLE_Z), None, [])
     add("handguard", "root", (0, b, -60.0), None, [])
     add("rail_top", "root", (0, TR_TOP_Y + 5.0, sum(TR_RAIL_Z) / 2), None, [])
+    # デフォルトのアイアンサイト（TR 型は照準器が無くレールだけ。折りたたみ式をレールの前後の端に載せる。
+    # サイトのアタッチメントを付けるとコードがこのボーンを描かない）
+    irons, sight_y = sights.default_irons(TR_TOP_Y + 5.0, TR_RAIL_Z[1] - 13.0, TR_RAIL_Z[0] + 11.0, trigger_z=8.0)
+    add("iron_sight", "root", (0, TR_TOP_Y + 5.0, TR_RAIL_Z[1] - 13.0), "iron_sight", irons)
     add("rail_side", "root", (HALF_HOUSING + 5.0, SIDE_RAIL_Y, sum(SIDE_RAIL_Z) / 2), None, [])
     add("rail_bottom", "root", (0, 40.0, -112.0), None, [])          # 下面レールは無い（前のハンドストップの下）
 
@@ -335,6 +340,6 @@ def build():
     add("ammo", "root", (0, b, tip + 30.0), None, case)
     add("bullet", "ammo", (0, b, tip + 6.0), None, bullet)
 
-    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=(TR_TOP_Y + 5.0) * K,
-                 rear_sight_z=TR_RAIL_Z[1] * K, grip_center=(0, 55.0 * K, 40.0 * K))
+    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=sight_y * K,
+                 rear_sight_z=(TR_RAIL_Z[1] - 13.0) * K, grip_center=(0, 55.0 * K, 40.0 * K), support_z=-84.0 * K)
     return m, parts

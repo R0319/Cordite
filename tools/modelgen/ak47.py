@@ -16,8 +16,9 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 import ak47_outline as O
-from core import MeshPart, Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe
+from core import MeshPart, Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, x_cyl
 from rig import add_locators
 
@@ -162,6 +163,11 @@ def front_trunnion():
 REAR_LEAF_HINGE = (-203.0, 175.5)      # 照尺の前の蝶番（図面の照門ブロックの前上の角）
 REAR_SLIDER_Z = (-194.0, -181.0)       # スライダー（図面の照尺の上の前寄りの膨らみ。「П」の位置）
 REAR_NOTCH_Z = (-140.0, -133.0)        # 照尺の後端の照門（図面の後ろの膨らみ。後端 -133）
+# 照門の切り欠きと照星のポストは見やすいように誇張する（実物は切り欠き 2.6mm・ポスト 2.2mm。sights の目安で
+# ADS の目からの距離で決める。トリガーは Z=0）
+_EYE = sights.eye_z(0.0, REAR_SIGHT_Z)
+NOTCH_HALF = sights.NOTCH_ANGLE * (_EYE - REAR_SIGHT_Z) / 2
+POST_HALF = sights.POST_ANGLE * (_EYE - FRONT_SIGHT_Z) / 2
 
 
 def rear_sight():
@@ -179,9 +185,9 @@ def rear_sight():
     out.append(x_cyl(zh, yh, 3.2, -11.6, 11.6, M.STEEL, n=12))                  # 蝶番のピン
     # 後端の照門: 左右 2 本の爪の間の切り欠きの底が照準線（SIGHT_Y）
     out.append(extrude_x_beveled([(nz0, 172.5), (nz1, 172.5), (nz1, SIGHT_Y), (nz0, SIGHT_Y)],
-                                 -7.0, 7.0, 0.5, STEEL_BLACK, steps=1))
+                                 -(NOTCH_HALF + 5.7), NOTCH_HALF + 5.7, 0.5, STEEL_BLACK, steps=1))
     for s in (1, -1):
-        x0, x1 = sorted((s * 1.3, s * 7.0))
+        x0, x1 = sorted((s * NOTCH_HALF, s * (NOTCH_HALF + 5.7)))
         out.append(extrude_x_beveled([(nz0, SIGHT_Y - 0.5), (nz1, SIGHT_Y - 0.5), (nz1, 184.0), (nz0 + 1.5, 184.0)],
                                      x0, x1, 0.5, STEEL_BLACK, steps=1))
     # スライダー（照尺を抱く箱）と左右のボタン
@@ -199,12 +205,16 @@ def rear_sight():
 TRIGGER_BOX = (-16.0, 75.5, 5.5, 101.0)       # ガードの中のトリガー（ガードの下の帯 Y≦74・後ろの柱 Z≧6 は含まない）
 MAG_CATCH_BOX = (-53.0, 50.0, -44.5, 101.0)   # ガードの前に垂れるマガジンキャッチ（弾倉の後ろの縁に 0.5mm 掛かる）
 MAG_CATCH_PIN = (-41.0, 95.0)                 # マガジンキャッチの軸（ガードの前の付け根）
+GUARD_REAR_FILL = (14.0, 74.5, 17.5, 100.0)    # ガードの後ろの脚とグリップの間を埋める範囲（Z0, Y0, Z1, Y1）
 
 
 def trigger_guard():
     """トリガーガード（プレス鋼板）。図面の輪郭からトリガーとマガジンキャッチを除いた残り。"""
     from shapely.geometry import Polygon, box as sbox
     g = Polygon(O.TRIGGER_GUARD["outer"]).difference(sbox(*TRIGGER_BOX)).difference(sbox(*MAG_CATCH_BOX))
+    # 後ろの脚をグリップの前の縁（Z 17）まで広げる。図面のトレースでは 2mm 空いて背景が抜けていたが、実物の写真
+    # （米国防総省 AK-47 type II）ではガードの後ろの端はグリップに直接つながり、隙間は無い
+    g = g.union(sbox(*GUARD_REAR_FILL))
     out = [extrude_x_beveled(list(q.exterior.coords)[:-1], -5.5, 5.5, 1.0, STEEL_BLACK, steps=1)
            for q in getattr(g, "geoms", [g]) if q.geom_type == "Polygon" and q.area > 0.5]
     out.append(x_cyl(*MAG_CATCH_PIN, 1.8, -6.4, 6.4, M.STEEL, n=8))              # マガジンキャッチの軸のピン
@@ -237,7 +247,8 @@ def stock():
 
     def radius(nz, ny):
         return 1.0 if nz < -0.6 else 9.0     # 前の端面（受け部の後端に付く面）は丸めない
-    out = [inflate_x(O.STOCK["outer"], HALF_STOCK, WOOD, steps=4, width_fn=width, radius_fn=radius)]
+    # cap_grid: 幅が場所ごとに変わる平らな面を格子で分ける（扇形の細長い三角形だと放射状の筋に見えた）
+    out = [inflate_x(densify(O.STOCK["outer"]), HALF_STOCK, WOOD, steps=4, width_fn=width, radius_fn=radius, cap_grid=14.0)]
     # 鋼の床尾板（図面: 床尾の縦の帯）
     y0, y1 = _yr(O.STOCK)
     out.append(extrude_x_beveled([(z1 - 6, y0 + 2), (z1 + 1, y0 + 2), (z1 + 1, y1 - 2), (z1 - 6, y1 - 2)],
@@ -262,14 +273,97 @@ def muzzle():
                   cap0=False, cap1=False)]
 
 
+# ガスチューブ（実物の写真で確認: 米国防総省「AK-47 type II Part DM-ST-89-01131.jpg」、2.55px/mm）。
+# 図面のトレース GAS は銃身の上に載った 1 枚の板だったが、実物はガスブロックより後ろで銃身から離れた丸い管で、
+# 管と銃身の間に背景が抜ける。管の後ろの端には上ハンドガードの前端を包む金具（カップ）、その前に細長い穴が 4 つ
+GAS_BLOCK_REAR_Z = -384.0                  # ガスブロック（図面の斜めの部分）の後ろの端。これより後ろは管
+GAS_TUBE_Y, GAS_TUBE_R = 157.6, 9.4        # 管の中心の高さ・半径（写真: 太さ 18.8mm、銃身との隙間 6.7mm）
+GAS_COLLAR_Z = (-412.0, -388.0)            # ガスブロックの銃身を抱く輪の前後（図面のブロックの前端〜斜めの部分の下）
+GAS_COLLAR_R = 12.4                        # 輪の半径（下端がクリーニングロッドに当たる太さ。写真ではブロックとロッドの間に隙間が無い）
+GAS_TUBE_REAR_Z = -296.0                   # 管の後ろの端（上ハンドガードの中に隠れる）
+# ハンドガードの前端（写真を 5 倍に拡大して読んだ。上の木の前端 Z -312 を基準に、写真の中の前後関係で置く）
+UPPER_CAP_Z = (-318.3, -311.0)             # 上の木の前端を包む金具（枠）。後ろの 1mm は木に被さる
+UPPER_CAP_Y = (144.6, 173.0)               # 枠の上下（上は写真: 木より少し低い所まで。下は下ハンドガードの上の縁 145 に食い込ませる）
+UPPER_CAP_HALF, UPPER_CAP_R = 15.6, 7.0    # 枠の半幅・角の丸み
+GAS_SLEEVE = (-331.6, -318.0, 10.0)        # ガス管の後ろの少し太い部分（Z の前・後ろ、半径）
+LOWER_HG_FRONT_Z = -313.6                  # 下ハンドガードの木の前端（写真: 上の木の前端より 1.6mm 後ろ）
+LOWER_HG_STEP_Z = -297.0                   # 下ハンドガードの上の縁の段（写真）。ここより後ろは上ハンドガードとの隙間が広い
+LOWER_HG_TOP = (143.0, 141.0)              # 上の縁の高さ（段の前・後ろ。写真の隙間 約 2mm・4mm）。上ハンドガードの下の面は 145
+LOWER_RIM_Z = (-316.7, -313.0)             # 下の金具の後ろの縁（木の前端の板。高さは木と同じ）
+LOWER_RIM_Y = (113.5, 146.3)
+LOWER_BODY_Z = (-333.9, -316.0)            # 下の金具の本体（銃身を抱く。写真では銃身の中心より上に寄り、下端 123.2・上端 146.5）
+LOWER_BODY_Y = (123.2, 148.4)              # 上はガス管の太い部分の下（147.6）まで（写真ではここに隙間が無い）
+LOWER_BODY_HALF = 12.5                     # 本体の半幅（🟡 写真は真横だけなので推定）
+LOWER_PIN = (-326.1, 141.4, 1.4)           # 輪の左の側面の丸いピンの頭（Z, Y, 半径）
+ROD_HANGER = (-320.5, -314.4, 113.5)       # 縁から下へ伸びてクリーニングロッドを抱く部分（Z の前・後ろ、下端。前は写真で白く抜け始める所）
+CLEANING_ROD_Y, CLEANING_ROD_R = 118.9, 1.8   # 写真: 太さ 3.6mm、銃身の下の面との隙間 3.9mm
+GAS_VENTS = [-358.0, -350.0, -342.0, -334.5]   # 側面の細長い穴の中心 Z（写真。長さ 5.5mm・幅 2.2mm。太い部分の前）
+
+
 def gas():
-    """ガスチューブ〜ガスブロック（図面の側面形。断面は丸める）と、ガスブロックの下の突起。"""
-    return [extrude_x_beveled(O.GAS["outer"], -HALF_GAS, HALF_GAS, 9.0, STEEL_BLACK, steps=3),
-            *outline_parts(O.GAS_LUG, -7.0, 7.0, STEEL_BLACK, bevel=2.0)]
+    """ガスブロック（図面の側面形の前の部分。断面は丸める）・その下の突起と、後ろへ延びる丸いガスチューブ・
+    上ハンドガードの前端を包む金具・チューブ側面の穴。"""
+    from shapely.geometry import Polygon, box as sbox
+    blk = Polygon(O.GAS["outer"]).intersection(sbox(-500.0, 0.0, GAS_BLOCK_REAR_Z, 300.0))
+    out = [extrude_x_beveled(list(blk.exterior.coords)[:-1], -HALF_GAS, HALF_GAS, 6.0, STEEL_BLACK, steps=3),   # 丸め 6mm（短く切ったので 9mm だと潰れる）
+           *outline_parts(O.GAS_LUG, -7.0, 7.0, STEEL_BLACK, bevel=2.0)]
+    # ガスブロックの下の輪（銃身を抱く。銃身の穴 → ブロック → 管とガスが通るので、横から見て銃身と管の間がつながる）
+    c0, c1 = GAS_COLLAR_Z
+    out.append(lathe(0, BORE_Y, [(c0, GAS_COLLAR_R), (c1, GAS_COLLAR_R)], ar15_mesh.N_MID, STEEL_BLACK))
+    y, r = GAS_TUBE_Y, GAS_TUBE_R
+    out.append(lathe(0, y, [(GAS_BLOCK_REAR_Z - 3.0, r), (GAS_TUBE_REAR_Z, r)], ar15_mesh.N_MID, STEEL_BLACK))
+    z0, z1, rs = GAS_SLEEVE
+    out.append(lathe(0, y, [(z0, r), (z0 + 1.0, rs), (z1, rs)], ar15_mesh.N_MID, STEEL_BLACK))
+    out.append(upper_cap())
+    for z in GAS_VENTS:                    # 穴（暗い長円の板を左右の面に。管の中心より 4.5mm 上。写真）
+        ts = [math.pi * (k / 6 - 0.5) for k in range(7)]          # -90°〜90°
+        hole = ([(z + 1.65 + 1.1 * math.cos(t), y + 4.5 + 1.1 * math.sin(t)) for t in ts] +     # 前後の半円
+                [(z - 1.65 - 1.1 * math.cos(t), y + 4.5 - 1.1 * math.sin(t)) for t in ts])
+        xs = math.sqrt(r * r - 4.5 * 4.5)
+        for sg in (1, -1):
+            xa, xb = sorted((sg * (xs - 0.6), sg * (xs + 0.15)))
+            out.append(extrude_x(hole, xa, xb, M.BORE))
+    return out
 
 
 def cleaning_rod():
-    return [lathe(0, 121.5, [(-505.0, 2.2), (-320.0, 2.2)], 6, M.STEEL)]
+    return [lathe(0, CLEANING_ROD_Y, [(-505.0, CLEANING_ROD_R), (LOWER_RIM_Z[1], CLEANING_ROD_R)], 6, M.STEEL)]
+
+
+def _rounded_rect(x0, y0, x1, y1, r_top, r_bot, n=4):
+    """角を丸めた長方形の断面（X, Y）。上の角と下の角で丸みを変えられる。"""
+    pts = []
+    for cx, cy, rr, a0 in ((x1 - r_bot, y0 + r_bot, r_bot, -90), (x1 - r_top, y1 - r_top, r_top, 0),
+                           (x0 + r_top, y1 - r_top, r_top, 90), (x0 + r_bot, y0 + r_bot, r_bot, 180)):
+        for k in range(n + 1):
+            t = math.radians(a0 + 90 * k / n)
+            pts.append((cx + rr * math.cos(t), cy + rr * math.sin(t)))
+    return pts
+
+
+def upper_cap():
+    """上ハンドガードの木の前端を包む金具（ガス管の後ろの端の枠。断面は木に沿った角の丸い四角）。"""
+    from mp5 import extrude_z
+    y0, y1 = UPPER_CAP_Y
+    sec = _rounded_rect(-UPPER_CAP_HALF, y0, UPPER_CAP_HALF, y1, UPPER_CAP_R, 3.0)
+    return extrude_z(sec, *UPPER_CAP_Z, STEEL_BLACK)
+
+
+def lower_front_retainer():
+    """下ハンドガードの前の留め金（写真）: 木の前端に当たる縁の板、銃身を抱く輪（左の側面に丸いピンの頭）、
+    縁から下へ伸びてクリーニングロッドを抱く部分。"""
+    from mp5 import extrude_z
+    hw = HALF_LOWER_HG * 1.45 + 0.8
+    y0, y1 = LOWER_RIM_Y
+    out = [extrude_z(_rounded_rect(-hw, y0, hw, y1, 3.0, 10.0), *LOWER_RIM_Z, STEEL_BLACK)]
+    by0, by1 = LOWER_BODY_Y
+    bh = LOWER_BODY_HALF
+    out.append(extrude_z(_rounded_rect(-bh, by0, bh, by1, 4.0, 9.0), *LOWER_BODY_Z, STEEL_BLACK))
+    hz0, hz1, hy = ROD_HANGER
+    out.append(box(-4.5, hy, hz0, 4.5, by0 + 2.0, hz1, STEEL_BLACK))
+    pz, py, pr = LOWER_PIN
+    out.append(x_cyl(pz, py, pr, bh - 0.8, bh + 0.8, M.STEEL, n=10))
+    return out
 
 
 FRONT_EARS_Y = 166.0                  # 照星の塔の上の左右の耳（ポストを守る）の下端
@@ -286,12 +380,12 @@ def front_sight():
     out += outline_parts({"outer": lower[0], "holes": [FRONT_WINDOW]}, -6.0, 6.0, STEEL_BLACK)
     for ear in _clip(o, -600.0, FRONT_EARS_Y - 0.5, -400.0, 300.0):
         for s in (1, -1):
-            x0, x1 = sorted((s * 3.0, s * 6.0))
+            x0, x1 = sorted((s * (POST_HALF + 1.2), s * (POST_HALF + 4.2)))   # ポストとの間 1.2mm
             out.append(extrude_x_beveled(ear, x0, x1, 0.8, STEEL_BLACK, steps=1))
     zd, yd, rd = FRONT_DRUM
     out.append(x_cyl(zd, yd, rd, -7.0, 7.0, STEEL_BLACK, n=16))
     out.append(x_cyl(zd, yd, 1.2, -7.4, 7.4, M.BORE, n=8))                      # ドラムの中心の穴（調整工具）
-    out.append(box(-1.1, yd + rd - 0.5, zd - 1.1, 1.1, SIGHT_Y, zd + 1.1, STEEL_BLACK))   # ポスト
+    out.append(sights.post(2 * POST_HALF, yd + rd - 0.5, SIGHT_Y, zd, STEEL_BLACK))       # ポスト（誇張）
     # 台: 銃身を抱く筒（銃口ナットと同じ太さ）＋図面の下の突起
     z0, z1 = _zr(O.FRONT_SIGHT_BASE)
     out.append(lathe(0, BORE_Y, [(z0, 12.0), (z1 - 1.0, 12.0)], ar15_mesh.N_MID, STEEL_BLACK))
@@ -312,7 +406,7 @@ def _clip_z_outline(o, z0, z1):
     return list(g.exterior.coords)[:-1]
 
 
-HG_RETAINERS = ((-214.0, -206.0), (-320.0, -306.0))   # 下ハンドガードの後ろ・前の留め金（図面の前の縦の帯 Z -306〜-318）
+HG_RETAINERS = ((-214.0, -206.0),)   # 下ハンドガードの後ろの留め金（前は lower_front_retainer。写真で作り直した）
 
 
 def handguard_retainers():
@@ -341,7 +435,14 @@ def lower_handguard_wood():
         if abs(nz) > 0.6 or ny > 0.6:
             return 1.5
         return 12.0 if ny < -0.5 else 3.0
-    return [inflate_x(O.LOWER_HANDGUARD["outer"], HALF_LOWER_HG, WOOD, steps=4, width_fn=width, radius_fn=radius)]
+    from shapely.geometry import Polygon, box as sbox
+    # 前端は写真の位置（金具の縁の後ろ）。上の縁は上ハンドガードとの間に隙間を開ける（写真: 全長に 2〜3mm の白い線が
+    # 抜け、前寄りの段から前は狭い）
+    g = Polygon(_clip_z_outline(O.LOWER_HANDGUARD, LOWER_HG_FRONT_Z, 1e4))
+    zs, (y_front, y_rear) = LOWER_HG_STEP_Z, LOWER_HG_TOP
+    g = g.difference(sbox(zs, y_rear, 0.0, 300.0)).difference(sbox(-400.0, y_front, zs, 300.0))
+    prof = [(round(z, 3), round(y, 3)) for z, y in list(g.exterior.coords)[:-1]]
+    return [inflate_x(prof, HALF_LOWER_HG, WOOD, steps=4, width_fn=width, radius_fn=radius)]
 
 
 def upper_handguard_wood():
@@ -350,7 +451,9 @@ def upper_handguard_wood():
 
     def radius(nz, ny):
         # 後ろの端面（照門ブロックに付く）と下面（下ハンドガードとの合わせ目）は丸めない。
-        # 前の端は実物でも丸く絞られている（ガスチューブだけが前へ続く）ので丸める
+        # 前の端は金具（upper_cap）に収まるので、丸めを小さくする（写真: 前端は斜めに面取りされて金具に入る）
+        if nz < -0.6:
+            return 4.0
         return 1.5 if (nz > 0.6 or ny < -0.6) else HALF_UPPER_HG
     return [inflate_x(O.UPPER_HANDGUARD["outer"], HALF_UPPER_HG, WOOD, steps=4, width_fn=width, radius_fn=radius)]
 
@@ -365,7 +468,8 @@ def lower_handguard_rail():
     slots = int((z1 - z0 - 14) // SLOT_MM)
     r1 = (z0 + z1) / 2 + slots * SLOT_MM / 2
     r0 = r1 - slots * SLOT_MM
-    out += [box(-8, y0 - 2, r0, 8, y0, r1, M.RAIL_DOWN), box(-RAIL_W / 2, y0 - 6, r0, RAIL_W / 2, y0 - 2, r1, M.RAIL_DOWN)]
+    # レールの台は上をハンドガードに 4mm 埋める（輪郭の下の縁は反っているので、一番低い所に合わせると隙間が見えた）
+    out += [box(-8, y0 - 2, r0, 8, y0 + 4, r1, M.RAIL_DOWN), box(-RAIL_W / 2, y0 - 6, r0, RAIL_W / 2, y0 - 2, r1, M.RAIL_DOWN)]
     yc = (y0 + y1) / 2 - 3
     for s in (1, -1):
         xa, xb = sorted((s * hw, s * (hw + 2)))
@@ -387,7 +491,8 @@ def upper_handguard_rail():
     slots = int((z1 - z0 - 12) // SLOT_MM)
     r1 = (z0 + z1) / 2 + slots * SLOT_MM / 2
     r0 = r1 - slots * SLOT_MM
-    out += [box(-8, yt - 1, r0, 8, yt + 3, r1, M.RAIL), box(-RAIL_W / 2, yt + 3, r0, RAIL_W / 2, yt + 8, r1, M.RAIL)]
+    # レールの台は下をハンドガードに埋める（輪郭の上の縁は前下がりなので、一番高い所に合わせると隙間が見えた）
+    out += [box(-8, yt - 6, r0, 8, yt + 3, r1, M.RAIL), box(-RAIL_W / 2, yt + 3, r0, RAIL_W / 2, yt + 8, r1, M.RAIL)]
     return out
 
 
@@ -561,7 +666,7 @@ def build(variant="wood"):
         add("rail_side", "root", (x_side, yc, r1), None, [])
     else:
         add("handguard", "root", (0, b, -208.0), "handguard_wood",
-            lower_handguard_wood() + upper_handguard_wood() + handguard_retainers())
+            lower_handguard_wood() + upper_handguard_wood() + handguard_retainers() + lower_front_retainer())
         add("rail_top", "root", (0, _yr(O.DUST_COVER)[1], 60.0), None, [])
         add("rail_bottom", "root", (0, _yr(O.LOWER_HANDGUARD)[0], -208.0), None, [])
         add("rail_side", "root", (HALF_RECEIVER, b, -208.0), None, [])
@@ -580,5 +685,5 @@ def build(variant="wood"):
     from shapely.geometry import Polygon
     c = Polygon(O.GRIP["outer"]).centroid
     add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=SIGHT_Y * K,
-                 rear_sight_z=REAR_SIGHT_Z * K, grip_center=(0, c.y * K, c.x * K))
+                 rear_sight_z=REAR_SIGHT_Z * K, grip_center=(0, c.y * K, c.x * K), support_z=-265.0 * K)
     return m, parts

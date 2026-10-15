@@ -11,9 +11,10 @@ import math
 
 import ar15_mesh
 import materials as M
+import sights
 import mp5_outline as O
 from ak47 import _clip, _yr, _zr
-from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe
+from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, rotated, x_cyl, y_cyl
 from rig import add_locators
 import ar15_parts
@@ -29,6 +30,13 @@ MUZZLE_Z = -331.0
 BOLT_FACE_Z = -106.0    # ボルトの前面＝薬室の後端（銃身 225mm を銃口から逆算）
 REAR_SIGHT_Z = 53.0     # 照門ドラムの中心（照準半径 340mm の後ろの端）
 FRONT_POST_Z = -285.0   # 照星のポスト（リングの中心）
+# ADS の目は照門の 140mm 後ろ（作者指示: 照門のドラムに近すぎて手前の受け部が画面を覆っていた）。照門の穴と照星の
+# ポストは見やすいように誇張し、この距離で大きさを決める（実物は穴 3.2mm・ポスト 2mm。sights の目安）
+EYE_RELIEF = 140.0
+_EYE = REAR_SIGHT_Z + EYE_RELIEF
+REAR_HOLE = sights.HOLE_ANGLE * EYE_RELIEF
+POST_W = sights.POST_ANGLE * (_EYE - FRONT_POST_Z)
+DRUM_R = 10.5           # ドラムの半径（実物 9mm。誇張した穴の周りに肉を残すため太くした）
 
 # 左右の半幅
 HALF_RECEIVER = 17.0    # 受け部 34mm
@@ -179,9 +187,10 @@ def rear_sight():
     base = _clip(O.REAR_SIGHT["outer"], 0.0, 0.0, 200.0, 200.0)
     out = [extrude_x_beveled(p, -9.0, 9.0, 2.5, STEEL_BLACK, steps=2) for p in base]
     out.append(x_cyl(66.0, 196.0, 2.2, -9.6, 9.6, M.STEEL, n=8))        # 台の十字ねじ（写真）
-    drum = [y_cyl(0.0, REAR_SIGHT_Z, 9.0, 197.0, 210.0, STEEL_BLACK, n=14),
-            lathe(0.0, 204.0, [(REAR_SIGHT_Z + 8.6, 1.6), (REAR_SIGHT_Z + 9.3, 1.6)], 8, M.BORE)]   # 後ろ向きの照門の穴
-    out += rotated(drum, "x", -25.0, (0.0, 197.0, REAR_SIGHT_Z))
+    # ドラムは前後に抜けた穴（中心＝照準線）を持つ。実物のドラムは軸が後ろへ傾いているが、傾けると穴が斜めになって
+    # 覗いても向こうが見えないので、軸は垂直にした
+    out += sights.drum_aperture(REAR_SIGHT_Z, DRUM_R, 196.0, SIGHT_Y, REAR_HOLE, SIGHT_Y + REAR_HOLE / 2 + 3.0,
+                                STEEL_BLACK)
     return out
 
 
@@ -195,7 +204,7 @@ def front_sight():
     out.append(lathe(0.0, yc, [(zc + 3.5, 8.6), (zc - 3.5, 8.6)], 16, STEEL_BLACK, cap0=False, cap1=False))     # 内側
     for zz in (zc - 3.5, zc + 3.5):                                     # リングの前後の面（輪）
         out.append(_annulus_z(0.0, yc, zz, 8.6, 12.0, STEEL_BLACK))
-    out.append(box(-1.0, 194.0, zc - 1.0, 1.0, SIGHT_Y, zc + 1.0, STEEL_BLACK))          # ポスト
+    out.append(sights.post(POST_W, 194.0, SIGHT_Y, zc, STEEL_BLACK))                     # ポスト（誇張）
     out.append(x_cyl(zc + 2.0, 181.0, 8.0, 10.5, 14.0, STEEL_BLACK, n=16))               # ドラム（左側面）
     return out
 
@@ -237,7 +246,8 @@ def handguard():
         if ny > 0.6:
             return 7.0                     # 上の縁もチューブの両脇で丸める（写真）
         return 14.0 if ny < -0.4 else 6.0
-    return [inflate_x(O.HANDGUARD["outer"], HALF_HG, POLY, steps=4, width_fn=width, radius_fn=radius)]
+    # cap_grid: 幅が場所ごとに変わる平らな面を格子で分ける（扇形の細長い三角形だと放射状の筋に見えた）
+    return [inflate_x(densify(O.HANDGUARD["outer"]), HALF_HG, POLY, steps=4, width_fn=width, radius_fn=radius, cap_grid=14.0)]
 
 
 # ---------------------------------------------------------------- 下部（樹脂のハウジング）
@@ -454,5 +464,6 @@ def build():
     from shapely.geometry import Polygon
     c = Polygon(O.GRIP["outer"]).centroid
     add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=SIGHT_Y * K,
-                 rear_sight_z=REAR_SIGHT_Z * K, grip_center=(0, c.y * K, c.x * K))
+                 rear_sight_z=REAR_SIGHT_Z * K, grip_center=(0, c.y * K, c.x * K), support_z=-192.0 * K,
+                 eye_relief=EYE_RELIEF * K)
     return m, parts

@@ -3,7 +3,8 @@
   生成したモデルを作者の作業フォルダへ配置し、残す銃以外のモデルを作業フォルダの外へ退避する。
 
 .DESCRIPTION
-  1. 生成モデル（下の $Install）を -ModelsDir へコピーする（同名は上書き）。
+  1. 生成モデル（下の $Install）を -ModelsDir へコピーする（同名は上書き）。腕の待機ポーズ（<銃ID>.animation.json）は
+     作業フォルダに同名のファイルが無いときだけ置く（作者のアニメーションを上書きしない）。
   2. -ModelsDir 直下のファイル・フォルダのうち、名前が -Keep の銃ID で始まらないものを -ArchiveDir へ移動する。
      消さないので、退避フォルダから戻せる。
   -Apply を付けないと「何をするか」の一覧を表示するだけで、何も変更しない。
@@ -20,7 +21,7 @@
 param(
     [Parameter(Mandatory = $true)] [string] $ModelsDir,
     [string] $ArchiveDir = "",
-    [string[]] $Keep = @("glock", "m1911", "ak_47", "m4a1", "m249", "m249_stanag", "mp5", "m24", "p90", "m1912", "awm"),   # ak_47 は別の作業（生成モデル）で作り直し中なので残す
+    [string[]] $Keep = @("glock", "m1911", "ak_47", "m4a1", "m249", "m249_stanag", "mp5", "m24", "p90", "m1912", "awm", "m79"),
     [switch] $Apply
 )
 $ErrorActionPreference = "Stop"
@@ -30,6 +31,7 @@ $gen = Join-Path $PSScriptRoot "generated"
 # 配置するモデル: 生成フォルダ → ファイル名（銃ID）。簡略版（m4a1_mesh_lite）は出力名が m4a1 と重なるので、
 # 出力名を分けるまで対象外
 $Install = @(
+    @{ Dir = "ak_47_mesh";       Id = "ak_47" },   # 作業フォルダの旧版の AK を置き換える（作者了承済み）
     @{ Dir = "m4a1_mesh";        Id = "m4a1" },
     @{ Dir = "m249_mesh";        Id = "m249" },
     @{ Dir = "m249_stanag_mesh"; Id = "m249_stanag" },
@@ -37,7 +39,8 @@ $Install = @(
     @{ Dir = "m24_mesh";         Id = "m24" },
     @{ Dir = "p90_mesh";         Id = "p90" },
     @{ Dir = "m1912_mesh";       Id = "m1912" },
-    @{ Dir = "awm_mesh";         Id = "awm" }
+    @{ Dir = "awm_mesh";         Id = "awm" },
+    @{ Dir = "m79_mesh";         Id = "m79" }
 )
 
 if (-not (Test-Path $ModelsDir -PathType Container)) { throw "作業フォルダが見つからない: $ModelsDir" }
@@ -93,6 +96,16 @@ foreach ($i in $Install) {
         if (-not (Test-Path $src)) { throw "生成物が無い（python3 build.py を先に実行）: $src" }
         $copies += @{ Src = $src; Dst = (Join-Path $ModelsDir ($i.Id + $suffix)) }
         Write-Host "   $($i.Id + $suffix)"
+    }
+    # 腕の待機ポーズ（仮置きの idle）。作者のアニメーションがすでにあれば上書きしない（作者の制作物を消さない）
+    $anim = $i.Id + ".animation.json"
+    $src = Join-Path (Join-Path $gen $i.Dir) $anim
+    $dst = Join-Path $ModelsDir $anim
+    if (Test-Path $dst) {
+        Write-Host "   $anim は配置しない（作業フォルダにすでにある）"
+    } elseif (Test-Path $src) {
+        $copies += @{ Src = $src; Dst = $dst }
+        Write-Host "   $anim（仮の待機ポーズ）"
     }
 }
 

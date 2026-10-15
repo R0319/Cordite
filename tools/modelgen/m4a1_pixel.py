@@ -84,5 +84,5 @@ def build() -> tuple[Model, dict]:
         box(-1, 2.5, 12.5, 1, 7, 13, M.PX_DARK),                      # バットプレート
     ])
     add_locators(m, muzzle=(0, B, -22.5), sight_line_y=8.25, rear_sight_z=0.5,
-                 grip_center=(0, 1.75, 2.25))
+                 grip_center=(0, 1.75, 2.25), support_z=-9.0)
     return m, {}

@@ -15,8 +15,9 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 import m1912_outline as O
-from core import MeshPart, box, extrude_x_beveled, extrude_x_rounded, inflate_x, lathe
+from core import MeshPart, box, extrude_x_beveled, extrude_x_rounded, inflate_x, lathe, densify
 from m249 import x_cyl
 from rig import add_locators
 
@@ -57,6 +58,12 @@ SHIELD_DOWN = 21.0          # 横の縁が水平より下へ回り込む角度�
 SHIELD_HOLE_Y = 108.5       # 横の穴の列（写真）
 SHIELD_HOLES = 20           # 1 列の穴の数（写真で数えた）
 SHIELD_HOLE_R = 3.4
+# 照準: 受け部の上面の溝から銃口の玉（ビード）を狙う。放熱カバーの上の縁（120.5）が銃身（113.5）より高く、銃身の上の
+# 実物の玉（3〜4mm）は覗くとカバーに隠れる。ゲーム向けに誇張して、着剣部の前の端に台を立てて大きな玉を載せる
+# （上の端＝照準線。カバーの上に玉の上 3 分の 2 が見える）。大きさは ADS の目からの距離で決める（sights の目安）
+SIGHT_Y = 125.0
+BEAD_Z = -650.0
+BEAD_D = sights.POST_ANGLE * 1.2 * (sights.eye_z(0.0, 20.0) - BEAD_Z)   # 丸くて光る玉が目印なので照星の 1.2 倍
 SAFETY = (-42.0, 52.0)      # 安全装置（トリガーガードの前のボタン。横に押す）
 
 
@@ -106,8 +113,8 @@ def stock():
     wood = g.difference(sbox(348.0, -100.0, 400.0, 200.0))
     plate = g.intersection(sbox(348.0, -100.0, 400.0, 200.0))
     wood = max([q for q in getattr(wood, "geoms", [wood]) if q.geom_type == "Polygon"], key=lambda q: q.area)
-    out = [inflate_x(_ring(wood.simplify(0.3)), HALF_BUTT, WOOD, steps=4, width_fn=width,
-                     radius_fn=lambda nz, ny: 6.0 if ny < -0.6 else 8.0)]
+    out = [inflate_x(densify(_ring(wood.simplify(0.3))), HALF_BUTT, WOOD, steps=4, width_fn=width,
+                     radius_fn=lambda nz, ny: 6.0 if ny < -0.6 else 8.0, cap_grid=14.0)]   # 格子: 放射状の筋を防ぐ
     for q in [q for q in getattr(plate, "geoms", [plate]) if q.geom_type == "Polygon"]:
         out.append(extrude_x_beveled(_ring(q.simplify(0.3)), -HALF_BUTT + 2.5, HALF_BUTT - 2.5, 3.0, M.RUBBER, steps=2))
     return out
@@ -205,7 +212,11 @@ def adapter():
     """着剣部（銃口と弾倉の筒の先をまとめて留める金具。下に着剣の爪と負い紐の環の台）。トレース。"""
     from shapely.geometry import Polygon
     g = Polygon(O.ADAPTER["outer"]).simplify(0.3)
-    return [extrude_x_beveled(_ring(g), -12.5, 12.5, 2.0, BLUED, steps=1)]
+    r = BEAD_D / 2
+    return [extrude_x_beveled(_ring(g), -12.5, 12.5, 2.0, BLUED, steps=1),
+            box(-1.5, 115.0, BEAD_Z - 1.5, 1.5, SIGHT_Y - r, BEAD_Z + 1.5, BLUED),           # 玉の台（着剣部に埋める）
+            lathe(0, SIGHT_Y - r, [(BEAD_Z - r, 0.01), (BEAD_Z - r * 0.7, r * 0.7), (BEAD_Z, r),
+                                   (BEAD_Z + r * 0.7, r * 0.7), (BEAD_Z + r, 0.01)], 10, M.BRASS)]   # 玉（真鍮）
 
 
 # ---------------------------------------------------------------- ポンプ
@@ -222,7 +233,9 @@ def pump():
     out = [lathe(0, FOREND_Y, prof, ar15_mesh.N_MID, WOOD)]
     for s in (1, -1):
         xa, xb = sorted((s * 7.5, s * 10.0))
-        out.append(box(xa, 86.0, z1 - 2.0, xb, 90.0, BREECH_Z - 5.0, M.M1912_STEEL))
+        # 上は 92 まで（写真ではポンプと受け部の間は銃身の下まで暗く、隙間が見えない。90 だと 1.5mm 抜けて見えた。
+        # X 7.5〜10 では銃身の下の面は Y 95.8 なので食い込まない）
+        out.append(box(xa, 86.0, z1 - 2.0, xb, 92.0, BREECH_Z - 5.0, M.M1912_STEEL))
     return out
 
 
@@ -273,6 +286,6 @@ def build():
     add("ammo", "root", (0, b, BREECH_Z - 32.0), None, case)
     add("bullet", "ammo", (0, b, BREECH_Z - 60.0), None, [])     # 散弾は描かない（位置だけ）
 
-    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=(SHIELD_R + b + 1.5) * K,
-                 rear_sight_z=20.0 * K, grip_center=(0, 30.0 * K, 45.0 * K))
+    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=SIGHT_Y * K,
+                 rear_sight_z=20.0 * K, grip_center=(0, 30.0 * K, 45.0 * K), support_z=-300.0 * K)
     return m, parts

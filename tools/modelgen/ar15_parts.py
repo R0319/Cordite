@@ -13,6 +13,7 @@ import math
 
 from core import box, cbox, round_rod
 import materials as M
+import sights
 
 MM_PER_PX = 24.0              # 07-model-assets.md「1px ≒ 24mm」
 SLOT_MM = 0.5 * MM_PER_PX     # レール1スロット = 0.5px（規約）
@@ -170,19 +171,12 @@ def bolt_carrier(l=L):
 
 def rear_sight(l=L, z=None):
     """フリップアップ式リアサイト（起こした状態。アパーチャー中心＝照準線）。z はクランプ前端。
-    大きさは全体写真の BUIS に合わせた（台は長さ 約 26mm・高さ 約 14mm、照準板は薄く照準線のすぐ上まで）。"""
+    形は共通の折りたたみ式（sights.buis_rear）。穴は見やすいように誇張（ADS の目からの距離で決める）。"""
     rt, sl = l.rail_top_y, l.bore_y + l.sight_h
     z = l.upper_rear_z - 30 if z is None else z
-    return [
-        box(-12, rt, z, 12, rt + 6, z + 26, M.STEEL_DARK),            # レールクランプ
-        box(-8, rt + 6, z + 4, 8, rt + 13, z + 22, M.STEEL_DARK),     # 台（照準板の付け根）
-        # 照準板（中央に 4mm の穴）
-        box(-6, rt + 13, z + 11, 6, sl - 2, z + 13, M.STEEL_DARK),
-        box(-6, sl + 2, z + 11, 6, sl + 4, z + 13, M.STEEL_DARK),
-        box(2, sl - 2, z + 11, 6, sl + 2, z + 13, M.STEEL_DARK),
-        box(-6, sl - 2, z + 11, -2, sl + 2, z + 13, M.STEEL_DARK),
-        box(-12, rt + 7, z + 6, -8, rt + 12, z + 12, M.STEEL_DARK),   # 左右調整ノブ（右側。AR 系の照門の風偏ノブは右）
-    ]
+    zc = z + 12                                                    # 照準板（rig の rear_sight_z と同じ）
+    hole = sights.HOLE_ANGLE * (sights.eye_z(0.0, zc) - zc)        # トリガーは Z=0
+    return sights.buis_rear(rt, sl, zc, hole)
 
 
 # ---------------------------------------------------------------- 銃身まわり
@@ -292,7 +286,8 @@ def front_sight_post(l=L):
     floor = sl - FSB_SLOT_DEPTH
     return [
         box(-3, floor, pz - 2.5, 3, floor + 4, pz + 2.5, M.STEEL_DARK),   # 台座（回して高さを調整する部分）
-        box(-0.9, floor + 4, pz - 0.9, 0.9, sl, pz + 0.9, M.STEEL_DARK),  # ポスト（1.8mm 角、先端＝照準線）
+        # ポスト（実物は 1.8mm 角。見やすいように誇張し、ADS の目からの距離で幅を決める。先端＝照準線）
+        sights.post(sights.POST_ANGLE * (sights.eye_z(0.0, l.upper_rear_z - 18) - pz), floor + 4, sl, pz, M.STEEL_DARK),
     ]
 
 

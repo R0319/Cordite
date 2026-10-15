@@ -1,0 +1,44 @@
+{
+ "format_version": "1.8.0",
+ "animations": {
+  "animation.m1912.idle": {
+   "loop": true,
+   "bones": {
+    "right_hand": {
+     "rotation": [
+      -115.7779,
+      -16.2514,
+      0.0
+     ],
+     "position": [
+      2.376,
+      -16.2686,
+      5.0491
+     ],
+     "scale": [
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "left_hand": {
+     "rotation": [
+      -103.364,
+      31.9246,
+      0.0
+     ],
+     "position": [
+      4.0,
+      -15.1917,
+      -3.1167
+     ],
+     "scale": [
+      1.0,
+      1.555,
+      1.0
+     ]
+    }
+   }
+  }
+ }
+}

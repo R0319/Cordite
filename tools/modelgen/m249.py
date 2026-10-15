@@ -16,6 +16,7 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
+import sights
 from core import MeshPart, Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe
 from rig import add_locators
 import m249_outline as O
@@ -139,14 +140,16 @@ def arc_ring(cx, cy, z0, z1, r_in, r_out, a0, a1, mat, n=10):
     return MeshPart(verts, faces, mat).finalize()
 
 
-def cartridge(x, y, z_tip):
-    """5.56×45mm 実包（回転体）: 縁・抽筒溝・テーパーの胴・肩・首、弾頭は先細り。全長 57.4mm、薬莢 44.7mm。"""
+def cartridge(x, y, z_tip, n=None):
+    """5.56×45mm 実包（回転体）: 縁・抽筒溝・テーパーの胴・肩・首、弾頭は先細り。全長 57.4mm、薬莢 44.7mm。
+    n は周の分割数（既定 N_SMALL）。"""
     b = z_tip + 57.4                                    # 薬莢の底（+Z 側）
     case = [(b, 4.8), (b - 1.1, 4.8), (b - 1.3, 4.2), (b - 2.2, 4.2), (b - 2.6, 4.75), (b - 36.5, 4.55),
             (b - 39.6, 3.15), (b - 44.7, 3.1)]
     bullet = [(b - 44.7, 2.85), (b - 49.0, 2.8), (b - 53.5, 2.1), (b - 56.5, 0.9), (z_tip, 0.3)]
-    return [lathe(x, y, case, ar15_mesh.N_SMALL, M.BRASS, cap0=True, cap1=False),
-            lathe(x, y, bullet, ar15_mesh.N_SMALL, M.COPPER, cap0=False, cap1=True)]
+    n = n or ar15_mesh.N_SMALL
+    return [lathe(x, y, case, n, M.BRASS, cap0=True, cap1=False),
+            lathe(x, y, bullet, n, M.COPPER, cap0=False, cap1=True)]
 
 
 def outline_parts(o, x0, x1, mat, bevel=0.0, steps=1):
@@ -359,11 +362,9 @@ def rear_sight(l=L):
         *outline_parts(base, -13, 13, M.RECEIVER),
         *outline_parts(ears, 6, 11, M.RECEIVER),
         *outline_parts(ears, -11, -6, M.RECEIVER),
-        # アパーチャー板（中央に 3mm の穴）
-        box(-5, y0 + 6, z - 1, 5, sy - 1.5, z + 1, STEEL_BLACK),
-        box(-5, sy + 1.5, z - 1, 5, sy + 6, z + 1, STEEL_BLACK),
-        box(1.5, sy - 1.5, z - 1, 5, sy + 1.5, z + 1, STEEL_BLACK),
-        box(-5, sy - 1.5, z - 1, -1.5, sy + 1.5, z + 1, STEEL_BLACK),
+        # アパーチャー板（丸い穴。実物は 3mm、見やすいように誇張して ADS の目からの距離で決める。耳の間に収める）
+        *sights.aperture_plate(sy, z - 1, z + 1, sights.HOLE_ANGLE * (sights.eye_z(0.0, z) - z), y0 + 6,
+                               STEEL_BLACK, half_w=5.8, ears=False),
         # 左右の調整つまみ（拡大写真: 丸穴の板の外側にローレットのつまみ。右側は距離の数字入りのドラム）
         x_cyl(z + 15, sy + 2, 6.0, 11, 18, STEEL_BLACK, n=12),
         x_cyl(z - 12, y0 + 7, 6.0, 11, 18, STEEL_BLACK, n=12),
@@ -475,8 +476,10 @@ def front_sight(l=L):
 
 
 def front_sight_post(l=L):
+    """ポスト（実物は 2mm 角。見やすいように誇張し、ADS の目からの距離で幅を決める）。"""
     zc = sum(l.fs_z) / 2
-    return [box(-1, l.sight_y - 14, zc - 1, 1, l.sight_y, zc + 1, STEEL_BLACK)]
+    w = sights.POST_ANGLE * (sights.eye_z(0.0, l.rear_sight_z) - zc)
+    return [sights.post(w, l.sight_y - 14, l.sight_y, zc, STEEL_BLACK)]
 
 
 def gas_system(l=L):
@@ -625,6 +628,10 @@ def ammo_box(l=L):
     ]
 
 
+BELT_ROUND_N = 6    # 弾帯の弾の周の分割（直径 9.6mm＝ゲーム内で 0.4 画素なので 6 角で足りる。8 角だと面の数が目安 7000 を超えた）
+BELT_RING_N = 6     # リンクの輪の分割（直径 11mm。以前は 10）
+
+
 def belt(l=L):
     """弾帯（M27 リンク）。トレイの上に平らに並び（リンクの開いた側が下、先頭の弾は弾止めに当たる。FM 3-22.68）、
     左側面の入口を出て外で下へ曲がり、ボックスのふたの出口に入る。外へ出ると開いた側は受け部の方を向く。
@@ -650,13 +657,13 @@ def belt(l=L):
     zt = -119.4                                           # 弾頭の先（写真）
     zb = zt + 57.4                                        # 薬莢の底
     for i, (x, y, nd) in enumerate(pts):
-        out += cartridge(x, y, zt)
+        out += cartridge(x, y, zt, n=BELT_ROUND_N)
         gap = 70.0                                        # 輪の開き（開いた側の向きを中心に）
         a0, a1 = nd + gap / 2, nd + 360 - gap / 2
-        out.append(arc_ring(x, y, zb - 26, zb - 18, 4.85, 5.5, a0, a1, STEEL_BLACK))        # 自分のリンクの輪
+        out.append(arc_ring(x, y, zb - 26, zb - 18, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))   # 自分のリンクの輪
         if i > 0:                                                                        # 前の弾のリンクの 2 つの輪
-            out.append(arc_ring(x, y, zb - 15, zb - 10, 4.85, 5.5, a0, a1, STEEL_BLACK))
-            out.append(arc_ring(x, y, zb - 34, zb - 29, 4.85, 5.5, a0, a1, STEEL_BLACK))
+            out.append(arc_ring(x, y, zb - 15, zb - 10, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))
+            out.append(arc_ring(x, y, zb - 34, zb - 29, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))
             px, py, _ = pts[i - 1]                                                       # 2 つの弾をつなぐ背の板
             n = math.radians(nd + 180.0)                                                 # 閉じた側
             ox, oy = 5.3 * math.cos(n), 5.3 * math.sin(n)
@@ -730,5 +737,5 @@ def build(feed="belt"):
     from shapely.geometry import Polygon
     c = Polygon(O.GRIP["outer"]).centroid
     add_locators(m, muzzle=(0, b * K, l.muzzle_z * K), sight_line_y=l.sight_y * K,
-                 rear_sight_z=l.rear_sight_z * K, grip_center=(0, c.y * K, c.x * K))
+                 rear_sight_z=l.rear_sight_z * K, grip_center=(0, c.y * K, c.x * K), support_z=-264.0 * K)
     return m, parts
