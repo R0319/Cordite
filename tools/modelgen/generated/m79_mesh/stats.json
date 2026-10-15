@@ -1,6 +1,6 @@
 {
- "cubes": 2,
- "mesh_faces": 3206,
+ "cubes": 6,
+ "mesh_faces": 3227,
  "bones": 25,
  "texture": 512,
  "texels_per_px": 8,

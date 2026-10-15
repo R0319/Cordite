@@ -8,7 +8,12 @@ M79 グレネードランチャー（40mm、中折れ式の単発）のパーツ
 
 中折れ: ボーン barrel（銃身・先台・照星・照尺・上の台）を蝶番の軸（HINGE、受け部の下の前）まわりに回すと、
 銃口が下がって薬室の後ろが受け部の上に出る。留め金のレバー（ボーン charging_handle）を右へ回して外す。
-照尺（ボーン rear_sight）は写真どおり起こした姿勢で作り、台の軸まわりに前へ倒せる。
+照準器は米陸軍の教範 FM 23-31（1972、パブリックドメイン）の図 9-7・9-8 と、斜め後ろ・左側面の写真で形を確かめた
+（真横の写真 1 枚で作った初版は照尺が細い棒になっていた。作者の指摘「サイトは違う形」）:
+  照尺（ボーン rear_sight）= 幅 40mm の四角い枠。上の横棒・左の昇降ねじと上の歯車・枠の中を上下する照門の台
+  （左に固定ナット、右につまみ）。既定の姿勢は前へ倒した状態（携行・100m までは台の固定照門で狙う）。
+  起こすには軸まわりに +90°。台（銃身の帯の上）には固定照門の切り欠きと、右側面の星形の左右調整つまみ。
+  照星 = 刃と、その左右の 2 枚のガード（穴の開いた耳）。
 """
 import math
 
@@ -49,7 +54,16 @@ GUARD_PATH = [(15.0, 38.5, 1.8), (15.2, 30.0, 1.6), (14.8, 12.0, 1.6), (12.5, 5.
 TRIGGER_PATH = [(2.0, 38.5, 1.8), (0.5, 31.0, 1.5), (-0.8, 25.0, 1.3), (-2.0, 18.0, 1.2), (-4.0, 12.0, 1.0),
                 (-6.5, 7.5, 0.9)]
 CROSS_SCREW = (-44.0, 30.0)  # トリガーガードの前の、右へ突き出たねじの頭（写真）
-LEAF_PIVOT = (-235.0, 106.0)   # 照尺の台の軸（Z, Y）
+LEAF_PIVOT = (-232.0, 116.0)   # 照尺の枠の軸（Z, Y）。写真で枠の足が台に入る所
+LEAF_W = 40.0               # 枠の幅（FM 23-31 図 9-7 の枠の縦横比 0.34 × 写真の枠の高さ 118mm）
+LEAF_TOP = 241.0            # 起こしたときの枠の上の端（写真）
+CARRIER_Y = (199.0, 206.0)  # 照門の台（写真の位置。昇降ねじで上下する）
+LEAF_FOLD_DEG = -90.0       # 既定の姿勢（前へ倒す）。起こすとき rear_sight を +90°
+BASE_Z = (-248.0, -224.0)   # 照尺の台（左右調整の台）の前後
+BASE_Y = (105.0, 124.0)
+FIXED_NOTCH_Y = 127.0       # 台の固定照門の切り欠きの底（照尺を倒したときの照準線）
+FRONT_Z = (-396.0, -379.5)  # 照星のガードの前後（写真に細かい目盛りを重ねて読んだ）
+FRONT_TOP = 130.5
 
 
 def _ring(q):
@@ -148,8 +162,7 @@ def barrel():
            lathe(0, BORE_Y, [(MUZZLE_Z - 0.1, BORE_R + 0.5), (BREECH_Z + 0.1, BORE_R + 0.5)], ar15_mesh.N_MID, M.BORE,
                  cap0=False, cap1=False)]
     out.append(extrude_x_beveled(_ring(_poly(O.TOP_RIB).simplify(0.2)), -9.0, 9.0, 1.2, BLUED, steps=1))
-    out.append(extrude_x_beveled(_ring(_poly(O.FRONT_SIGHT).simplify(0.2)), -1.6, 1.6, 0.4, BLUED, steps=1))
-    out.append(box(-6.0, BORE_Y + BARREL_R - 2.0, -385.0, 6.0, 105.0, -358.0, BLUED))      # 照星の台
+    out += front_sight() + leaf_base()
     # 先台（木）: 銃身の下を包む
     fg = _poly(O.FOREND).simplify(0.3)
     out.append(extrude_x_rounded(_ring(fg), [], lambda z, y: HALF_FOREND, 6.0, FOREND_WOOD, steps=3))
@@ -161,12 +174,85 @@ def barrel():
     return out
 
 
-def leaf_sight():
-    """照尺（起こした状態。薄い板の枠と、右側面のつまみ）。台は銃身の帯の上。"""
-    g = _poly(O.LEAF).simplify(0.2)
-    out = [extrude_x_beveled(_ring(g), -2.5, 2.5, 0.6, BLUED, steps=1)]
-    out.append(x_cyl(-241.0, 119.0, 6.5, -12.0, -2.5, BLUED, n=10))                       # 右のつまみ
+def front_sight():
+    """照星: 刃（先が細い）と左右 2 枚のガード（上が丸く、穴と縦の切れ目）。台は銃身の上。"""
+    from shapely.geometry import Point, box as sbox
+    z0, z1 = FRONT_Z
+    top = FRONT_TOP
+    ear = sbox(z0, 104.0, z1, top - 5.5).union(sbox(z0 + 5.5, top - 6.0, z1 - 5.5, top)).union(
+        Point(z0 + 5.5, top - 5.5).buffer(5.5, quad_segs=4)).union(Point(z1 - 5.5, top - 5.5).buffer(5.5, quad_segs=4))
+    ear = ear.difference(Point((z0 + z1) / 2, 118.5).buffer(2.0, quad_segs=3))
+    out = []
+    for s in (1, -1):
+        xa, xb = sorted((s * 4.0, s * 6.0))
+        out.append(extrude_x(_ring(ear.simplify(0.1)), xa, xb, BLUED))
+    zc = (z0 + z1) / 2
+    blade = [(zc - 4.0, 104.0), (zc + 4.0, 104.0), (zc + 1.5, top - 2.5), (zc - 1.5, top - 2.5)]
+    out.append(extrude_x_beveled(blade, -1.2, 1.2, 0.3, BLUED, steps=1))
+    out.append(box(-6.0, BORE_Y + BARREL_R - 2.5, z0, 6.0, 105.0, z1, BLUED))
     return out
+
+
+def leaf_base():
+    """照尺の台（銃身の帯の上の左右調整の台）: 固定照門の切り欠き、右側面の星形のつまみ、左の目盛りの板。"""
+    z0, z1 = BASE_Z
+    y0, y1 = BASE_Y
+    out = [box(-LEAF_W / 2, y0, z0, LEAF_W / 2, y1, z1, BLUED)]
+    # 固定照門（後ろの端の 2 枚の耳の間の切り欠き）
+    for s in (1, -1):
+        xa, xb = sorted((s * 2.0, s * 8.0))
+        out.append(box(xa, y1, z1 - 4.0, xb, FIXED_NOTCH_Y + 2.5, z1, BLUED))
+    out.append(box(-2.0, y1, z1 - 4.0, 2.0, FIXED_NOTCH_Y, z1, BLUED))
+    # 左右調整のつまみ（星形。6 枚の羽根を角柱で表す）
+    zc, yc = -244.0, 117.0
+    out.append(x_cyl(zc, yc, 6.0, -LEAF_W / 2 - 9.0, -LEAF_W / 2, BLUED, n=12))
+    for k in range(3):
+        a = math.pi * k / 3
+        dz, dy = 9.5 * math.cos(a), 9.5 * math.sin(a)
+        prof = [(zc - dz - 2.2 * math.sin(a), yc - dy + 2.2 * math.cos(a)), (zc + dz - 2.2 * math.sin(a), yc + dy + 2.2 * math.cos(a)),
+                (zc + dz + 2.2 * math.sin(a), yc + dy - 2.2 * math.cos(a)), (zc - dz + 2.2 * math.sin(a), yc - dy - 2.2 * math.cos(a))]
+        out.append(extrude_x_beveled(prof, -LEAF_W / 2 - 8.0, -LEAF_W / 2 - 2.0, 0.6, BLUED, steps=1))
+    return out
+
+
+def _bar(x0, x1, y0, y1, z0, z1, mat=None):
+    """回転させられる角柱（MeshPart）。"""
+    return extrude_x([(z0, y0), (z1, y0), (z1, y1), (z0, y1)], x0, x1, mat or BLUED)
+
+
+def leaf_sight():
+    """照尺の枠（起こした姿勢で作り、LEAF_FOLD_DEG だけ前へ倒す）。左右の縦棒・上の横棒・左の昇降ねじと上の歯車・
+    照門の台（中央に照門の穴、左に固定ナット、右につまみ）。"""
+    from m249 import rotated
+    pz, py = LEAF_PIVOT
+    w = LEAF_W / 2
+    zf, zr = pz - 4.5, pz + 4.0            # 枠の前後（写真の枠の奥行き 8.5mm）
+    out = []
+    for s in (1, -1):                        # 縦棒
+        xa, xb = sorted((s * (w - 4.5), s * w))
+        out.append(_bar(xa, xb, py - 4.0, LEAF_TOP - 6.0, zf, zr))
+    out.append(_bar(-w, w, LEAF_TOP - 6.0, LEAF_TOP, zf, zr))                 # 上の横棒
+    out.append(_bar(-w, w, py - 4.0, py + 4.0, zf + 1.0, zr - 1.0))            # 下の横棒（軸）
+    out.append(x_cyl(pz, py, 2.5, -w - 1.0, w + 1.0, BLUED, n=8))             # 軸のピン
+    out.append(_bar(w - 9.0, w - 6.5, py + 4.0, LEAF_TOP - 6.0, pz - 1.2, pz + 1.2))   # 昇降ねじ（左の縦棒の内側）
+    out.append(lathe(w - 7.75, pz, [(LEAF_TOP - 1.0, 0.5), (LEAF_TOP - 1.0, 5.0), (LEAF_TOP + 4.0, 5.0),
+                                    (LEAF_TOP + 4.0, 0.5)], 12, BLUED))        # 上の歯車（Y 方向の軸）
+    out[-1] = _swap_yz(out[-1])
+    cy0, cy1 = CARRIER_Y
+    out.append(_bar(-w + 4.5, w - 4.5, cy0, cy1, zf - 1.0, zr + 1.0))          # 照門の台
+    out.append(_bar(-3.0, 3.0, cy1, cy1 + 4.0, pz - 1.5, pz + 1.5))            # 照門（穴の開いた小さな板）
+    out.append(lathe(0.0, cy1 + 2.0, [(pz - 1.6, 1.2), (pz + 1.6, 1.2)], 8, M.BORE))   # 照門の穴（前後に抜ける暗い円）
+    out.append(x_cyl(pz, (cy0 + cy1) / 2, 3.0, w, w + 5.0, BLUED, n=10))      # 左の固定ナット
+    out.append(x_cyl(pz - 6.0, 193.5, 4.0, -w - 4.0, -w, BLUED, n=10))        # 右のつまみ
+    return rotated(out, "x", LEAF_FOLD_DEG, (0.0, py, pz))
+
+
+def _swap_yz(m):
+    """Z 軸の回転体を Y 軸の回転体にする（lathe(cx=x, cy=z, profile は y の範囲) で作ったものの Y と Z を入れ替える）。"""
+    from core import MeshPart
+    sw = lambda v: (v[0], v[2], v[1])
+    n_ = None if m.normals is None else [[sw(v) for v in f] for f in m.normals]
+    return MeshPart([sw(v) for v in m.verts], m.faces, m.mat, n_, m.charts, m.chart_uv, m.chart_edge)
 
 
 # ---------------------------------------------------------------- 弾
@@ -217,6 +303,6 @@ def build():
     c2, h2 = round_40mm(BREECH_Z, b)
     add("mag_ammo", "magazin", (0, b, BREECH_Z - 50.0), None, c2 + h2)
 
-    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=(BORE_Y + BARREL_R + 22.0) * K,
-                 rear_sight_z=LEAF_PIVOT[0] * K, grip_center=(0, 40.0 * K, 70.0 * K))
+    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=FIXED_NOTCH_Y * K,
+                 rear_sight_z=BASE_Z[1] * K, grip_center=(0, 40.0 * K, 70.0 * K))
     return m, parts
