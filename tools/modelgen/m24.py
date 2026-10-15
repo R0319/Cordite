@@ -17,7 +17,7 @@ import ar15_mesh
 import ar15_parts
 import materials as M
 import m24_outline as O
-from core import Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe
+from core import Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, rotated, x_cyl
 from mp5 import extrude_z
 from rig import add_locators
@@ -39,7 +39,9 @@ PORT_Z = (-160.0, -76.0)  # 右側面の排莢口（写真の暗い窓）
 PORT_Y = (106.0, 118.0)  # 下の縁はストックの縁（写真）
 HANDLE_ROOT_Z = -30.0    # ボルトハンドルの付け根（写真）
 KNOB = (-27.0, 79.0, -15.0)   # ハンドルの玉の中心（X, Y, Z）。Y・Z は写真、X は推定
-SAFETY_Z = 8.0           # 安全装置のレバー（右側面の後ろ。M700 は 2 位置の安全装置）
+SAFETY_Z = -8.6          # 安全装置のレバーの頭（右側面、ボルトの覆いの横・ハンドルのすぐ後ろ。写真に目盛りを重ねて読んだ。
+                         # 以前は 8.0 で覆いの後ろの空中に浮いていた）。M700 は 2 位置の安全装置
+SAFETY_HEAD_Y = 112.0    # レバーの頭（丸いつまみ）の中心の高さ（写真）
 
 # ストックの左右の半幅（H-S PST-024。🟡 推定）
 HALF_FOREND = 24.0       # 先台 48mm（ベンチレストに置ける平らで幅広の先台）
@@ -73,7 +75,8 @@ def stock():
         return 7.0
     # 膨らませる量 STOCK_H は側面形の一番薄い所（先台の先 約 40mm）の半分より小さくする（大きいと形が潰れる）。
     # 実際の幅は width_fn の倍率で出す
-    return [inflate_x(O.STOCK["outer"], STOCK_H, STOCK_MAT, steps=4, width_fn=width, radius_fn=radius)]
+    # cap_grid: 幅が場所ごとに変わる平らな面を格子で分ける（扇形の細長い三角形だと放射状の筋に見えた）
+    return [inflate_x(densify(O.STOCK["outer"]), STOCK_H, STOCK_MAT, steps=4, width_fn=width, radius_fn=radius, cap_grid=14.0)]
 
 
 def butt():
@@ -161,8 +164,10 @@ def bolt_body():
 
 def safety():
     """安全装置のレバー（ボーン selector。右側面の後ろ。前＝発射、後ろ＝安全の 2 位置）。"""
-    return [box(-RCV_R + 2.0, 103.0, SAFETY_Z - 4.0, -RCV_R + 4.0, 107.0, SAFETY_Z + 4.0, STEEL_BLACK),
-            box(-RCV_R + 0.5, 104.0, SAFETY_Z - 1.0, -RCV_R + 2.2, 109.0, SAFETY_Z + 2.0, STEEL_BLACK)]
+    # 台（引き金の機構の側面。ストックの上の縁に埋まる）→ レバー → 丸い頭。覆い（半幅 8mm）の右に沿う
+    return [box(-11.0, 101.0, SAFETY_Z - 5.5, -8.2, 107.0, SAFETY_Z + 5.0, STEEL_BLACK),
+            box(-11.5, 104.0, SAFETY_Z - 2.0, -8.6, SAFETY_HEAD_Y, SAFETY_Z + 2.0, STEEL_BLACK),
+            x_cyl(SAFETY_Z, SAFETY_HEAD_Y, 3.5, -12.0, -8.6, STEEL_BLACK, n=10)]
 
 
 # ---------------------------------------------------------------- 引き金まわり・弾倉
@@ -211,7 +216,7 @@ def trigger():
 
 def floorplate():
     """内蔵弾倉の底板（ボーン magazin。前の蝶番で開いて弾を抜く）。写真のストックの下の金属の帯。"""
-    return [box(-13.0, 55.5, -150.0, 13.0, 59.0, -55.0, STEEL_BLACK)]
+    return [box(-13.0, 55.5, -150.0, 13.0, 61.0, -55.0, STEEL_BLACK)]   # 上は 2mm ストックに埋める（前端の下が反って隙間が見えた）
 
 
 def cartridge_308(z_tip, y, x=0.0):
@@ -250,7 +255,7 @@ def build():
 
     m.bone("root", None, (0, 0, 0))
     add("receiver", "root", (0, b, 0), "receiver", receiver() + scope_base())
-    add("selector", "receiver", (-RCV_R + 2.0, 105.0, SAFETY_Z), "safety", safety())
+    add("selector", "receiver", (-10.0, 104.0, SAFETY_Z), "safety", safety())
     add("lower_receiver", "receiver", (0, 58.0, 0), "trigger_guard", trigger_guard())
     add("trigger", "root", (0, 58.0, 0), "trigger", trigger())
     add("mag_release", "lower_receiver", (0, FLOORPLATE_LATCH[1], FLOORPLATE_LATCH[0] - 3.0), "floorplate_latch",

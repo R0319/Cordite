@@ -34,7 +34,8 @@ from ar15_parts import MM_PER_PX  # noqa: E402
 FACE_LIMIT = 7000
 SLIT_MAX = 3.0                      # 背景が抜けて線に見える隙間の幅の上限 [mm]（これより広いのは窓・穴として扱う）
 SLIT_LEN = 4.0                      # これより短いもの（角の小さな切れ込み）は出さない [mm]
-FOLD_LEN, FOLD_DEG, FOLD_REPORT = 25.0, (1.0, 15.0), 500.0   # 長い浅い折れ目（筋）: 辺の長さ・折れ角・報告する合計 [mm]
+FOLD_LEN, FOLD_DEG, FOLD_REPORT = 25.0, (1.0, 15.0), 1000.0  # 長い浅い折れ目（筋）: 辺の長さ・折れ角・報告する合計 [mm]
+# 報告の下限: 描画で筋が見えた物は 1933〜7557mm、見えなかった物（輪郭の角に縁の帯の辺が集まる所）は 522〜919mm だった
 EDGE_TOL = 2.0                      # 輪郭のずれとして出す差 [mm]
 PX_PER_MM = 2.0                     # 写真との比較の解像度
 SLIT_PX_PER_MM = 4.0                # 隙間を探す影絵の解像度（0.5mm の隙間が 2 画素）
@@ -133,6 +134,8 @@ def folds(T, smooth, bone_of):
             if len(fs) != 2 or smooth[fs[0][0]] or smooth[fs[1][0]]:
                 continue
             i, k = fs[0]
+            if min(abs(nrm[i][0]), abs(nrm[fs[1][0]][0])) < 0.7:     # 横を向いた側面だけ（丸めた縁の帯の段は形どおり）
+                continue
             ln = np.linalg.norm(T[i][k] - T[i][(k + 1) % 3])
             if ln < FOLD_LEN:
                 continue

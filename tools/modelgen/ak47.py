@@ -17,7 +17,7 @@ import ar15_mesh
 import ar15_parts
 import materials as M
 import ak47_outline as O
-from core import MeshPart, Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe
+from core import MeshPart, Model, box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, x_cyl
 from rig import add_locators
 
@@ -237,7 +237,8 @@ def stock():
 
     def radius(nz, ny):
         return 1.0 if nz < -0.6 else 9.0     # 前の端面（受け部の後端に付く面）は丸めない
-    out = [inflate_x(O.STOCK["outer"], HALF_STOCK, WOOD, steps=4, width_fn=width, radius_fn=radius)]
+    # cap_grid: 幅が場所ごとに変わる平らな面を格子で分ける（扇形の細長い三角形だと放射状の筋に見えた）
+    out = [inflate_x(densify(O.STOCK["outer"]), HALF_STOCK, WOOD, steps=4, width_fn=width, radius_fn=radius, cap_grid=14.0)]
     # 鋼の床尾板（図面: 床尾の縦の帯）
     y0, y1 = _yr(O.STOCK)
     out.append(extrude_x_beveled([(z1 - 6, y0 + 2), (z1 + 1, y0 + 2), (z1 + 1, y1 - 2), (z1 - 6, y1 - 2)],
@@ -365,7 +366,8 @@ def lower_handguard_rail():
     slots = int((z1 - z0 - 14) // SLOT_MM)
     r1 = (z0 + z1) / 2 + slots * SLOT_MM / 2
     r0 = r1 - slots * SLOT_MM
-    out += [box(-8, y0 - 2, r0, 8, y0, r1, M.RAIL_DOWN), box(-RAIL_W / 2, y0 - 6, r0, RAIL_W / 2, y0 - 2, r1, M.RAIL_DOWN)]
+    # レールの台は上をハンドガードに 4mm 埋める（輪郭の下の縁は反っているので、一番低い所に合わせると隙間が見えた）
+    out += [box(-8, y0 - 2, r0, 8, y0 + 4, r1, M.RAIL_DOWN), box(-RAIL_W / 2, y0 - 6, r0, RAIL_W / 2, y0 - 2, r1, M.RAIL_DOWN)]
     yc = (y0 + y1) / 2 - 3
     for s in (1, -1):
         xa, xb = sorted((s * hw, s * (hw + 2)))
@@ -387,7 +389,8 @@ def upper_handguard_rail():
     slots = int((z1 - z0 - 12) // SLOT_MM)
     r1 = (z0 + z1) / 2 + slots * SLOT_MM / 2
     r0 = r1 - slots * SLOT_MM
-    out += [box(-8, yt - 1, r0, 8, yt + 3, r1, M.RAIL), box(-RAIL_W / 2, yt + 3, r0, RAIL_W / 2, yt + 8, r1, M.RAIL)]
+    # レールの台は下をハンドガードに埋める（輪郭の上の縁は前下がりなので、一番高い所に合わせると隙間が見えた）
+    out += [box(-8, yt - 6, r0, 8, yt + 3, r1, M.RAIL), box(-RAIL_W / 2, yt + 3, r0, RAIL_W / 2, yt + 8, r1, M.RAIL)]
     return out
 
 

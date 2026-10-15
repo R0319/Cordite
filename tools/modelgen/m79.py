@@ -53,7 +53,11 @@ GUARD_PATH = [(15.0, 38.5, 1.8), (15.2, 30.0, 1.6), (14.8, 12.0, 1.6), (12.5, 5.
               (-37.0, 26.0, 2.2), (-37.0, 38.5, 2.6)]
 TRIGGER_PATH = [(2.0, 38.5, 1.8), (0.5, 31.0, 1.5), (-0.8, 25.0, 1.3), (-2.0, 18.0, 1.2), (-4.0, 12.0, 1.0),
                 (-6.5, 7.5, 0.9)]
-CROSS_SCREW = (-44.0, 30.0)  # トリガーガードの前の、右へ突き出たねじの頭（写真）
+GUARD_STUD_Y = 26.0          # トリガーガードの前の脚から前へ伸びる円筒（つば付き）の中心の高さ。写真に目盛りを重ねて読んだ
+GUARD_STUD = [(-59.6, 5.3), (-45.6, 5.3), (-45.6, 3.6), (-42.6, 3.6), (-42.6, 7.0), (-35.8, 7.0)]   # (Z, 半径)
+SWIVEL_Z, SWIVEL_Y = -251.0, (29.5, 35.5)   # 先台の下の負い紐の環（水平に寝た輪）の中心の Z と上下。写真
+SWIVEL_R = (7.0, 10.0)       # 環の内径・外径の半分
+SWIVEL_STUD_Z = -257.5       # 環を吊る柱（先台の後ろ寄りの下から出る）
 LEAF_PIVOT = (-232.0, 116.0)   # 照尺の枠の軸（Z, Y）。写真で枠の足が台に入る所
 LEAF_W = 40.0               # 枠の幅（FM 23-31 図 9-7 の枠の縦横比 0.34 × 写真の枠の高さ 118mm）
 LEAF_TOP = 241.0            # 起こしたときの枠の上の端（写真）
@@ -124,13 +128,25 @@ def stock():
 # ---------------------------------------------------------------- 受け部（枠）
 def frame():
     """受け部の枠（灰色のパーカー処理）: 後ろの縦の部分と銃身の下へ伸びる板。蝶番の軸の頭。"""
-    g = _poly(O.FRAME).simplify(0.3)
+    # 前端の細い切れ込み（写真の光った線をトレースが拾ったもの。写真では埋まっている）を閉じる
+    g = _poly(O.FRAME).buffer(1.5, join_style=2).buffer(-1.5, join_style=2).simplify(0.3)
     out = [extrude_x_rounded(_ring(g), [], lambda z, y: HALF_FRAME, 2.0, FRAME_MAT, steps=2)]
     z, y = HINGE
     out.append(x_cyl(z, y, 4.0, -HALF_FRAME - 0.8, HALF_FRAME + 0.8, BLUED, n=12))
-    zc, yc = CROSS_SCREW
-    out.append(x_cyl(zc, yc, 3.6, -HALF_FRAME - 7.0, HALF_FRAME, BLUED, n=12))
+    out.append(lathe(0.0, GUARD_STUD_Y, GUARD_STUD, 12, BLUED))   # ガードの前の円筒（前へ伸びる。つばがガードの脚に付く）
     return out
+
+
+def sling_swivel():
+    """先台の下の負い紐の環: 先台から下へ出た柱と、水平に寝た輪（Y 軸まわりの回転体。内側の壁も作る）。"""
+    y0, y1 = SWIVEL_Y
+    ri, ro = SWIVEL_R
+    c = 1.2                                  # 輪の断面の角を落とす（写真の輪は丸い針金）
+    sec = [(y0, ri + c), (y0, ro - c), (y0 + c, ro), (y1 - c, ro), (y1, ro - c), (y1, ri + c), (y1 - c, ri),
+           (y0 + c, ri), (y0, ri + c)]
+    ring = lathe(0.0, SWIVEL_Z, sec, 12, BLUED, cap0=False, cap1=False)
+    stud = box(-2.0, (y0 + y1) / 2, SWIVEL_STUD_Z - 2.0, 2.0, 40.0, SWIVEL_STUD_Z + 2.0, BLUED)
+    return [_swap_yz(ring), stud]
 
 
 def trigger_guard():
@@ -167,7 +183,7 @@ def barrel():
     # 先台（木）: 銃身の下を包む
     fg = _poly(O.FOREND).simplify(0.3)
     out.append(extrude_x_rounded(_ring(fg), [], lambda z, y: HALF_FOREND, 6.0, FOREND_WOOD, steps=3))
-    out.append(x_cyl(-252.0, 33.0, 3.5, -4.0, 4.0, BLUED, n=10))                         # 負い紐の環
+    out += sling_swivel()
     # 銃身の下の蝶番の受け（枠の板の間に入る）
     z, y = HINGE
     out.append(box(-HALF_FRAME + 2.0, y - 6.0, z - 8.0, HALF_FRAME - 2.0, BORE_Y - BARREL_R + 1.0, BREECH_Z - 1.0,

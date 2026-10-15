@@ -230,7 +230,8 @@ def receiver():
            extrude_z(_rcv_section(), pz1, RCV_REAR_Z, STEEL_BLACK)]
     (nw, nh), (hw, hh) = ar15_parts.RAS_NECK, ar15_parts.RAS_HEAD
     z0, z1 = RAIL_Z
-    out += [box(-nw / 2, RAIL_Y - 3.0, z0, nw / 2, RAIL_Y + nh, z1, M.RAIL),
+    # 台の下は 159（受け部より前へ張り出す所で銃身の上端 159.3 に載せる。160 だと 0.7mm 浮いて線が見えた）
+    out += [box(-nw / 2, RAIL_Y - 4.0, z0, nw / 2, RAIL_Y + nh, z1, M.RAIL),
             box(-hw / 2, RAIL_Y + nh, z0, hw / 2, RAIL_Y + nh + hh, z1, M.RAIL)]
     return out
 

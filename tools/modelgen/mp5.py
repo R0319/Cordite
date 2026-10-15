@@ -13,7 +13,7 @@ import ar15_mesh
 import materials as M
 import mp5_outline as O
 from ak47 import _clip, _yr, _zr
-from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe
+from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, rotated, x_cyl, y_cyl
 from rig import add_locators
 import ar15_parts
@@ -237,7 +237,8 @@ def handguard():
         if ny > 0.6:
             return 7.0                     # 上の縁もチューブの両脇で丸める（写真）
         return 14.0 if ny < -0.4 else 6.0
-    return [inflate_x(O.HANDGUARD["outer"], HALF_HG, POLY, steps=4, width_fn=width, radius_fn=radius)]
+    # cap_grid: 幅が場所ごとに変わる平らな面を格子で分ける（扇形の細長い三角形だと放射状の筋に見えた）
+    return [inflate_x(densify(O.HANDGUARD["outer"]), HALF_HG, POLY, steps=4, width_fn=width, radius_fn=radius, cap_grid=14.0)]
 
 
 # ---------------------------------------------------------------- 下部（樹脂のハウジング）
