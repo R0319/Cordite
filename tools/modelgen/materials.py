@@ -98,6 +98,11 @@ HK_POLY = Material("hk_poly", (30, 30, 32), noise=0.06, grime=0.12, scratch=0.00
                    wear=0.2, wear_color=(62, 62, 64), edge_wear=0.35, dust=0.14)
 HK_STEEL = Material("hk_steel", (28, 28, 30), noise=0.05, grime=0.16, scratch=0.010,
                     wear=0.22, wear_color=(96, 96, 94), edge_wear=0.45, dust=0.08)
+# ライオット兵の盾（黒い防弾樹脂の板・縁と金具・覗き窓の暗いガラス）
+SHIELD_BODY = Material("shield_body", (40, 41, 44), noise=0.05, grime=0.12, scratch=0.006,
+                       wear=0.15, wear_color=(84, 86, 88), edge_wear=0.4, dust=0.12)
+SHIELD_RIM = Material("shield_rim", (30, 30, 32), noise=0.05, grime=0.12, scratch=0.006, edge_wear=0.4)
+SHIELD_GLASS = Material("shield_glass", (70, 84, 92), noise=0.02, grime=0.06)
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
