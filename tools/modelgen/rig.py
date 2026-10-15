@@ -42,6 +42,15 @@ RIGHT_ELBOW = (-6.0, -10.0, 1.0)
 LEFT_ELBOW = (7.0, -10.0, -5.0)
 LEFT_SIDE = 0.4                 # 左手の中心を銃の中心線から左へ
 LEFT_GRIP = 0.8                 # 左手の箱（厚さ 4px）の上面をハンドガードの下面からこれだけ食い込ませる（指が回り込む分）
+# 拳銃: 作者が作った glock の一人称（両手で構える）をそのまま使う。カメラはトリガーからの前後と照準線からの高さ、
+# 腕の待機ポーズは銃身の軸の高さとトリガーの前後の差だけ平行移動する（手と銃の関係を glock と同じにする）
+GLOCK_TRIGGER_Z = 0.03525       # glock.geo.json の trigger の pivot
+GLOCK_BORE_Y = 4.3125           # glock.geo.json の ammo の pivot（銃身の軸）
+PISTOL_HIP = (0.0, 3.0, 12.215)     # idle_view: 照準線の 3px 上・トリガーの 12.2px 後ろ（glock の (0, 7.7, 12.25)）
+PISTOL_IRON_Z = 9.715               # iron_view: トリガーの 9.7px 後ろ（glock の (0, 4.7, 9.75)）
+PISTOL_IRON_BEHIND = PISTOL_IRON_Z * 24.0   # 同じ値の mm（照準器の誇張の大きさを決めるのに使う）
+GLOCK_IDLE = {"right_hand": {"rotation": [-90, -6.25, 0], "position": [4.05159, -10.825, 5.8133]},
+              "left_hand": {"rotation": [-90, 25, 0], "position": [-0.825, -11.175, 5]}}
 SUPPORT_SKIP = ("magazin", "mag_ammo", "ammo", "bullet", "bipod_leg_l", "bipod_foot_l", "bipod_leg_r", "bipod_foot_r")
 
 
@@ -62,6 +71,21 @@ def add_locators(m: Model, muzzle, sight_line_y, rear_sight_z, grip_center, supp
         m.raw_bone(b)
     m.support_z = support_z
     m.hands = hands
+
+
+def add_pistol_locators(m: Model, muzzle, sight_line_y, bore_y, grip_center):
+    """拳銃のカメラ・腕の基準（glock と同じ構え。上の PISTOL_*）。bore_y: 銃身の軸の高さ [px]。"""
+    tz = m.get("trigger").pivot[2]
+    m.bone("muzzle_flash", "root", muzzle)
+    m.bone("idle_view", None, (PISTOL_HIP[0], sight_line_y + PISTOL_HIP[1], tz + PISTOL_HIP[2]))
+    m.bone("iron_view", "idle_view", (0, sight_line_y, tz + PISTOL_IRON_Z))
+    m.bone("ground", None, (0, 0, 0))
+    m.bone("thirdperson_hand", None, grip_center)
+    for b in ARM_PLACEHOLDERS:
+        m.raw_bone(b)
+    m.support_z = None
+    m.hands = None
+    m.pistol = (0.0, bore_y - GLOCK_BORE_Y, tz - GLOCK_TRIGGER_Z)
 
 
 def _bottom_at(bones, z, half_x=1.0):
@@ -109,9 +133,14 @@ def place_iron_view(geo_bones):
     iv[2] = min(iv[2], round(hip[2] - IRON_MIN_ADVANCE, 4))
 
 
-def hold_animation(geo_bones, stem, support_z, hands=None):
+def hold_animation(geo_bones, stem, support_z, hands=None, pistol=None):
     """腕に銃を握らせる待機ポーズ（idle）。作者が待機アニメーションを作るまでの仮置きで、腕のボーン以外は動かさない。
-    hands を渡すと手先をその位置にし、肘は銃の中心に対して左右対称（手先の外 2.5px・カメラの 10px 下）に置く。"""
+    hands を渡すと手先をその位置にし、肘は銃の中心に対して左右対称（手先の外 2.5px・カメラの 10px 下）に置く。
+    pistol（add_pistol_locators が決める平行移動）を渡すと glock の待機ポーズをその分ずらして使う。"""
+    if pistol is not None:
+        bones = {n: {"rotation": list(v["rotation"]),
+                     "position": [round(p + d, 4) for p, d in zip(v["position"], pistol)]} for n, v in GLOCK_IDLE.items()}
+        return {"format_version": "1.8.0", "animations": {f"animation.{stem}.idle": {"loop": True, "bones": bones}}}
     by = {b["name"]: b for b in geo_bones}
     eye = np.array(by["idle_view"]["pivot"], float)
     if hands:

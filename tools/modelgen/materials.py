@@ -98,6 +98,13 @@ HK_POLY = Material("hk_poly", (30, 30, 32), noise=0.06, grime=0.12, scratch=0.00
                    wear=0.2, wear_color=(62, 62, 64), edge_wear=0.35, dust=0.14)
 HK_STEEL = Material("hk_steel", (28, 28, 30), noise=0.05, grime=0.16, scratch=0.010,
                     wear=0.22, wear_color=(96, 96, 94), edge_wear=0.45, dust=0.08)
+# FN Five-seveN MK2（黒）: 黒い樹脂のフレーム・グリップ・弾倉、黒い表面処理の鋼のスライド、握る所の滑り止め（細かい凹凸）
+FN_POLY = Material("fn_poly", (34, 34, 36), noise=0.06, grime=0.12, scratch=0.004,
+                   wear=0.2, wear_color=(62, 62, 64), edge_wear=0.35, dust=0.12)
+FN_STIPPLE = Material("fn_stipple", (28, 28, 30), noise=0.35, grime=0.10, dots=2)
+FN_SLIDE = Material("fn_slide", (32, 32, 35), noise=0.05, grime=0.14, scratch=0.008,
+                    wear=0.2, wear_color=(90, 90, 92), edge_wear=0.45, dust=0.08)
+FN_STEEL = Material("fn_steel", (44, 44, 46), noise=0.05, grime=0.14, scratch=0.010, edge_wear=0.4)
 # ライオット兵の盾（黒い防弾樹脂の板・縁と金具・覗き窓の暗いガラス）
 SHIELD_BODY = Material("shield_body", (40, 41, 44), noise=0.05, grime=0.12, scratch=0.006,
                        wear=0.15, wear_color=(84, 86, 88), edge_wear=0.4, dust=0.12)
