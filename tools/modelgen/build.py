@@ -36,7 +36,7 @@ def _with_detail(level):
         ar15_mesh.set_detail("full")
 
 
-VIEWS = {"side_left": (90, 0), "side_right": (-90, 0), "three_quarter": (40, 22), "top": (90, 89.9),
+VIEWS = {"side_left": (-90, 0), "side_right": (90, 0), "three_quarter": (-40, 22), "top": (-90, 89.9),
          "front": (0, 8)}
 
 
