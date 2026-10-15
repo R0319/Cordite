@@ -49,6 +49,7 @@ PHOTO = {
     "m1912_mesh": ("trace_m1912", False, 165, 1.0),
     "awm_mesh": ("trace_awm", True, 205, 0.8),        # 左側面の写真（a4）
     "m79_mesh": ("trace_m79", False, 200, 0.6),
+    "m2_mesh": ("trace_m2", False, 128, 0.8),         # trace_m2.py の第 2 引数で書き出した前処理済みの写真
 }
 CODE_BONES = ("muzzle_flash", "idle_view", "iron_view", "ammo", "right_hand", "left_hand")
 PART_BONES = ("receiver", "trigger", "magazin", "mag_ammo", "bolt", "charging_handle", "selector", "mag_release")

@@ -75,6 +75,12 @@ M79_FRAME = Material("m79_frame", (58, 60, 62), noise=0.06, grime=0.16, scratch=
                      wear=0.22, wear_color=(104, 106, 108), edge_wear=0.45, dust=0.08)
 M79_CASE = Material("m79_case", (150, 150, 146), noise=0.05, grime=0.10)        # 40mm の薬莢（アルミ）
 M79_GRENADE = Material("m79_grenade", (74, 82, 52), noise=0.05, grime=0.10)     # 擲弾の弾頭（オリーブ色）
+# M2 重機関銃の材質（パーカー処理の暗い灰緑の鋼、樹脂のグリップ、オリーブ色の弾薬箱。使い込まれた感の汚し）
+M2_STEEL = Material("m2_steel", (56, 58, 54), noise=0.06, grime=0.18, scratch=0.010,
+                    wear=0.22, wear_color=(100, 102, 96), edge_wear=0.45, dust=0.10)
+M2_GRIP = Material("m2_grip", (34, 32, 30), noise=0.06, grime=0.12, scratch=0.004, edge_wear=0.2)
+M2_CAN = Material("m2_can", (76, 82, 54), noise=0.06, grime=0.18, scratch=0.012,
+                  wear=0.2, wear_color=(110, 112, 96), edge_wear=0.5, dust=0.14)
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
