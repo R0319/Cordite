@@ -199,12 +199,16 @@ def rear_sight():
 TRIGGER_BOX = (-16.0, 75.5, 5.5, 101.0)       # ガードの中のトリガー（ガードの下の帯 Y≦74・後ろの柱 Z≧6 は含まない）
 MAG_CATCH_BOX = (-53.0, 50.0, -44.5, 101.0)   # ガードの前に垂れるマガジンキャッチ（弾倉の後ろの縁に 0.5mm 掛かる）
 MAG_CATCH_PIN = (-41.0, 95.0)                 # マガジンキャッチの軸（ガードの前の付け根）
+GUARD_REAR_FILL = (14.0, 74.5, 17.5, 100.0)    # ガードの後ろの脚とグリップの間を埋める範囲（Z0, Y0, Z1, Y1）
 
 
 def trigger_guard():
     """トリガーガード（プレス鋼板）。図面の輪郭からトリガーとマガジンキャッチを除いた残り。"""
     from shapely.geometry import Polygon, box as sbox
     g = Polygon(O.TRIGGER_GUARD["outer"]).difference(sbox(*TRIGGER_BOX)).difference(sbox(*MAG_CATCH_BOX))
+    # 後ろの脚をグリップの前の縁（Z 17）まで広げる。図面のトレースでは 2mm 空いて背景が抜けていたが、実物の写真
+    # （米国防総省 AK-47 type II）ではガードの後ろの端はグリップに直接つながり、隙間は無い
+    g = g.union(sbox(*GUARD_REAR_FILL))
     out = [extrude_x_beveled(list(q.exterior.coords)[:-1], -5.5, 5.5, 1.0, STEEL_BLACK, steps=1)
            for q in getattr(g, "geoms", [g]) if q.geom_type == "Polygon" and q.area > 0.5]
     out.append(x_cyl(*MAG_CATCH_PIN, 1.8, -6.4, 6.4, M.STEEL, n=8))              # マガジンキャッチの軸のピン
