@@ -383,12 +383,15 @@ def extrude_x_rounded(outer, holes, half_fn, bevel, mat, steps=3, side=0, hole_b
     return MeshPart(verts, faces, mat, None, charts, cuv, {li: "rows" for li in range(len(loops))}).finalize()
 
 
-def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> MeshPart:
+def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None, radius_at=None, cap_grid=None) -> MeshPart:
     """側面形状を左右に「膨らませた」立体（断面が楕円状）。グリップのような丸い樹脂部品用。
     輪郭の各点で丸みの半径 r を変えられる: r = half_w なら縁は X=0 の稜線まで丸まり（前後のストラップ）、
     小さい r なら縁に平らな帯が残る（底面など）。
     width_fn(z, y, f) → 幅の倍率。f はその高さでの前後位置（0=前端, 1=後端）。
-    radius_fn(nz, ny) → 丸みの半径。(nz, ny) は輪郭のその点での外向き法線（側面図）。"""
+    radius_fn(nz, ny) → 丸みの半径。(nz, ny) は輪郭のその点での外向き法線（側面図）。
+    radius_at(z, y, nz, ny) → 場所でも変える丸みの半径（radius_fn の代わり。グリップだけ大きく丸める等）。
+    cap_grid=間隔 [mm] で、側面の平らな面の中に格子点を足して分割する。width_fn で幅が場所ごとに変わると、輪郭の点だけの
+    細長い三角形では面が折れて星形の筋に見えるため（AWM のグリップの膨らみで出た）。"""
     pts = list(profile)
     if _area2(pts) < 0:
         pts.reverse()
@@ -402,7 +405,10 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> M
         (z0, y0), (z1, y1), (z2, y2) = pts[i - 1], pts[i], pts[(i + 1) % n]
         nz, ny = (y2 - y0), -(z2 - z0)            # 反時計回りの外向き法線（側面図）
         ln = math.hypot(nz, ny) or 1.0
-        r = H if radius_fn is None else min(H, max(0.5, radius_fn(nz / ln, ny / ln)))
+        if radius_at is not None:
+            r = min(H, max(0.5, radius_at(z1, y1, nz / ln, ny / ln)))
+        else:
+            r = H if radius_fn is None else min(H, max(0.5, radius_fn(nz / ln, ny / ln)))
         radii.append(r)
 
     def span(y):
@@ -460,7 +466,11 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> M
                 extra[t] = len(verts)
                 verts.append((side * H * scale(t[0], t[1]), t[1], t[0]))
             return extra[t]
-        for tri in _cap_triangles(pts, [(verts[c][2], verts[c][1]) for c in cap]):
+        cap_zy = [(verts[c][2], verts[c][1]) for c in cap]
+        tris = _grid_cap_triangles(cap_zy, cap_grid) if cap_grid else None
+        if tris is None:
+            tris = _cap_triangles(pts, cap_zy)
+        for tri in tris:
             faces.append([vid(t) for t in (tri if side == 1 else (tri[0], tri[2], tri[1]))])
             charts.append(None)
             cuv.append(None)
@@ -473,6 +483,75 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None) -> M
         w = 2 * (H - min(radii[i], radii[j]) * 0.999)   # 半径が切り替わる点では帯が三角形になるので、広い側の幅で塗る
         cuv.append([(perim[i], 0), (perim[i + 1], 0), (perim[i + 1], max(w, 0.01)), (perim[i], max(w, 0.01))])
     return MeshPart(verts, faces, mat, None, charts, cuv, {0: False, 1: False, 2: False}).finalize()
+
+
+def _grid_cap_triangles(cap, spacing):
+    """平らな面（輪郭 cap、反時計回り）を、中に間隔 spacing の格子点を足して三角形に分ける。返す三角形の頂点は
+    輪郭の番号（int）か、足した点の座標 (z, y)。点ごとに丸みの半径が違うと縮めた輪郭が自己交差するので、
+    _cap_triangles と同じく交差を解いた形で分ける。分割が形を覆い切れないとき（凹みで三角形が外へ出る等）は None。"""
+    try:
+        import shapely
+        from shapely.geometry import MultiPoint, Point, Polygon
+        from shapely.validation import make_valid
+    except ImportError:
+        return None
+    g = Polygon(cap)
+    if not g.is_valid:
+        g = make_valid(g)
+    polys = [q for q in getattr(g, "geoms", [g]) if q.geom_type == "Polygon" and q.area > 1e-6]
+    if not polys:
+        return None
+    key = lambda q: (round(q[0], 6), round(q[1], 6))
+    index = {}
+    for i, q in enumerate(cap):
+        index.setdefault(key(q), i)
+    out = []
+    for poly in polys:
+        pts = []
+        for ring in [poly.exterior] + list(poly.interiors):
+            for q in list(ring.coords)[:-1]:
+                if not pts or math.dist(pts[-1], q) > 1e-6:
+                    pts.append((q[0], q[1]))
+        inner = poly.buffer(-spacing * 0.6)
+        if not inner.is_empty:
+            z0, y0, z1, y1 = inner.bounds
+            k, y = 0, y0
+            while y <= y1:
+                z = z0 + (spacing / 2 if k % 2 else 0.0)
+                while z <= z1:
+                    if inner.contains(Point(z, y)):
+                        pts.append((z, y))
+                    z += spacing
+                y += spacing * 0.866
+                k += 1
+        guard = poly.buffer(1e-6)
+        area = 0.0
+        kept = [tg for tg in shapely.delaunay_triangles(MultiPoint(pts)).geoms if guard.contains(tg)]
+        # 凹んだ角の近くで外へはみ出した三角形は捨て、その空いた所だけを制約付きドロネーで埋める（空いた所の輪郭は
+        # 既存の点だけでできるので、継ぎ目に点が増えない）
+        left = poly.difference(shapely.unary_union(kept)) if kept else poly
+        for piece in getattr(left, "geoms", [left]):
+            if piece.geom_type != "Polygon" or piece.area < 1e-9:
+                continue
+            if not piece.is_valid:
+                piece = make_valid(piece)
+            for sub in getattr(piece, "geoms", [piece]):
+                if sub.geom_type == "Polygon" and sub.area > 1e-9:
+                    kept += [t for t in shapely.constrained_delaunay_triangles(sub).geoms if t.area > 1e-12]
+        for tg in kept:
+            tri = []
+            for q in list(tg.exterior.coords)[:3]:
+                i = index.get(key(q))
+                tri.append(i if i is not None else (q[0], q[1]))
+            (az, ay), (bz, by), (cz, cy) = [cap[v] if isinstance(v, int) else v for v in tri]
+            a2 = (bz - az) * (cy - ay) - (by - ay) * (cz - az)
+            if abs(a2) < 1e-9:
+                continue
+            out.append(tuple(tri) if a2 > 0 else (tri[0], tri[2], tri[1]))
+            area += abs(a2) / 2
+        if abs(area - poly.area) > poly.area * 2e-3:
+            return None
+    return out
 
 
 def _inset(pts, d):

@@ -54,6 +54,16 @@ M1912_BOLT = Material("m1912_bolt", (150, 148, 140), noise=0.05, grime=0.12, scr
                       wear=0.15, wear_color=(176, 174, 168), dust=0.04)     # ボルト（排莢口から見える明るい鋼）
 M1912_WOOD = Material("m1912_wood", (96, 40, 26), noise=0.08, grime=0.14, scratch=0.004,
                       wear=0.2, wear_color=(128, 70, 44), edge_wear=0.3, dust=0.06)
+# Accuracy International AWM の材質（ストックはオリーブ色の樹脂塗装のアルミ・樹脂。作者の指定。使い込まれた感の汚し）
+AWM_STOCK = Material("awm_stock", (82, 90, 62), noise=0.08, grime=0.16, scratch=0.006,
+                     wear=0.22, wear_color=(112, 118, 92), edge_wear=0.4, dust=0.16)
+AWM_STOCK_DARK = Material("awm_stock_dark", (52, 58, 40), noise=0.06, grime=0.14)   # 先台の溝の影
+AWM_STEEL = Material("awm_steel", (32, 32, 34), noise=0.05, grime=0.16, scratch=0.010,
+                     wear=0.22, wear_color=(96, 96, 94), edge_wear=0.45, dust=0.08)
+AWM_BOLT = Material("awm_bolt", (120, 120, 116), noise=0.05, grime=0.12, scratch=0.016,
+                    wear=0.15, wear_color=(160, 160, 154), dust=0.04)          # ボルト（明るい鋼）
+AWM_MAG = Material("awm_mag", (84, 86, 86), noise=0.05, grime=0.16, scratch=0.014,
+                   wear=0.25, wear_color=(130, 130, 128), edge_wear=0.45, dust=0.08)   # 弾倉（灰色の鋼）
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
