@@ -744,7 +744,9 @@ _FACE_UV = [(0, 0), (1, 0), (1, 1), (0, 1)]
 def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 900,
            ss: int = 2, background=(0, 0, 0, 0), skip_bones=("right_hand", "left_hand"),
            fixed=None) -> Image.Image:
-    """正射影で描画する。yaw=90 で左側面（+X 側から -X を見る）。背景は既定で透明。
+    """正射影で描画する。yaw=90 で右側面（銃口が右）、yaw=-90 で左側面（銃口が左）、yaw=0 で後ろから。背景は既定で透明。
+    ゲーム内と同じ見え方にするため、描く前に X を反転する（Bedrock の座標は +X が左・-X が右。右手系のまま描くと
+    鏡に映した像になり、後ろから見たときに左右の部品が逆に見えていた）。
     fixed=(倍率, x0, y0, 幅, 高さ) を渡すと自動の拡大縮小をやめ、画面座標 = (x*倍率 + x0, y0 - y*倍率) で描く
     （写真との重ね合わせ用）。"""
     texa = np.asarray(tex.convert("RGBA"), dtype=np.float32)
@@ -821,7 +823,7 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
         W, H, scale = fw * ss, fh * ss, fs * ss
         off = np.array([fx0 * ss, H - fy0 * ss])
     else:
-        allp = np.concatenate([q[0] for q in quads]) @ view.T
+        allp = (np.concatenate([q[0] for q in quads]) * np.array([-1.0, 1.0, 1.0])) @ view.T
         lo, hi = allp[:, :2].min(0), allp[:, :2].max(0)
         span = hi - lo
         W = width * ss
@@ -832,7 +834,9 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
     color[:] = background
     depth = np.full((H, W), -1e9, dtype=np.float32)
 
+    mirror = np.array([-1.0, 1.0, 1.0])
     for pts, uvs in quads:
+        pts = pts * mirror                      # X 反転（ゲーム内の見え方。上の説明）
         vp = pts @ view.T
         n = np.cross(pts[1] - pts[0], pts[-1] - pts[0])
         nn = np.linalg.norm(n)

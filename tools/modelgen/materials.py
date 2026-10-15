@@ -18,6 +18,9 @@ MAG = Material("mag", (74, 76, 68), noise=0.06, grime=0.16, scratch=0.006)      
 MAG_USGI = Material("mag_usgi", (92, 96, 94), noise=0.05, grime=0.14, scratch=0.008)   # USGI アルミ弾倉（鈍い灰色の陽極酸化。傷で地金が出る）
 MAG_AK = Material("mag_ak", (44, 44, 46), noise=0.05, grime=0.14, scratch=0.006)     # AK の鋼製弾倉（黒染め）
 MAG_PMAG = Material("mag_pmag", (30, 30, 32), noise=0.05, grime=0.10, scratch=0.002)   # Magpul PMAG（黒い樹脂）
+MP5_RECEIVER = Material("mp5_receiver", (48, 50, 54), noise=0.05, grime=0.12, scratch=0.004)   # MP5 の受け部（黒に近い灰色の塗装。写真）
+MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
+MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
 FOLLOWER = Material("follower", (88, 100, 78), noise=0.05, grime=0.10, scratch=0.002)  # 弾倉の送り板（樹脂。中が見えたとき本体と見分けられる色）
 RUBBER = Material("rubber", (24, 24, 24), noise=0.10, grime=0.08)
 CANVAS = Material("canvas", (150, 126, 82), noise=0.10, grime=0.18)   # 布（タン）
