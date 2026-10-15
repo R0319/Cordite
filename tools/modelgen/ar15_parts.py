@@ -495,7 +495,20 @@ def lower_common(l=L, magwell_fn=None):
         box(-13.3, b - 18, 42, 13.3, b - 12, 48, M.STEEL_DARK),              # 後ピン
         box(-16, b - 45, -42, -12, b - 37, -34, M.STEEL_DARK),               # マガジンキャッチ（右）
         box(12, b - 30, -48, 15, b - 14, -38, M.STEEL_DARK),                 # ボルトキャッチ（左）
-        box(12, b - 38, 18, 14.5, b - 32, 38, M.STEEL_DARK),                 # セレクター（左）
+    ]
+
+
+SELECTOR_PIVOT = (33.0, -35.0)   # セレクターの軸（Z, ボア軸からの Y）。レバーの後ろの丸い付け根
+
+
+def selector(l=L):
+    """セレクター（ボーン selector。左側面）: 後ろの付け根と、前へ伸びるレバー（安全の位置）。
+    以前は下部レシーバーの部品に含まれていて、切り替えのアニメーションで動かせなかった。"""
+    b = l.bore_y
+    zc, yc = SELECTOR_PIVOT
+    return [
+        box(12, b + yc - 5, zc - 4, 14.8, b + yc + 5, zc + 4, M.STEEL_DARK),      # 付け根
+        box(12, b + yc - 2, 17, 14.5, b + yc + 2, zc - 2, M.STEEL_DARK),          # レバー（前向き）
     ]
 
 
