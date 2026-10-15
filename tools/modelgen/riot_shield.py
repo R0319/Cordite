@@ -81,7 +81,7 @@ def _hold():
     anchor = body @ (pivot + item @ np.array(VANILLA_HAND_OFFSET)) + body0       # 手持ちの物の基準点（足元基準）
     to_world = body @ item @ np.diag([-1.0, 1.0, 1.0]) / 16.0                    # モデル [px] → 足元基準（ローダーが X を反転）
     shield = np.diag([1.0, 1.0, -1.0]) / 1000.0                                   # 盾の座標 [mm] → 足元基準
-    center = np.array([HIT_CENTER_X, HIT_CENTER_Y, PLATE_FRONT + PLATE_T / 2000.0])
+    center = np.array([HIT_CENTER_X, HIT_CENTER_Y, PLATE_FRONT - PLATE_T / 2000.0])   # 板の中心（前の面が PLATE_FRONT）
     inv = np.linalg.inv(to_world)
     rot = inv @ shield                                                           # 盾 [mm] → モデル [px]
     off = inv @ (center - anchor)
