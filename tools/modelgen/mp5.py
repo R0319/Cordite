@@ -44,6 +44,8 @@ ROD_HALF = 3.5          # 棒の厚さ 7mm（作者の指摘「ストックが�
 # 右側面の排莢口（写真の暗い角の丸い長方形）と、その奥で動くボルト
 PORT_Z = (-81.0, -42.0)
 PORT_Y = (161.0, 181.0)
+PORT_CORNER_R = 7.0     # 排莢口の角の丸み（高さ 20mm に対して。実物はほぼ両端が半円の長穴）
+PORT_INNER_X = 11.0     # 排莢口から見えるボルトの側面の深さ（受け部の右側面から 6mm 奥）
 BOLT_TRAVEL_MAX = 70.0  # ボルトの後退量の上限（🟡 実物の値は未確認。ボルトの後端が受け部の後端を越えない長さを決める）
 CH_SLOT_Z = (-206.0, -126.0)   # コッキングハンドルの溝（チューブの左側面。前の端が閉鎖位置）
 STOCK_TRAVEL = 120.0    # ストックを縮めたときの前進量（HK 公表の全長 700→550mm の差は 150。写真の伸長位置からの量は 🟡 仮）
@@ -131,7 +133,16 @@ def receiver():
            extrude_z(_rcv_section(groove=True, port=True), pz0, pz1, RCV_MAT),
            extrude_z(_rcv_section(groove=True), pz1, gz1, RCV_MAT),
            extrude_z(_rcv_section(groove=False), gz1, z_rear, RCV_MAT)]
-    out.append(box(-0.3, PORT_Y[0] - 0.3, pz0, 9.0, PORT_Y[1] + 0.3, pz1, M.BORE))   # 排莢口の奥
+    out.append(box(-0.3, PORT_Y[0] - 0.3, pz0, 9.0, PORT_Y[1] + 0.3, pz1, M.BORE))   # 排莢口の奥（ボルトを引くと見える）
+    # 排莢口の四隅を丸める（実物は両端の丸い長穴）。窓の切り欠きの角に、四角から 1/4 円を抜いた埋め物を置く
+    r = PORT_CORNER_R
+    for zc, yc, sz, sy in ((pz0 + r, PORT_Y[0] + r, -1, -1), (pz1 - r, PORT_Y[0] + r, 1, -1),
+                           (pz0 + r, PORT_Y[1] - r, -1, 1), (pz1 - r, PORT_Y[1] - r, 1, 1)):
+        pts = [(zc + sz * r, yc + sy * r)]
+        pts += [(zc + sz * r * math.cos(math.radians(a)), yc + sy * r * math.sin(math.radians(a)))
+                for a in range(0, 91, 15)]
+        x_out = -h + 0.1 if sy < 0 else -h + 0.8          # 上の角は受け部の丸みの内側に収める
+        out.append(extrude_x(pts, x_out, -PORT_INNER_X - 0.2, RCV_MAT))
     # 後端キャップ＋ストックの受けと止め金（丸みのある樹脂・金属。角を大きく丸める）
     out += outline_parts(O.STOCK_LATCH, -h + 1.0, h - 1.0, RCV_MAT, bevel=5.0, steps=3)
     return out
@@ -300,11 +311,18 @@ def stock():
 
 # ---------------------------------------------------------------- ボルト
 def bolt():
-    """ボルト（ボーン bolt）: ボルトの頭と本体。排莢口から上半分が見え、引くと奥（暗い面）が見える。
+    """ボルト（ボーン bolt）: ボルトの頭と本体。排莢口からは本体の平らな側面とエキストラクターが見え、引くと
+    ボルトの頭→奥（暗い面）が見える。
     後ろの端は BOLT_TRAVEL_MAX 下がっても受け部の後端キャップを越えない長さ。"""
     rear = 100.0 - BOLT_TRAVEL_MAX
-    return [lathe(0, BORE_Y, [(BOLT_FACE_Z, 8.5), (BOLT_FACE_Z + 22.0, 8.5)], ar15_mesh.N_MID, M.STEEL),
-            lathe(0, BORE_Y, [(BOLT_FACE_Z + 22.0, 13.0), (rear, 13.0)], ar15_mesh.N_MID, M.STEEL)]
+    zh = BOLT_FACE_Z + 22.0
+    x_side = -PORT_INNER_X                                  # 排莢口から見えるボルトの平らな側面
+    return [lathe(0, BORE_Y, [(BOLT_FACE_Z, 8.5), (zh, 8.5)], ar15_mesh.N_MID, STEEL_BLACK),
+            # 本体: 排莢口の高さいっぱいの平らな側面を持つ角柱（以前は丸棒で、上面だけが明るい棚に見えた）
+            extrude_x_beveled([(zh, BORE_Y - 12.0), (rear, BORE_Y - 12.0), (rear, PORT_Y[1] + 2.0), (zh, PORT_Y[1] + 2.0)],
+                              x_side, -x_side, 1.0, STEEL_BLACK, steps=1),
+            # エキストラクター（側面の前寄りの細長い爪。写真で排莢口の中に見える）
+            box(x_side - 0.6, BORE_Y + 9.0, zh, x_side, BORE_Y + 13.0, zh + 24.0, M.STEEL)]
 
 
 # ---------------------------------------------------------------- 弾倉
