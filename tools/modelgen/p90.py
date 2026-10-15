@@ -61,6 +61,14 @@ TR_FRONT = [(-109.6, 170.0), (-124.6, 150.4), (-130.9, 127.9)]   # 前の斜め�
 TR_REAR = [(46.6, 118.0), (42.9, 135.4), (35.4, 150.4), (27.9, 161.6), (24.1, 170.0)]   # 後ろの脚の後ろの縁（弾倉をまたぐ）
 TR_PANEL = [(-74.0, 154.5), (-18.0, 154.5), (-18.0, 166.0), (-74.0, 166.0)]   # 上の橋の側面の凹んだ枠（写真の暗い長方形）
 TR_PANEL_DEPTH = 2.5
+TR_TAPER = (145.0, 170.0, 21.0)   # 上の部分は上へ細くなる（作者提供の三面図の後ろの図: 弾倉の上で約 46mm、上面で約 37mm）。
+                                  # Y 145 から上面で半幅 21 へ（TR 型の写真では側板が厚めなので三面図より太め）
+
+
+def housing_half(z, y):
+    """受け部の半幅（高さで変わる）。"""
+    y0, y1, top = TR_TAPER
+    return HALF_HOUSING + (top - HALF_HOUSING) * min(1.0, max(0.0, (y - y0) / (y1 - y0)))
 TR_RAIL_Z = (-108.0, 24.0)  # 上面レールの前後
 SIDE_RAIL_Z = (-91.0, -67.0)   # 左右の短いレール（前の端）
 SIDE_RAIL_Y = 157.5           # 頭（幅 24mm）が上面（TR_TOP_Y）からはみ出さない高さ
@@ -167,14 +175,14 @@ def housing():
     out = []
     for q in _parts_of(main):
         out.append(extrude_x_rounded(_ring(q), [list(h.coords)[:-1] for h in q.interiors],
-                                     lambda z, y: HALF_HOUSING, 1.5, HOUSING_MAT, steps=2))
+                                     housing_half, 1.5, HOUSING_MAT, steps=2))
     arm = g.intersection(sbox(ARM_Z, y0, z0, y1))
     for q in _parts_of(arm):
         for s in (1, -1):
             xa, xb = sorted((s * (HALF_MAG + 0.3), s * HALF_HOUSING))
             out.append(extrude_x(_ring(q), xa, xb, HOUSING_MAT))
     # 上の橋の側面の凹み（側面形に抜いた窓の奥の板）
-    h = HALF_HOUSING - TR_PANEL_DEPTH
+    h = housing_half(0.0, max(y for _, y in TR_PANEL)) - TR_PANEL_DEPTH
     out.append(extrude_x([(z, y) for z, y in TR_PANEL], -h, h, HOUSING_MAT))
     return out
 
@@ -187,7 +195,7 @@ def rails():
     out = [box(-nw / 2, y - 0.5, z0, nw / 2, y + nh, z1, M.RAIL),
            box(-hw / 2, y + nh, z0, hw / 2, y + nh + hh, z1, M.RAIL)]
     s0, s1 = SIDE_RAIL_Z
-    r0 = HALF_HOUSING - 0.5
+    r0 = housing_half(0.0, SIDE_RAIL_Y) - 0.5
     for s in (1, -1):
         xa, xb = sorted((s * r0, s * (r0 + nh + 0.5)))
         out.append(box(xa, SIDE_RAIL_Y - nw / 2, s0, xb, SIDE_RAIL_Y + nw / 2, s1, M.RAIL_SIDE))
