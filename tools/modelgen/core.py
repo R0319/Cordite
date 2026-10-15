@@ -105,23 +105,52 @@ class MeshPart:
                         [[(s * k, t * k) for s, t in f] for f in self.chart_uv], self.chart_edge)
 
     def finalize(self):
-        """チャート未指定の面へ、平面投影のチャートを割り当てる。"""
+        """チャート未指定の面へ、平面投影のチャートを割り当てる。同じ平面の上で頂点を共有してつながった面（押し出しの
+        端面を分けた三角形など）は 1 枚のチャートにまとめる（三角形ごとに分けると、チャートごとに汚しの模様が途切れて
+        三角形が浮き出て見えた）。"""
         if self.charts is None:
             self.charts = [None] * len(self.faces)
             self.chart_uv = [None] * len(self.faces)
         nxt = max([c for c in self.charts if c is not None], default=-1) + 1
-        for fi, f in enumerate(self.faces):
-            if self.charts[fi] is not None:
-                continue
-            p = [np.array(self.verts[i], dtype=float) for i in f]
+        free = [fi for fi, c in enumerate(self.charts) if c is None]
+        info = {}
+        for fi in free:
+            p = [np.array(self.verts[i], dtype=float) for i in self.faces[fi]]
             n = np.cross(p[1] - p[0], p[2] - p[0])
             n /= np.linalg.norm(n) + 1e-12
-            u = p[1] - p[0]
+            info[fi] = (n, (tuple(np.round(n, 3)), round(float(n @ p[0]), 2)))
+        # 同じ平面の面を、頂点の共有でつないだまとまりに分ける
+        parent = {fi: fi for fi in free}
+
+        def find(a):
+            while parent[a] != a:
+                parent[a] = parent[parent[a]]
+                a = parent[a]
+            return a
+        owner = {}
+        for fi in free:
+            for vi in self.faces[fi]:
+                key = (info[fi][1], vi)
+                if key in owner:
+                    ra, rb = find(fi), find(owner[key])
+                    if ra != rb:
+                        parent[ra] = rb
+                else:
+                    owner[key] = fi
+        groups = {}
+        for fi in free:
+            groups.setdefault(find(fi), []).append(fi)
+        for members in groups.values():
+            n = info[members[0]][0]
+            ax = np.eye(3)[int(np.argmin(np.abs(n)))]
+            u = np.cross(n, ax)
             u /= np.linalg.norm(u) + 1e-12
             v = np.cross(n, u)
-            self.charts[fi] = nxt
-            self.chart_uv[fi] = [(float((q - p[0]) @ u), float((q - p[0]) @ v)) for q in p]
-            self.chart_edge.setdefault(nxt, len(f) == 4)
+            for fi in members:
+                self.charts[fi] = nxt
+                self.chart_uv[fi] = [(float(np.array(self.verts[i], dtype=float) @ u),
+                                      float(np.array(self.verts[i], dtype=float) @ v)) for i in self.faces[fi]]
+            self.chart_edge.setdefault(nxt, len(members) == 1 and len(self.faces[members[0]]) == 4)
             nxt += 1
         return self
 
@@ -371,16 +400,36 @@ def extrude_x_rounded(outer, holes, half_fn, bevel, mat, steps=3, side=0, hole_b
         sg, k, mid = entry
         return ring_pts[0] if mid else ring_pts[k]
     first, last = ring_idx[0], ring_idx[-1]
+    # 側面（端面）は幅が場所で変わると平面でなくなるので、横から投影した 1 枚の区画に貼り、滑らかな法線にする
+    # （三角形ごとに区画・陰影が分かれると、三角形が浮き出て見えた。P90 の本体）
+    cap_faces = []
+    ch0, ch1 = len(loops), len(loops) + 1
     for tri in cap_tris(ring_pts_of(seq[0])):
         f = [first[li][i] for li, i in tri]
+        cap_faces.append(len(faces))
         faces.append([f[0], f[2], f[1]])
-        charts.append(None)
-        cuv.append(None)
+        charts.append(ch0)
+        cuv.append([(verts[i][2], verts[i][1]) for i in faces[-1]])
     for tri in cap_tris(ring_pts_of(seq[-1])):
+        cap_faces.append(len(faces))
         faces.append([last[li][i] for li, i in tri])
-        charts.append(None)
-        cuv.append(None)
-    return MeshPart(verts, faces, mat, None, charts, cuv, {li: "rows" for li in range(len(loops))}).finalize()
+        charts.append(ch1)
+        cuv.append([(verts[i][2], verts[i][1]) for i in faces[-1]])
+    edge = {li: "rows" for li in range(len(loops))}
+    edge.update({ch0: False, ch1: False})
+    return MeshPart(verts, faces, mat, _smooth_cap_normals(verts, faces, cap_faces), charts, cuv, edge).finalize()
+
+
+def densify(profile, step=10.0):
+    """輪郭の辺を長さ step 以下に分ける（点を足すだけで形は変えない）。inflate_x の cap_grid と組み合わせる:
+    輪郭の点が疎だと、丸めた縁の帯が長い三角形になって放射状の筋が残るため。"""
+    pts = [tuple(p) for p in profile]
+    out = []
+    for i, (z0, y0) in enumerate(pts):
+        z1, y1 = pts[(i + 1) % len(pts)]
+        k = max(1, math.ceil(math.hypot(z1 - z0, y1 - y0) / step))
+        out += [(z0 + (z1 - z0) * j / k, y0 + (y1 - y0) * j / k) for j in range(k)]
+    return out
 
 
 def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None, radius_at=None, cap_grid=None) -> MeshPart:
@@ -444,6 +493,7 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None, radi
     for i in range(n):
         perim.append(perim[-1] + math.dist(pts[i], pts[(i + 1) % n]))
     faces, charts, cuv = [], [], []
+    cap_faces = []
     for side in (-1, 1):
         t_acc = 0.0
         for k in range(steps):
@@ -471,9 +521,17 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None, radi
         if tris is None:
             tris = _cap_triangles(pts, cap_zy)
         for tri in tris:
-            faces.append([vid(t) for t in (tri if side == 1 else (tri[0], tri[2], tri[1]))])
-            charts.append(None)
-            cuv.append(None)
+            face = [vid(t) for t in (tri if side == 1 else (tri[0], tri[2], tri[1]))]
+            if cap_grid:
+                # 格子の側面は 1 枚のテクスチャの区画に横から投影して貼る（三角形ごとに区画を分けると、区画ごとに汚しの
+                # 模様が途切れて三角形が浮き出て見えた）
+                cap_faces.append(len(faces))
+                charts.append(3 if side == 1 else 4)
+                cuv.append([(verts[i][2], verts[i][1]) for i in face])
+            else:
+                charts.append(None)
+                cuv.append(None)
+            faces.append(face)
     # 縁の帯（左右の稜線をつなぐ。半径 = half_w の点では幅 0）
     a, b = ring_idx[(-1, 0)], ring_idx[(1, 0)]
     for i in range(n):
@@ -482,7 +540,36 @@ def inflate_x(profile, half_w, mat, steps=5, width_fn=None, radius_fn=None, radi
         charts.append(2)
         w = 2 * (H - min(radii[i], radii[j]) * 0.999)   # 半径が切り替わる点では帯が三角形になるので、広い側の幅で塗る
         cuv.append([(perim[i], 0), (perim[i + 1], 0), (perim[i + 1], max(w, 0.01)), (perim[i], max(w, 0.01))])
-    return MeshPart(verts, faces, mat, None, charts, cuv, {0: False, 1: False, 2: False}).finalize()
+    normals = _smooth_cap_normals(verts, faces, cap_faces) if cap_faces else None
+    return MeshPart(verts, faces, mat, normals, charts, cuv, {0: False, 1: False, 2: False, 3: False, 4: False}).finalize()
+
+
+def _face_normal(verts, f):
+    """書き出し（_poly_mesh）が法線を省いたときと同じ面法線（最初の 3 頂点の巻き方向）。"""
+    p = [np.array(verts[i], dtype=float) for i in f[:3]]
+    n = np.cross(p[1] - p[0], p[2] - p[0])
+    return tuple(n / (np.linalg.norm(n) + 1e-12))
+
+
+def _smooth_cap_normals(verts, faces, cap_faces):
+    """格子で分けた側面（cap_faces）だけ、頂点ごとに周りの面の法線を面積で重み付けして平均した滑らかな法線にする。
+    側面は幅に合わせてゆるく曲がった面なので、面ごとの法線のままだと格子の三角形が 1 枚ずつ陰影の違う模様に見える
+    （MP5 のハンドガード）。それ以外の面（丸めた縁の帯）は今までどおり面法線。向きは巻き方向の規則に揃える。"""
+    acc = {}
+    for fi in cap_faces:
+        f = faces[fi]
+        p = [np.array(verts[i], dtype=float) for i in f[:3]]
+        n = np.cross(p[1] - p[0], p[2] - p[0])          # 長さ = 面積の 2 倍（面積の重み）
+        for i in f:
+            acc[i] = acc.get(i, 0) + n
+    cap = set(cap_faces)
+    out = []
+    for fi, f in enumerate(faces):
+        if fi in cap:
+            out.append([tuple(acc[i] / (np.linalg.norm(acc[i]) + 1e-12)) for i in f])
+        else:
+            out.append([_face_normal(verts, f)] * len(f))
+    return out
 
 
 def _grid_cap_triangles(cap, spacing):
@@ -981,12 +1068,12 @@ _FACE_UV = [(0, 0), (1, 0), (1, 1), (0, 1)]
 
 def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 900,
            ss: int = 2, background=(0, 0, 0, 0), skip_bones=("right_hand", "left_hand"),
-           fixed=None) -> Image.Image:
+           fixed=None, smooth=False) -> Image.Image:
     """正射影で描画する。yaw=90 で右側面（銃口が右）、yaw=-90 で左側面（銃口が左）、yaw=0 で後ろから。背景は既定で透明。
     ゲーム内と同じ見え方にするため、描く前に X を反転する（Bedrock の座標は +X が左・-X が右。右手系のまま描くと
     鏡に映した像になり、後ろから見たときに左右の部品が逆に見えていた）。
     fixed=(倍率, x0, y0, 幅, 高さ) を渡すと自動の拡大縮小をやめ、画面座標 = (x*倍率 + x0, y0 - y*倍率) で描く
-    （写真との重ね合わせ用）。"""
+    （写真との重ね合わせ用）。smooth=True で保存した頂点の法線を使った陰影（ゲームの見え方に近い）。"""
     texa = np.asarray(tex.convert("RGBA"), dtype=np.float32)
     th, tw = texa.shape[:2]
     cy, sy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
@@ -1034,8 +1121,14 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
                     u, v = pm["uvs"][c[2]]
                     uvl.append((u, 1 - v) if pm.get("normalized_uvs") else (u / tw, 1 - v / th))
                 pts = place(pts)
+                nrm = None
+                if smooth and pm.get("normals"):
+                    nrm = np.array([pm["normals"][c[1]] for c in uniq], dtype=float)
+                    if not np.allclose(Wm, np.eye(4)):
+                        nrm = nrm @ Wm[:3, :3].T
                 for k in range(1, len(uniq) - 1):
-                    quads.append((pts[[0, k, k + 1]], [uvl[0], uvl[k], uvl[k + 1]]))
+                    quads.append((pts[[0, k, k + 1]], [uvl[0], uvl[k], uvl[k + 1]],
+                                  None if nrm is None else nrm[[0, k, k + 1]]))
         for jc in jb.get("cubes", []):
             uv = jc.get("uv")
             if not isinstance(uv, dict):
@@ -1054,7 +1147,7 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
                 u0, v0 = fd["uv"]
                 uw, vh = fd["uv_size"]
                 uvs = [((u0 + a * uw) / tw, (v0 + b * vh) / th) for a, b in _FACE_UV]
-                quads.append((place(np.array(pts)), uvs))
+                quads.append((place(np.array(pts)), uvs, None))
 
     if fixed is not None:
         fs, fx0, fy0, fw, fh = fixed
@@ -1073,7 +1166,7 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
     depth = np.full((H, W), -1e9, dtype=np.float32)
 
     mirror = np.array([-1.0, 1.0, 1.0])
-    for pts, uvs in quads:
+    for pts, uvs, nrm in quads:
         pts = pts * mirror                      # X 反転（ゲーム内の見え方。上の説明）
         vp = pts @ view.T
         n = np.cross(pts[1] - pts[0], pts[-1] - pts[0])
@@ -1082,11 +1175,15 @@ def render(geo_bones, tex: Image.Image, yaw: float, pitch: float, width: int = 9
             continue
         n /= nn
         shade = 0.55 + 0.45 * abs(float(n @ light))
+        if nrm is not None:                     # 保存した頂点の法線で頂点ごとに陰影を付け、面の中で補間する（ゲームと同じ）
+            nv = nrm * mirror
+            nv = nv / (np.linalg.norm(nv, axis=1, keepdims=True) + 1e-12)
+            shade = 0.55 + 0.45 * np.abs(nv @ light)
         sx_ = vp[:, 0] * scale + off[0]
         sy_ = H - (vp[:, 1] * scale + off[1])
         for tri in (((0, 1, 2), (0, 2, 3)) if len(pts) == 4 else ((0, 1, 2),)):
             _raster(color, depth, texa, sx_[list(tri)], sy_[list(tri)], vp[list(tri), 2],
-                    [uvs[i] for i in tri], shade, tw, th)
+                    [uvs[i] for i in tri], shade if np.isscalar(shade) else shade[list(tri)], tw, th)
     img = Image.fromarray(np.clip(color, 0, 255).astype(np.uint8), "RGBA")
     return img.resize((W // ss, H // ss), Image.LANCZOS)
 
@@ -1119,5 +1216,9 @@ def _raster(color, depth, texa, xs, ys, zs, uvs, shade, tw, th):
     c = texa[tv, tu]
     sub[m] = z[m]
     out = color[y0:y1 + 1, x0:x1 + 1]
-    out[m, :3] = c[m, :3] * shade
+    if np.isscalar(shade):
+        out[m, :3] = c[m, :3] * shade
+    else:
+        sh = w0 * shade[0] + w1 * shade[1] + w2 * shade[2]
+        out[m, :3] = c[m, :3] * sh[m][:, None]
     out[m, 3] = 255
