@@ -19,7 +19,7 @@ import ar15_mesh
 import ar15_parts
 import materials as M
 import p90_outline as O
-from core import MeshPart, box, extrude_x, extrude_x_beveled, extrude_x_rounded, lathe
+from core import box, extrude_x, extrude_x_beveled, extrude_x_rounded, lathe
 from m249 import x_cyl, y_cyl
 from rig import add_locators
 
@@ -47,6 +47,7 @@ HALF_MAG = 22.0             # 弾倉 44mm（5.7×28mm 弾 40.5mm を横向きに
 MAG_Z = (-82.0, 181.0)
 MAG_Y = (117.0, 140.0)
 MAG_WALL = 2.5              # 上下の板・前後の端の厚さ
+ROTOR_Z, ROTOR_R, ROTOR_H = 160.0, 19.0, 6.5   # 給弾ローター（弾倉の後ろの下。本体の後ろの下のふくらみの中に収まる）
 MAG_RIBS = [160.0, 135.0, 110.0, 85.0, 60.0, 35.0, 10.0, -15.0, -40.0, -62.0]   # 側面の縦の補強（写真の縦の筋）
 MAG_CHANNEL = (60.0, -86.5, 116.0, 141.5)   # 受け部の中の弾倉の通り道（前後 z, 上下 y）
 ARM_Z = 17.0                # 受け部の後ろの腕（弾倉の横を覆う）の前の縁
@@ -254,58 +255,33 @@ def charging_handle():
 
 # ---------------------------------------------------------------- 弾倉
 def magazine():
-    """50 発弾倉（半透明の樹脂。上面に乗る）: 上下の板・前後の端・側面の縦の補強だけを作り、側面は開けて
-    中の弾（横向きに 2 段）が見えるようにする（実物は半透明で弾が透けて見える）。"""
+    """50 発弾倉（煙色の樹脂。上面に乗る）。中は透かさず閉じた箱にする（弾 50 発分のポリゴンを省くため。作者指示）。
+    側面に縦の補強（写真の縦の筋）。後ろの下に回転式の給弾ローター（装着中は本体の中に隠れ、外すと見える）。"""
     z0, z1 = MAG_Z
     y0, y1 = MAG_Y
-    w, h = MAG_WALL, HALF_MAG
+    h = HALF_MAG
     mat = M.P90_MAG
-    out = [extrude_x_beveled([(z0, y1 - w), (z1, y1 - w), (z1, y1), (z0 + 2.0, y1)], -h, h, 1.0, mat, steps=1),
-           extrude_x_beveled([(z0, y0), (z1, y0), (z1, y0 + w), (z0, y0 + w)], -h, h, 1.0, mat, steps=1),
+    out = [extrude_x_beveled([(z0 + 9.0, y0), (z1 - 9.0, y0), (z1 - 9.0, y1), (z0 + 9.0, y1)], -h, h, 1.0, mat,
+                             steps=1),
            # 後ろの端（黒い蓋）・前の端（掛け金の爪が上に出る）
            extrude_x_beveled([(z1 - 9.0, y0), (z1, y0), (z1, y1), (z1 - 9.0, y1)], -h, h, 1.5, M.P90_MAG_CAP, steps=1),
            extrude_x_beveled([(z0, y0), (z0 + 9.0, y0), (z0 + 9.0, y1), (z0 + 4.0, y1 + 3.0), (z0, y1 + 3.0)], -h, h,
                              1.2, M.P90_MAG_CAP, steps=1)]
     for zr in MAG_RIBS:
         for s in (1, -1):
-            xa, xb = sorted((s * (h - 1.6), s * h))
-            out.append(box(xa, y0 + w, zr - 0.9, xb, y1 - w, zr + 0.9, mat))
-    # 送り板（空のとき前の端に見える）
-    out.append(box(-h + 1.0, y0 + w, z0 + 9.0, h - 1.0, y1 - w, z0 + 14.0, M.FOLLOWER))
-    # 中央の暗い仕切り（弾のすき間から向こう側の背景が透けないように。空のときは暗い中が見える）
-    out.append(box(-6.0, y0 + w, z0 + 14.0, 6.0, y1 - w, z1 - 9.0, M.P90_MAG_CAP))
-    return out
-
-
-def round_57_x(z, y):
-    """5.7×28mm 実包を横向き（X 方向、弾頭が +X＝左）に置く（弾倉の中）: 全長 40.5mm、薬莢 28.9mm、底 7.95mm。
-    煙色の弾倉越しに見えるので、色は暗くした材質（P90_ROUND_*）。"""
-    b = -20.25
-    case = [(b, 3.97), (b + 28.9 - 3.5, 3.97), (b + 28.9, 3.0)]
-    bullet = [(b + 28.9, 2.85), (b + 34.0, 2.7), (20.25, 0.6)]
-    out = []
-    swap = lambda v: (v[2], v[1], v[0])
-    for prof, mat, c0, c1 in ((case, M.P90_ROUND_CASE, True, False), (bullet, M.P90_ROUND_TIP, False, True)):
-        m = lathe(0, y, prof, 6, mat, cap0=c0, cap1=c1)
-        n_ = None if m.normals is None else [[swap(v) for v in f] for f in m.normals]
-        out.append(MeshPart([(v[2], v[1], v[0] + z) for v in m.verts], m.faces, m.mat, n_, m.charts, m.chart_uv,
-                            m.chart_edge))
+            xa, xb = sorted((s * (h - 0.2), s * (h + 0.6)))
+            out.append(box(xa, y0 + 2.5, zr - 0.9, xb, y1 - 2.5, zr + 0.9, mat))
+    zc, r = ROTOR_Z, ROTOR_R
+    out.append(y_cyl(0.0, zc, r, y0 - ROTOR_H, y0 + 0.3, M.P90_MAG_CAP, n=20))
     return out
 
 
 def magazine_rounds():
-    """弾倉の中の弾（mag_ammo）: 横向きの弾を上下 2 段・半ピッチずらして 25 発ずつ（50 発）。"""
-    z0, z1 = MAG_Z
-    y0, y1 = MAG_Y
-    pitch = 8.4
-    out = []
-    for row, (yc, off) in enumerate(((y1 - MAG_WALL - 4.3, 0.0), (y0 + MAG_WALL + 4.3, pitch / 2))):
-        for i in range(25):
-            z = z0 + 16.0 + off + i * pitch
-            if z > z1 - 13.0:
-                break
-            out += round_57_x(z, yc)
-    return out
+    """弾倉の中の弾（mag_ammo）: 外したときに見える、給弾ローターの溝に乗った 1 発だけ（弾頭が前）。
+    下側がローターの底から少し出る。空のときはローターだけが見える。"""
+    y = MAG_Y[0] - ROTOR_H + 2.5
+    case, bullet = cartridge_57(ROTOR_Z - 20.25, y)
+    return case + bullet
 
 
 def cartridge_57(z_tip, y, x=0.0):
@@ -352,7 +328,7 @@ def build():
 
     zc = sum(MAG_Z) / 2
     add("magazin", "root", (0, MAG_Y[0], zc), "magazine", magazine())
-    add("mag_ammo", "magazin", (0, sum(MAG_Y) / 2, zc), None, magazine_rounds())
+    add("mag_ammo", "magazin", (0, MAG_Y[0] - ROTOR_H, ROTOR_Z), None, magazine_rounds())
 
     tip = BOLT_FACE_Z - 40.5                                  # 薬室内の実包
     case, bullet = cartridge_57(tip, b)

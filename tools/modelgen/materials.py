@@ -44,8 +44,6 @@ P90_STEEL = Material("p90_steel", (30, 30, 31), noise=0.05, grime=0.16, scratch=
                      wear=0.22, wear_color=(96, 96, 94), edge_wear=0.45, dust=0.08)
 P90_GUIDE = Material("p90_guide", (96, 94, 88), noise=0.05, grime=0.16, scratch=0.010, dust=0.06)   # 横の灰色の棒
 P90_MAG = Material("p90_mag", (60, 56, 50), noise=0.06, grime=0.12, scratch=0.006, dust=0.08)      # 煙色の半透明樹脂
-P90_ROUND_CASE = Material("p90_round_case", (124, 98, 56), noise=0.05, grime=0.10)   # 弾倉越しの薬莢（暗い真鍮）
-P90_ROUND_TIP = Material("p90_round_tip", (58, 54, 50), noise=0.05, grime=0.08)      # 弾倉越しの弾頭（SS190 の黒い先端）
 P90_MAG_CAP = Material("p90_mag_cap", (40, 38, 36), noise=0.05, grime=0.12, scratch=0.004)
 MARK_WHITE = Material("mark_white", (226, 226, 220), noise=0.03, grime=0.10)   # 刻印の白い塗り（セレクターの S など）
 MARK_RED = Material("mark_red", (196, 38, 34), noise=0.03, grime=0.10)       # 刻印の赤い塗り（セレクターの E・F など）
