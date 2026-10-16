@@ -27,7 +27,8 @@ STEEL_BLACK = M.G3_STEEL
 RCV_MAT = M.G3_RECEIVER
 OD = M.G3_OD             # オリーブ色の樹脂（ハンドガード・グリップ・ストック）
 
-BORE_Y = 177.0           # 銃身の軸（写真の消炎器の上下の中点）
+BORE_Y = 177.0           # 銃身の軸
+MUZZLE_Y = 175.7         # 照星より前の銃身・消炎器の中心（写真の上下の中点 175.3〜176.4）
 SIGHT_Y = 225.0          # 照準線（照星のリングのフードの中心の少し下）
 MUZZLE_Z = -605.0
 BOLT_FACE_Z = -155.0     # ボルトの前面＝薬室の後端（銃身 450mm を銃口から逆算）
@@ -68,9 +69,10 @@ BOLT_TRAVEL_MAX = 100.0  # 🟡 実物の値は未確認（後端キャップの
 
 TUBE_Y, TUBE_R = 203.5, 7.7       # コッキングチューブ（写真の上の縁 211.2）
 TUBE_Z = (-205.0, -493.0)
-CH_SLOT_Z = (-385.0, -250.0)      # コッキングハンドルの溝（チューブの左側面。前の端が閉鎖位置＝写真のハンドルの位置）
-CH_Z = -376.0
-CARRY_LOOP = (-100.0, -205.0, 177.0, 207.0)   # 折りたたんだ運搬用ハンドル（針金の輪。左側面）の Z, Y の範囲
+CH_SLOT_Z = (-378.0, -243.0)      # コッキングハンドルの溝（チューブの左側面。前の端が閉鎖位置＝写真のハンドルの位置）
+CH_ANGLE = 72.0
+CH_Z = -369.5                    # 写真の明るい箱 Z -357〜-382（上の縁 214.4）
+CARRY_LOOP = (-96.5, -202.0, 177.0, 211.3)   # 針金の上の縁 213.3（写真）   # 折りたたんだ運搬用ハンドル（針金の輪。左側面）の Z, Y の範囲
 
 
 # ---------------------------------------------------------------- 受け部
@@ -154,8 +156,8 @@ def cocking_tube():
     チューブの後ろの金具（写真の Z -150〜-205 の段）。"""
     out = [lathe(0, TUBE_Y, [(TUBE_Z[1], TUBE_R), (TUBE_Z[0] + 55.0, TUBE_R)], ar15_mesh.N_MID, RCV_MAT)]
     out.append(box(TUBE_R - 1.5, TUBE_Y - 2.0, CH_SLOT_Z[0], TUBE_R + 0.2, TUBE_Y + 2.0, CH_SLOT_Z[1], M.BORE))
-    out.append(extrude_x_beveled([(-138.0, RCV_TOP - 3.0), (-212.0, RCV_TOP - 3.0), (-212.0, 215.5), (-202.0, 217.0),
-                                  (-150.0, 217.0)], -TUBE_R - 2.0, TUBE_R + 2.0, 2.0, RCV_MAT, steps=2))   # 写真の上の段
+    out.append(extrude_x_beveled([(-138.0, RCV_TOP - 3.0), (-210.0, RCV_TOP - 3.0), (-210.0, 211.5), (-204.0, 213.5),
+                                  (-196.0, 216.0), (-150.0, 216.0)], -TUBE_R - 2.0, TUBE_R + 2.0, 2.0, RCV_MAT, steps=2))   # 写真の上の段
     return out
 
 
@@ -163,11 +165,12 @@ def charging_handle():
     """コッキングハンドル（ボーン charging_handle。チューブの左側面から左へ出るレバーと、その先のつまみ）。
     非往復式で、閉鎖位置ではチューブの前の切り欠きに掛けておく。写真では Z -362〜-388 にチューブの上へ出て見える。"""
     z = CH_Z
-    out = [extrude_x_beveled([(z - 10.0, TUBE_Y - 3.0), (z + 10.0, TUBE_Y - 3.0), (z + 10.0, TUBE_Y + 12.0),
-                              (z - 10.0, TUBE_Y + 12.0)], TUBE_R - 4.0, TUBE_R + 5.0, 1.0, STEEL_BLACK, steps=1)]
+    out = [extrude_x_beveled([(z - 13.5, TUBE_Y - 3.0), (z + 12.5, TUBE_Y - 3.0), (z + 12.5, TUBE_Y + 11.0),
+                              (z - 13.5, TUBE_Y + 11.0)], TUBE_R - 4.0, TUBE_R + 5.0, 1.0, STEEL_BLACK, steps=1)]
+    a = CH_ANGLE                                   # レバーの傾き（つまみの上の縁が写真の箱の上の縁 214.4 を越えない）
     out += rotated([extrude_x([(z - 3.0, TUBE_Y), (z + 3.0, TUBE_Y), (z + 3.0, TUBE_Y + 18.0), (z - 3.0, TUBE_Y + 18.0)],
-                              TUBE_R + 1.0, TUBE_R + 5.0, STEEL_BLACK)], "z", -55.0, (TUBE_R + 3.0, TUBE_Y, z))
-    tip = (TUBE_R + 3.0 + 18.0 * math.sin(math.radians(55.0)), TUBE_Y + 18.0 * math.cos(math.radians(55.0)))
+                              TUBE_R + 1.0, TUBE_R + 5.0, STEEL_BLACK)], "z", -a, (TUBE_R + 3.0, TUBE_Y, z))
+    tip = (TUBE_R + 3.0 + 18.0 * math.sin(math.radians(a)), TUBE_Y + 18.0 * math.cos(math.radians(a)))
     out.append(lathe(tip[0], tip[1], [(z - 7.0, 5.0), (z + 7.0, 5.0)], ar15_mesh.N_SMALL, STEEL_BLACK))   # つまみ
     return out
 
@@ -231,8 +234,9 @@ def barrel():
     fh_rear = -566.0                                           # 消炎器の後ろの端（写真の太さが変わる所）
     pipe = [(z, r) for z, r in prof if z > fh_rear]
     out = [lathe(0, BORE_Y, [(-500.0, 9.0), (BOLT_FACE_Z, 9.0)], ar15_mesh.N_MID, M.STEEL)]
-    out.append(lathe(0, BORE_Y, [(fh_rear, pipe[0][1])] + pipe, ar15_mesh.N_MID, STEEL_BLACK))
-    out += slotted_flash_hider(BORE_Y, MUZZLE_Z, fh_rear, 10.2, 6.5, (-599.0, -577.0), (0, 90, 180, 270), 26.0,
+    my = MUZZLE_Y                                              # 照星より前は写真の上下の中点（銃身の軸より 1.3mm 下に写る）
+    out.append(lathe(0, my, [(fh_rear, pipe[0][1])] + pipe, ar15_mesh.N_MID, STEEL_BLACK))
+    out += slotted_flash_hider(my, MUZZLE_Z, fh_rear, 10.2, 6.5, (-599.0, -577.0), (0, 90, 180, 270), 26.0,
                                STEEL_BLACK, ribs=((-571.5, -569.0, 0.6), (-575.5, -573.0, 0.6)))
     return out
 
@@ -480,6 +484,6 @@ def build():
 
     from shapely.geometry import Polygon
     c = Polygon(O.GRIP["outer"]).centroid
-    add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=SIGHT_Y * K,
+    add_locators(m, muzzle=(0, MUZZLE_Y * K, MUZZLE_Z * K), sight_line_y=SIGHT_Y * K,
                  rear_sight_z=REAR_SIGHT_Z * K, grip_center=(0, c.y * K, c.x * K), support_z=-330.0 * K)
     return m, parts

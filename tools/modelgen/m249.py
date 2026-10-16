@@ -579,7 +579,7 @@ def bipod_leg(l=L, side=1):
     end = pz + l.bipod_len - 20
     leg = [
         x_cyl(pz, py, 6.0, x - 3.5, x + 3.5, STEEL_BLACK, n=10),                                  # 付け根の軸
-        extrude_x([(pz, py - 6), (end, py - 5), (end, py + 5), (pz, py + 6)], x - 1.8, x + 1.8, STEEL_BLACK),
+        extrude_x([(pz, py - 6), (end, py - 5), (end, py + 7.5), (pz, py + 6)], x - 1.8, x + 1.8, STEEL_BLACK),
         extrude_x([(pz + 30, py - 1.5), (end - 20, py - 1.5), (end - 20, py + 1.5), (pz + 30, py + 1.5)],
                   min(x + side * 1.8, x + side * 2.1), max(x + side * 1.8, x + side * 2.1), M.BORE),  # 外側の溝
     ]

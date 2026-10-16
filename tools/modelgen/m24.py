@@ -84,10 +84,11 @@ def butt():
     """床尾板（ゴム）と、長さ調整の 2 本の棒・調整ノブ（写真: 床尾板を約 45mm 伸ばした状態）。"""
     out = [extrude_x_beveled(O.BUTT_PAD["outer"], -HALF_PAD, HALF_PAD, 6.0, M.RUBBER, steps=2)]
     z0, z1 = 268.0, 314.0
-    for y in (75.5, 14.5):                                                # 上下 2 本の棒
-        out.append(lathe(0, y, [(z0, 4.3), (z1, 4.3)], ar15_mesh.N_SMALL, STEEL_BLACK))
-    out.append(lathe(0, 45.0, [(z0, 3.0), (z1, 3.0)], ar15_mesh.N_SMALL, STEEL_BLACK))   # 調整ねじ
-    out.append(lathe(0, 45.0, [(274.0, 17.0), (291.0, 17.0)], 16, STEEL_BLACK))           # 調整ノブ（刻みはテクスチャ）
+    # 寸法は写真の明るさの段で読んだ（棒の太さ 11mm、下の棒の中心 10.5、ねじの中心 42、ノブは前が太い）
+    for y in (75.3, 10.5):                                                # 上下 2 本の棒
+        out.append(lathe(0, y, [(z0, 5.5), (z1, 5.5)], ar15_mesh.N_SMALL, STEEL_BLACK))
+    out.append(lathe(0, 42.0, [(z0, 5.0), (z1, 5.0)], ar15_mesh.N_SMALL, STEEL_BLACK))   # 調整ねじ
+    out.append(lathe(0, 44.0, [(274.0, 24.0), (285.0, 24.0), (291.0, 18.0)], 16, STEEL_BLACK))   # 調整ノブ（刻みはテクスチャ）
     return out
 
 
@@ -249,7 +250,9 @@ def trigger():
 
 def floorplate():
     """内蔵弾倉の底板（ボーン magazin。前の蝶番で開いて弾を抜く）。写真のストックの下の金属の帯。"""
-    return [box(-13.0, 55.5, -150.0, 13.0, 61.0, -55.0, STEEL_BLACK)]   # 上は 2mm ストックに埋める（前端の下が反って隙間が見えた）
+    # 下の面はストックの下の縁と同じ傾き（写真: 後ろ Y 54.4 → 前 60.2。水平の箱では前で 4.5mm はみ出した）。上はストックに埋める
+    return [extrude_x_beveled([(-55.0, 54.4), (-150.0, 60.4), (-150.0, 64.0), (-55.0, 58.0)], -13.0, 13.0, 0.8,
+                              STEEL_BLACK, steps=1)]
 
 
 def cartridge_308(z_tip, y, x=0.0):

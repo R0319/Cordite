@@ -48,6 +48,7 @@ class Silhouette:
         """region（mm の多角形）で切り出した輪郭。minus の多角形は除く。最大の 1 片を返す。
         面積 min_hole [mm²] 未満の穴は捨てる（ピンの光りなど、穴ではない明るい点を拾うため）。"""
         g = self.geom.intersection(Polygon(region))
+        self._report_cuts(Polygon(region), g)
         for m in minus:
             g = g.difference(Polygon(m))
         if isinstance(g, MultiPolygon) or g.geom_type == "GeometryCollection":
@@ -56,6 +57,41 @@ class Silhouette:
         g = g.simplify(tol, preserve_topology=True)
         r = lambda ring: [(round(x, 1), round(y, 1)) for x, y in list(ring.coords)[:-1]]
         return {"outer": r(g.exterior), "holes": [r(h) for h in g.interiors if Polygon(h).area >= min_hole]}
+
+    def _report_cuts(self, region, g, min_len=4.0, probe=2.0):
+        """範囲の端で切った辺を覚えておき、終了時に「写真ではその外へも暗い所が続くのに、どの部品の範囲にも入っていない」辺を
+        表示する（範囲の決め方の漏れ。MP5 の後端キャップ・G3 のグリップの前の縁・M79 の先台の先と枠の上・AWM のほお当て・
+        弾倉止めなど、範囲で部品の一部を切り落とした例が多かった）。表示は stderr（書き出す座標には影響しない）。"""
+        import atexit
+        from shapely.geometry import Point
+        if not hasattr(self, "_regions"):
+            self._regions, self._cuts = [], []
+            atexit.register(self._print_cuts)
+        self._regions.append(region)
+        cut = g.boundary.intersection(region.exterior.buffer(0.05))
+        for seg in getattr(cut, "geoms", [cut]):
+            if seg.is_empty or seg.length < min_len:
+                continue
+            for t in (0.25, 0.5, 0.75):
+                m = seg.interpolate(t, normalized=True)
+                for dz, dy in ((probe, 0), (-probe, 0), (0, probe), (0, -probe)):
+                    q = Point(m.x + dz, m.y + dy)
+                    if not region.contains(q) and self.geom.contains(q):
+                        self._cuts.append((seg, q))
+                        break
+
+    def _print_cuts(self):
+        import sys
+        from shapely.ops import unary_union
+        allr = unary_union(self._regions)
+        shown = []
+        for seg, q in self._cuts:
+            if allr.contains(q) or any(seg.equals(s) for s in shown):
+                continue
+            shown.append(seg)
+            z0, y0, z1, y1 = seg.bounds
+            print(f"  ⚠ 範囲の端で切った辺: Z {z0:.1f}〜{z1:.1f}、Y {y0:.1f}〜{y1:.1f}（長さ {seg.length:.0f}mm）。写真ではその外へも"
+                  f"暗い所が続くが、どの部品の範囲にも入っていない（付属品として外したのでなければ範囲を広げる）", file=sys.stderr)
 
     def radius_profile(self, z_from, z_to, axis_y, step=2.0, band=30.0):
         """銃身などの丸い部品: 各 Z で軸の上下の輪郭までの距離（の平均）を半径とする。"""
