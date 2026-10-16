@@ -14,7 +14,7 @@ import materials as M
 import sights
 import mp5_outline as O
 from ak47 import _clip, _yr, _zr
-from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
+from core import MeshPart, box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, rotated, x_cyl, y_cyl
 from rig import add_locators
 import ar15_parts
@@ -27,9 +27,12 @@ RCV_MAT = M.MP5_RECEIVER_W  # 受け部・チューブ（写真では樹脂部�
 BORE_Y = 153.5          # 銃身の軸（写真の銃口の上下の中点）
 SIGHT_Y = 205.0         # 照準線（照星のポストの先端＝フードのリングの中心の少し下）
 MUZZLE_Z = -331.0
+MUZZLE_Y = 154.7         # 照星より前の銃口側の中心（写真の上下の中点。銃身の軸より 1.2mm 上に写る）
 BOLT_FACE_Z = -106.0    # ボルトの前面＝薬室の後端（銃身 225mm を銃口から逆算）
 REAR_SIGHT_Z = 53.0     # 照門ドラムの中心（照準半径 340mm の後ろの端）
 FRONT_POST_Z = -285.0   # 照星のポスト（リングの中心）
+FRONT_HOOD_HALF = 8.75  # リングのフードの前後の半分（写真の側面で Z -294.5〜-277。7mm の薄い輪にしていた）
+FRONT_HOOD_BACK = -0.5  # フードの中心とポストの前後のずれ（写真）
 # ADS の目は照門の 140mm 後ろ（作者指示: 照門のドラムに近すぎて手前の受け部が画面を覆っていた）。照門の穴と照星の
 # ポストは見やすいように誇張し、この距離で大きさを決める（実物は穴 3.2mm・ポスト 2mm。sights の目安）
 EYE_RELIEF = 140.0
@@ -57,6 +60,8 @@ PORT_INNER_X = 15.0     # 排莢口から見えるボルトの側面（受け部
                         # 閉鎖時は排莢口がボルトで埋まって見える。6mm 奥だと暗い穴に見えた＝作者の指摘）
 BOLT_MAT = M.STEEL      # ボルト（受け部より明るい鋼。暗いと空洞と見分けがつかない）
 BOLT_TRAVEL_MAX = 70.0  # ボルトの後退量の上限（🟡 実物の値は未確認。ボルトの後端が受け部の後端を越えない長さを決める）
+CH_TUBE_Y = 181.8          # コッキングチューブの軸（上の縁 189.4。写真のトレースの上の縁 189〜190 に合わせる。183.6 では 2mm 高かった）
+CH_TUBE_REAR = -160.0     # チューブの太い所の前の端（写真）
 CH_SLOT_Z = (-206.0, -126.0)   # コッキングハンドルの溝（チューブの左側面。前の端が閉鎖位置）
 STOCK_TRAVEL = 120.0    # ストックを縮めたときの前進量（HK 公表の全長 700→550mm の差は 150。写真の伸長位置からの量は 🟡 仮）
 
@@ -95,6 +100,9 @@ RCV_BOTTOM = 130.0       # 受け部の断面の下端（トリガーハウジ�
 RCV_TOP_R = 15.0         # 上の角の丸み（実物の断面は上がほぼ半円。作者の指摘「角張ったところは弾倉ぐらい」）
 RCV_GROOVE = (142.5, 156.5, 1.8)   # 側面の長い溝（上下の範囲・深さ。写真の暗い帯 Y 140〜160）
 RCV_GROOVE_Z = (-80.0, 77.0)       # 溝のある前後の範囲（写真）
+# 後端キャップの上の部分（作者の指摘「ここの角が取れてない」）。受け部と同じ断面で後ろへ続き、上の角を斜めに落とす
+# （写真: Z 114.5 から Z 126 で Y 171 まで下がる平らな面）。トレースの stock_latch は Y 175 で切っていたので漏れていた
+CAP_CHAMFER = (116.5, 127.0, 171.0)   # 斜めの面の前の端 z、後ろの端 z、後ろの端の高さ y（自動採点の写真との比較で 2mm 後ろへ）
 
 
 def _rcv_section(groove=True, port=False):
@@ -132,6 +140,48 @@ def _rcv_section(groove=True, port=False):
     return pts
 
 
+def _loft_closed(sections, mat):
+    """凸の断面 [(z, [(x, y)...])...]（点の数をそろえる）を前後につないだ閉じた筒。前後の蓋は重心からの扇。"""
+    verts, faces, charts, cuv = [], [], [], []
+    n = len(sections[0][1])
+    for z, pts in sections:
+        verts += [(x, y, z) for x, y in pts]
+    p0 = sections[0][1]
+    per = [0.0]
+    for i in range(n):
+        per.append(per[-1] + math.dist(p0[i], p0[(i + 1) % n]))
+    for j in range(len(sections) - 1):
+        za, zb = sections[j][0], sections[j + 1][0]
+        for i in range(n):
+            a, b = j * n + i, j * n + (i + 1) % n
+            faces.append([a, b, b + n, a + n])
+            charts.append(0)
+            cuv.append([(per[i], za), (per[i + 1], za), (per[i + 1], zb), (per[i], zb)])
+    for j, front in ((0, True), (len(sections) - 1, False)):
+        z, pts = sections[j]
+        c = len(verts)
+        verts.append((sum(p[0] for p in pts) / n, sum(p[1] for p in pts) / n, z))
+        for i in range(n):
+            a, b = j * n + i, j * n + (i + 1) % n
+            faces.append([c, b, a] if front else [c, a, b])
+            charts.append(None)
+            cuv.append(None)
+    return MeshPart(verts, faces, mat, None, charts, cuv, {0: "band"}).finalize()
+
+
+def end_cap():
+    """後端キャップの上の部分: 受け部の断面のまま後ろへ伸ばし、CAP_CHAMFER の斜めの面で上を切る。"""
+    z0 = _zr(O.RECEIVER)[1]
+    c0, c1, yb = CAP_CHAMFER
+    top = _yr(O.RECEIVER)[1]
+    sec = _rcv_section(groove=False)
+    sections = [(z0, sec)]
+    for k in range(13):
+        yt = top - (top - yb) * k / 12
+        sections.append((c0 + (c1 - c0) * k / 12, [(x, min(y, yt)) for x, y in sec]))
+    return [_loft_closed(sections, RCV_MAT)]
+
+
 def receiver():
     """受け部（板金の筒）。断面（上が丸く、側面に長い溝）を前後に押し出して作る。右側面の排莢口は、その区間だけ
     窓を切り欠いた断面にする（前後の区間の端面が窓の前後の壁になる）。奥は暗い面、間をボルトが動く。"""
@@ -153,8 +203,14 @@ def receiver():
                 for a in range(0, 91, 15)]
         x_out = -h + 0.1 if sy < 0 else -h + 0.8          # 上の角は受け部の丸みの内側に収める
         out.append(extrude_x(pts, x_out, -PORT_INNER_X - 0.2, RCV_MAT))
+    top = _yr(O.RECEIVER)[1]
+    for z0, z1 in CLAW_BUMPS:
+        # 前後の端が爪の掛かる高い縁、間が低い（写真。平らな箱では中が 2mm 高かった）
+        out.append(extrude_x_beveled([(z0, top - 3.0), (z1, top - 3.0), (z1 - 0.5, top + 2.5), (z1 - 2.5, top + 2.5),
+                                      (z1 - 3.5, top + 0.5), (z0 + 3.5, top + 0.5), (z0 + 2.5, top + 2.5),
+                                      (z0 + 0.5, top + 2.5)], -5.0, 5.0, 0.6, RCV_MAT, steps=1))
     # 後端キャップ＋ストックの受けと止め金（丸みのある樹脂・金属。角を大きく丸める）
-    out += outline_parts(O.STOCK_LATCH, -h + 1.0, h - 1.0, RCV_MAT, bevel=5.0, steps=3)
+    out += outline_parts(O.STOCK_LATCH, -h + 1.0, h - 1.0, RCV_MAT, bevel=5.0, steps=3) + end_cap()
     return out
 
 
@@ -162,8 +218,10 @@ def cocking_tube():
     """コッキングチューブ（ハンドガードの上で受け部から照星まで）。左側面にハンドルの溝。"""
     zs = [p[0] for p in O.COCKING_TUBE["outer"]]
     z0, z1 = min(zs), max(zs)
-    yc, r = 183.6, 7.6
-    out = [lathe(0, yc, [(z0, r), (z1 + 4.0, r)], ar15_mesh.N_MID, RCV_MAT)]
+    yc, r = CH_TUBE_Y, 7.6
+    # 受け部の前の 50mm は写真で 2mm 太く（上の縁 191.3）見える。前の細い所とは 10mm かけてつなぐ
+    out = [lathe(0, yc, [(z0, r), (CH_TUBE_REAR - 10.0, r), (CH_TUBE_REAR, r + 1.9), (z1 + 4.0, r + 1.9)],
+                 ar15_mesh.N_MID, RCV_MAT)]
     out.append(box(r - 1.5, yc - 1.8, CH_SLOT_Z[0], r + 0.2, yc + 1.8, CH_SLOT_Z[1], M.BORE))   # 溝（左）
     return out
 
@@ -171,13 +229,14 @@ def cocking_tube():
 def charging_handle():
     """コッキングハンドル（ボーン charging_handle。チューブの左側面から外へ斜め上に出るレバーと丸いつまみ）。
     非往復式: 引いてボルトを後ろへ掛けたら前へ戻す。写真ではつまみの頭がチューブの上に Z -206〜-195 で見える。"""
-    yc = 183.6
-    z = CH_SLOT_Z[0] + 6.0
+    yc = CH_TUBE_Y
+    z = CH_SLOT_Z[0] + 2.5                 # つまみの中心（写真では Z -211〜-196 の 15mm。前は 10mm で 5mm 後ろだった）
     out = [extrude_x([(z - 3.0, yc - 1.5), (z + 3.0, yc - 1.5), (z + 3.0, yc + 1.5), (z - 3.0, yc + 1.5)], 5.0, 13.0,
                      STEEL_BLACK)]
     out += rotated([extrude_x([(z - 2.5, yc), (z + 2.5, yc), (z + 2.5, yc + 14.0), (z - 2.5, yc + 14.0)], 11.0, 14.0,
                               STEEL_BLACK)], "z", -35.0, (12.0, yc, z))
-    out.append(lathe(20.0, yc + 10.0, [(z - 5.0, 4.5), (z + 5.0, 4.5)], ar15_mesh.N_SMALL, POLY))   # つまみ
+    out.append(lathe(20.0, yc + 10.0, [(z - 7.5, 3.5), (z - 6.0, 4.5), (z + 6.0, 4.5), (z + 7.5, 3.5)], ar15_mesh.N_SMALL,
+                     POLY))   # つまみ
     return out
 
 
@@ -200,10 +259,16 @@ def front_sight():
     o = O.FRONT_SIGHT["outer"]
     out = [extrude_x_beveled(p, -11.0, 11.0, 4.5, STEEL_BLACK, steps=2) for p in _clip(o, -400.0, 0.0, 0.0, 196.0)]
     zc, yc = FRONT_POST_Z, 208.0
-    out.append(lathe(0.0, yc, [(zc - 3.5, 12.0), (zc + 3.5, 12.0)], 16, STEEL_BLACK, cap0=False, cap1=False))   # リング外側
-    out.append(lathe(0.0, yc, [(zc + 3.5, 8.6), (zc - 3.5, 8.6)], 16, STEEL_BLACK, cap0=False, cap1=False))     # 内側
-    for zz in (zc - 3.5, zc + 3.5):                                     # リングの前後の面（輪）
-        out.append(_annulus_z(0.0, yc, zz, 8.6, 12.0, STEEL_BLACK))
+    hl = FRONT_HOOD_HALF
+    hz = FRONT_POST_Z + FRONT_HOOD_BACK
+    k = (12.0 ** 2 - 9.2 ** 2) / hl ** 2                 # 外側は前後の端で半径 9.2 まで丸く細る（写真の側面で丸く見える）
+    out.append(lathe(0.0, yc, [(hz + d, math.sqrt(12.0 ** 2 - k * d * d)) for d in (-hl, -hl * 0.66, -hl * 0.33, 0.0,
+                                                                                   hl * 0.33, hl * 0.66, hl)],
+                     16, STEEL_BLACK, cap0=False, cap1=False))
+    out.append(lathe(0.0, yc, [(hz + hl, 8.6), (hz - hl, 8.6)], 16, STEEL_BLACK, cap0=False, cap1=False))     # 内側
+    for zz in (hz - hl, hz + hl):                                     # リングの前後の面（輪）
+        out.append(_annulus_z(0.0, yc, zz, 8.6, 9.2, STEEL_BLACK))
+    out.append(box(-6.0, 195.0, hz - hl + 0.5, 6.0, 200.0, hz + hl - 0.5, STEEL_BLACK))   # フードの下の台（塔の上面とつなぐ）
     out.append(sights.post(POST_W, 194.0, SIGHT_Y, zc, STEEL_BLACK))                     # ポスト（誇張）
     out.append(x_cyl(zc + 2.0, 181.0, 8.0, 10.5, 14.0, STEEL_BLACK, n=16))               # ドラム（左側面）
     return out
@@ -227,9 +292,9 @@ def barrel():
     """銃身（ハンドガードの中は見えない）と銃口側（写真の太さの分布。3 つの突起のある先端）。"""
     prof = sorted(O.MUZZLE_R)
     out = [lathe(0, BORE_Y, [(BOLT_FACE_Z - 0.5 - 225.0 + 30.0, 8.0), (BOLT_FACE_Z, 8.0)], ar15_mesh.N_MID, M.STEEL)]
-    out.append(lathe(0, BORE_Y, [(prof[0][0], 4.5)] + prof + [(prof[-1][0], 4.5)], ar15_mesh.N_MID, STEEL_BLACK,
+    out.append(lathe(0, MUZZLE_Y, [(prof[0][0], 4.5)] + prof + [(prof[-1][0], 4.5)], ar15_mesh.N_MID, STEEL_BLACK,
                      cap0=False, cap1=False))
-    out.append(lathe(0, BORE_Y, [(MUZZLE_Z - 0.2, 4.5), (MUZZLE_Z + 20.0, 4.5)], ar15_mesh.N_SMALL, M.BORE, cap0=False))
+    out.append(lathe(0, MUZZLE_Y, [(MUZZLE_Z - 0.2, 4.5), (MUZZLE_Z + 20.0, 4.5)], ar15_mesh.N_SMALL, M.BORE, cap0=False))
     return out
 
 
@@ -251,8 +316,25 @@ def handguard():
 
 
 # ---------------------------------------------------------------- 下部（樹脂のハウジング）
+# トリガーハウジングの側面の成形の凹凸（作者提供の写真を 3 倍に拡大して読んだ。Z, Y）: セレクターの周りの後ろが丸い
+# 盛り上がった板、その前上の三角、後ろの四角い台。どれも両側面に 0.8mm 盛り上げる
+HOUSING_PANEL = ([(14.0 + 21.0 * math.cos(math.radians(a)), 117.0 + 21.0 * math.sin(math.radians(a)))
+                  for a in range(-65, 66, 13)] + [(8.6, 135.9), (-45.8, 101.1)])
+HOUSING_TRIANGLE = [(-6.4, 130.8), (-38.3, 130.8), (-38.3, 116.1)]
+HOUSING_PAD = [(48.0, 112.5), (81.5, 112.5), (81.5, 135.5), (48.0, 135.5)]
+PANEL_T = 0.8
+CLAW_BUMPS = [(-36.6, -17.5)]     # 受け部の上のスコープの爪を掛ける突起（写真で照門の前に 1 つ見える。前後 z）
+
+
 def lower_housing():
+    from shapely.geometry import Polygon
     out = [extrude_x_beveled(O.LOWER_HOUSING["outer"], -HALF_HOUSING, HALF_HOUSING, 6.0, POLY, steps=3)]
+    for poly, r in ((HOUSING_PANEL, 3.0), (HOUSING_TRIANGLE, 2.5), (HOUSING_PAD, 3.0)):
+        g = Polygon(poly).buffer(-r).buffer(r, quad_segs=3)
+        pts = list(g.exterior.coords)[:-1]
+        for s_ in (1, -1):
+            xa, xb = sorted((s_ * (HALF_HOUSING - 0.4), s_ * (HALF_HOUSING + PANEL_T)))
+            out.append(extrude_x_beveled(pts, xa, xb, 0.4, POLY, steps=1))
     # 押しピン（写真の丸）: 後ろ 1 本・前（弾倉口の後ろ）2 本、両側面
     out += selector_marks()
     for z, y, r in ((92.8, 127.4, 4.0), (-58.0, 116.0, 3.5), (-58.0, 98.0, 3.0)):
@@ -276,7 +358,7 @@ def selector_marks():
     out = []
     for z, y, mat in SELECTOR_MARKS:
         for s in (1, -1):
-            xa, xb = sorted((s * (HALF_HOUSING - 0.1), s * (HALF_HOUSING + 0.15)))
+            xa, xb = sorted((s * (HALF_HOUSING + PANEL_T - 0.1), s * (HALF_HOUSING + PANEL_T + 0.15)))   # 盛り上がった板の上
             out.append(box(xa, y - 2.6, z - 2.2, xb, y + 2.6, z + 2.2, mat))
     return out
 
@@ -347,6 +429,7 @@ def bolt():
 
 
 # ---------------------------------------------------------------- 弾倉
+MAG_WELL_FRONT = -101.5  # 弾倉口の前の縁（写真）
 MAG_TOP_Y = 134.0       # 弾倉の上端（差すと受け部の下＝弾倉口の中に隠れる）
 MAG_SHELL = 10.0        # 上部の中空の深さ
 MAG_WALL = 1.0
@@ -362,7 +445,7 @@ def _mag_body():
     g = Polygon(O.MAGAZINE["outer"])
     top = max(p[1] for p in O.MAGAZINE["outer"])
     zs = [p[0] for p in O.MAGAZINE["outer"] if p[1] >= top - 1.0]
-    zf, zr = min(zs), max(zs)
+    zf, zr = max(min(zs), MAG_WELL_FRONT), max(zs)     # 上部は弾倉口の前の縁より前へ出さない（3mm 出ていた）
     return unary_union([g, sbox(zf, top - 2.0, zr, MAG_TOP_Y)]), (zf, zr)
 
 
@@ -372,6 +455,7 @@ def magazine():
     from shapely.geometry import box as sbox
     body, (zf, zr) = _mag_body()
     solid = body.intersection(sbox(-400.0, -200.0, 0.0, MAG_TOP_Y - MAG_SHELL + 0.5))
+    solid = solid.buffer(-3.0, quad_segs=3).buffer(3.0, quad_segs=3).simplify(0.2)   # 底板の角は丸い（写真）
     out = [extrude_x_beveled(list(solid.exterior.coords)[:-1], -HALF_MAG, HALF_MAG, 1.2, M.MP5_MAG, steps=1)]
     y0, w, h = MAG_TOP_Y - MAG_SHELL, MAG_WALL, HALF_MAG
     for s in (1, -1):
@@ -450,7 +534,7 @@ def build():
     add("rail_side", "root", (HALF_HG, b, -200.0), None, [])
 
     add("bolt", "root", (0, b, BOLT_FACE_Z + 40.0), "bolt", bolt())
-    add("charging_handle", "receiver", (8.0, 183.6, CH_SLOT_Z[0] + 6.0), "charging_handle", charging_handle())
+    add("charging_handle", "receiver", (8.0, CH_TUBE_Y, CH_SLOT_Z[0] + 6.0), "charging_handle", charging_handle())
 
     _, (zf, zr) = _mag_body()
     add("magazin", "root", (0, 90.0, (zf + zr) / 2), "magazine", magazine())

@@ -24,6 +24,11 @@ APERTURE_RELIEF = 72.0          # rig.IRON_MIN_RELIEF と同じ（穴照門か�
 BUIS_HEIGHT = 22.0              # 折りたたみ式: レールの天面から照準線まで
 BUIS_REAR_LEN = 26.0            # 後ろのクランプの前後の長さ（照準板はその中央）
 BUIS_FRONT_LEN = 22.0
+# 折りたたみ式の照準板の輪・耳の太さ（作者の指摘「P90 の照準器が太い」。輪を穴の 2 倍の太さにし、耳 3mm・板 4mm に
+# していたので、穴を大きくした分だけ枠も太り、後ろ・斜めから見ると受け部より幅広い塊になっていた。実物の MBUS の
+# 照準板・耳は 2mm 前後）。穴の大きさ（HOLE_ANGLE。ADS の見え方）は変えない
+BUIS_RING = 2.5
+BUIS_EAR = 2.0
 
 
 def eye_z(trigger_z, rear_z):
@@ -50,19 +55,19 @@ def plate_z(shape, z0, z1, mat):
             for q in pieces if q.area > 0.2]
 
 
-def aperture_plate(sy, z0, z1, hole_d, base_y, mat, half_w=None, ears=True):
-    """穴照門の板: 照準線 sy を中心に直径 hole_d の穴、外側は輪（穴の 2 倍）、下は base_y まで。
-    ears=True なら左右に守りの耳（輪より上まで）。"""
+def aperture_plate(sy, z0, z1, hole_d, base_y, mat, half_w=None, ears=True, ring=None, ear_t=3.0):
+    """穴照門の板: 照準線 sy を中心に直径 hole_d の穴、外側は輪（既定は穴の 2 倍。ring を渡すとその太さ）、下は base_y まで。
+    ears=True なら左右に守りの耳（輪より上まで。厚さ ear_t）。"""
     r_in = hole_d / 2
-    r_out = r_in + max(3.0, r_in)
+    r_out = r_in + (max(3.0, r_in) if ring is None else ring)
     q = 3 if r_in < 4.0 else 4                     # 円の分割（小さい穴は 12 角形で十分。面の数を抑える）
     w = r_out if half_w is None else half_w
     g = [Point(0, sy).buffer(r_out, quad_segs=q), sbox(-w, base_y, w, sy)]
     if ears:
         for s in (1, -1):
-            xa, xb = sorted((s * (r_out - 1.0), s * (r_out + 3.0)))
+            xa, xb = sorted((s * (r_out - 1.0), s * (r_out + ear_t)))
             g.append(sbox(xa, base_y, xb, sy + r_out + 1.5))
-        g.append(sbox(-(r_out + 3.0), base_y, r_out + 3.0, base_y + 4.0))
+        g.append(sbox(-(r_out + ear_t), base_y, r_out + ear_t, base_y + 4.0))
     shape = unary_union(g).difference(Point(0, sy).buffer(r_in, quad_segs=q))
     return plate_z(shape.simplify(0.05), z0, z1, mat)
 
@@ -79,24 +84,26 @@ def buis_rear(rail_top, sy, zc, hole_d, mat=M.STEEL_DARK):
     h = BUIS_REAR_LEN / 2
     # クランプ（レールの頭の幅 24mm）。下面はレールへ 1.5mm 埋める（台の高さが前後で違っても浮かない）
     out = [box(-12, rail_top - 1.5, zc - h, 12, rail_top + 6, zc + h, mat),
-           box(-8, rail_top + 6, zc - h + 4, 8, rail_top + 10, zc + h - 4, mat)]   # 台（折りたたみの蝶番）
-    out += aperture_plate(sy, zc - 2.0, zc + 2.0, hole_d, rail_top + 9.0, mat)
-    out.append(box(-17, rail_top + 5, zc - 4, -12, rail_top + 11, zc + 4, mat))   # 風偏つまみ（右）
+           box(-6, rail_top + 6, zc - h + 5, 6, rail_top + 10, zc + h - 5, mat)]   # 台（折りたたみの蝶番）
+    # 照準板は輪・耳を細く（BUIS_RING・BUIS_EAR）。穴の大きさ（ADS の見え方）は変えない
+    out += aperture_plate(sy, zc - 1.5, zc + 1.5, hole_d, rail_top + 9.0, mat, ring=BUIS_RING, ear_t=BUIS_EAR)
+    out.append(box(-15, rail_top + 6, zc - 3, -12, rail_top + 10, zc + 3, mat))   # 風偏つまみ（右）
     return out
 
 
 def buis_front(rail_top, sy, zc, post_w, mat=M.STEEL_DARK):
     """折りたたみ式の前のサイト（起こした状態）。クランプ・塔・左右の守りの耳・ポスト（先端＝照準線）。"""
     h = BUIS_FRONT_LEN / 2
-    gap = post_w / 2 + 3.0                         # ポストと耳の間（覗いたとき耳がポストに重ならない）
+    gap = post_w / 2 + 2.5                         # ポストと耳の間（覗いたとき耳がポストに重ならない）
     top = sy - post_w * 1.5                        # 塔の上面（ここからポストが立つ）
+    e = BUIS_EAR
     out = [box(-12, rail_top - 1.5, zc - h, 12, rail_top + 6, zc + h, mat)]   # クランプ（レールへ 1.5mm 埋める）
-    parts = [sbox(-(gap + 3.0), rail_top + 5.0, gap + 3.0, top)]
+    parts = [sbox(-(gap + e), rail_top + 5.0, gap + e, top)]
     for s in (1, -1):
-        xa, xb = sorted((s * gap, s * (gap + 3.0)))
+        xa, xb = sorted((s * gap, s * (gap + e)))
         parts.append(sbox(xa, top - 1.0, xb, sy + 3.0))
     shape = unary_union(parts)
-    out += plate_z(shape, zc - 3.0, zc + 3.0, mat)
+    out += plate_z(shape, zc - 2.0, zc + 2.0, mat)
     out.append(post(post_w, top - 1.0, sy, zc, mat))
     return out
 

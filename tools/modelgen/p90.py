@@ -21,7 +21,7 @@ import materials as M
 import sights
 import p90_outline as O
 from core import box, extrude_x, extrude_x_beveled, extrude_x_rounded, lathe
-from m249 import x_cyl, y_cyl
+from m249 import ring_z, slotted_flash_hider, x_cyl, y_cyl
 from rig import add_locators
 
 K = 1.0 / ar15_parts.MM_PER_PX
@@ -31,40 +31,64 @@ STEEL_BLACK = M.P90_STEEL
 
 BORE_Y = 102.3
 MUZZLE_Z = -166.3
+FH_R = 10.95                # 消炎器の前の部分の半径（トレース）
+FH_SLOTS = (-161.0, -145.0)   # 溝の前後（写真）
+FH_SLOT_REAR = -143.0       # 溝のある前の部分の後ろの端（ここから後ろはトレースの太さの回転体）
 BOLT_FACE_Z = 97.7          # 薬室の後端（銃身 264mm を銃口から逆算。ブルパップなのでトリガーより後ろ）
 
-# 左右の半幅（全幅 55mm が上限。斜め前の写真で、ストックがいちばん幅広く、前のハンドストップが細い）
-HALF_STOCK = 27.5
-HALF_UPPER = 26.0           # 本体の上半分（弾倉の下）
+# 左右の半幅（全幅 55mm が上限）。作者提供の TR 型の図（正面・後面・上面。上面図のレールが 15px＝規格の 21mm で縮尺を
+# 確かめた）で読み直した: いちばん幅広いのは弾倉の後ろの肩（弾倉止めのまわり）の 55mm で、ストックは 48mm、
+# 受け部は前の部分 41mm・弾倉をまたぐ後ろの脚 48mm で、どちらも上のレールの下で 29mm まで細くなる
+HALF_STOCK = 24.0
+HALF_UPPER = 24.0           # 本体の上半分（弾倉の下）
+HALF_SHOULDER = 27.5        # 弾倉の後ろの肩（上面図のふくらみ Z 150〜190）
+SHOULDER_Z = (150.0, 190.0)
 HALF_GRIP = 24.0            # 親指の穴のまわり
 HALF_TRIGGER = 19.0         # トリガーの穴のまわり
 HALF_FRONT = 17.5           # 前のハンドストップ
-HALF_UNDER_HOUSING = 23.0   # 受け部の下に隠れる所（受け部の側面と同じ面にしない）
+HALF_UNDER_HOUSING = 20.0   # 受け部の下に隠れる所（受け部の側面と同じ面にしない）
 BODY_BEVEL = 7.0            # 本体の角の丸み（P90 は角の大きく丸い樹脂の塊。トリガーの穴の下の壁 15mm で 7 が上限）
-HALF_HOUSING = 26.0
+HOUSING_FRONT = 20.5        # 受け部の前の部分 41mm（弾倉 44mm より細く、弾倉の側面が少しはみ出す。正面図・上面図）
+HOUSING_ARCH = 24.0         # 弾倉をまたぐ後ろの脚（上面図で前の部分から段になって太る）
+HOUSING_ARCH_Z = -3.0       # 段の位置（上面図）
+HOUSING_TOP = 14.5          # レールの下（正面図・後面図で 29mm。レールは 21mm）
+HALF_HOUSING = HOUSING_FRONT   # 前の部分の側面に付く部品（コッキングハンドルのガイド・玉）の基準
 HALF_MAG = 22.0             # 弾倉 44mm（5.7×28mm 弾 40.5mm を横向きに収める）
 
 # 弾倉（写真）: 後ろの端は本体の段の前、前の端は受け部の前のブロックの手前
-MAG_Z = (-82.0, 181.0)
-MAG_Y = (115.8, 140.0)           # 下は受け部の溝の底（116）にわずかに埋める（1mm 浮いて下に線が見えていた）
+MAG_Z = (-83.8, 181.0)
+MAG_Y = (119.0, 140.0)           # 下と受け部の溝の底（116）の間は 3mm 抜けて向こうが見える（写真。前は「線に見える」として埋めていた）
 MAG_WALL = 2.5              # 上下の板・前後の端の厚さ
 ROTOR_Z, ROTOR_R, ROTOR_H = 160.0, 19.0, 6.5   # 給弾ローター（弾倉の後ろの下。本体の後ろの下のふくらみの中に収まる）
 MAG_RIBS = [160.0, 135.0, 110.0, 85.0, 60.0, 35.0, 10.0, -15.0, -40.0, -62.0]   # 側面の縦の補強（写真の縦の筋）
-MAG_CHANNEL = (60.0, -86.5, 116.0, 141.5)   # 受け部の中の弾倉の通り道（前後 z, 上下 y）
+MAG_CHANNEL = (60.0, -87.3, 116.0, 141.5)   # 前の端と弾倉の前の端の間が 3.5mm 抜ける（写真 Z -87.3〜-83.8）   # 受け部の中の弾倉の通り道（前後 z, 上下 y）
 ARM_Z = 17.0                # 受け部の後ろの腕（弾倉の横を覆う）の前の縁
 
-# TR 型の上面（写真「FN P90 PDW.jpg」の溝の間隔 4.45px/mm で読んだ）
-TR_TOP_Y = 175.0            # 受け部の上面（レールの台）
-TR_FRONT = [(-100.0, 175.0), (-121.5, 145.0)]   # 前の斜めの面
-TR_RAIL_Z = (-93.0, 42.0)   # 上面レールの前後
+# TR 型の上面（写真「FN P90 PDW.jpg」（CC0）に mm 目盛りを重ねて読んだ。縮尺はレールの溝の間隔 10mm、
+# 原点は銃口の先端。作者の指摘「サイト周りが太っちょすぎる」で読み直した: 上面が 5mm 高く、後ろの端が
+# 20mm 後ろへはみ出し、レールが 17mm 後ろにずれていた）
+TR_TOP_Y = 170.0            # 受け部の上面（レールの台。レールの頭の上面は 175）
+TR_FRONT = [(-109.6, 170.0), (-124.6, 150.4), (-130.9, 127.9)]   # 前の斜めの面
+TR_REAR = [(46.6, 118.0), (42.9, 135.4), (35.4, 150.4), (27.9, 161.6), (24.1, 170.0)]   # 後ろの脚の後ろの縁（弾倉をまたぐ）
+TR_PANEL = [(-74.0, 154.5), (-18.0, 154.5), (-18.0, 166.0), (-74.0, 166.0)]   # 上の橋の側面の凹んだ枠（写真の暗い長方形）
+TR_PANEL_DEPTH = 2.5
+TR_TAPER = (142.0, 168.0)  # この高さの間で HOUSING_TOP まで細くなる（後面図: 弾倉の上の 47mm からレールの下の 28mm へ）
+
+
+def housing_half(z, y):
+    """受け部の半幅（前後の位置と高さで変わる）。"""
+    lo = _lerp(HOUSING_FRONT, HOUSING_ARCH, (z - HOUSING_ARCH_Z + 6.0) / 6.0)
+    y0, y1 = TR_TAPER
+    return _lerp(lo, HOUSING_TOP, (y - y0) / (y1 - y0))
+TR_RAIL_Z = (-108.0, 24.0)  # 上面レールの前後
 SIDE_RAIL_Z = (-91.0, -67.0)   # 左右の短いレール（前の端）
-SIDE_RAIL_Y = 165.0
+SIDE_RAIL_Y = 157.5           # 頭（幅 24mm）が上面（TR_TOP_Y）からはみ出さない高さ
 
 # トリガーの穴の後ろ（写真でトリガーの側面が見える所）と、その下のセレクター（回転する円盤）
 TRIGGER_WELL = [(17.7, 82.2), (-8.0, 82.2), (-8.0, 52.5), (9.5, 52.5), (13.6, 54.4), (17.7, 62.6), (18.8, 73.5)]
 SELECTOR_C = (-1.0, 49.0)   # 円盤の中心 (Z, Y)
-SELECTOR_R = 15.0
-SELECTOR_SLOT = [(-3.0, 47.5), (-17.5, 47.5), (-17.5, 53.0), (-3.0, 53.0)]   # 前のつまみの所だけ（円盤は本体に埋まる）
+SELECTOR_R = 10.5           # 前の刻みのある縁が Z -11.5（写真。15 では 7mm 前に出ていた）
+SELECTOR_SLOT = [(-3.0, 47.5), (-12.0, 47.5), (-12.0, 53.0), (-3.0, 53.0)]   # 前のつまみの所だけ（円盤は本体に埋まる）
 
 MAG_RELEASE = (181.5, 196.0, 117.5, 131.0)    # 弾倉止め（弾倉の後ろの左右のレバー。前後 z, 上下 y）
 ROTOR_BULGE = [(178.0, 118.0), (150.0, 118.0), (150.0, 110.0), (156.0, 104.0), (172.0, 103.0), (178.0, 108.0)]
@@ -81,10 +105,10 @@ def _lerp(a, b, t):
 
 def body_half(z, y):
     """本体の半幅。上半分（弾倉の下）と下半分（グリップ・穴のまわり）を高さで混ぜる。"""
-    if z >= 200.0:
-        up = HALF_STOCK
-    elif z >= 165.0:
-        up = _lerp(HALF_UPPER, HALF_STOCK, (z - 165.0) / 35.0)
+    s0, s1 = SHOULDER_Z
+    if z >= s0 - 10.0:
+        up = _lerp(HALF_UPPER, HALF_SHOULDER, (z - s0 + 10.0) / 10.0) if z < s1 else \
+            _lerp(HALF_SHOULDER, HALF_STOCK, (z - s1) / 10.0)
     elif z >= 60.0:
         up = HALF_UPPER
     else:
@@ -133,6 +157,10 @@ def body():
                              steps=3)]
     hw = body_half(165.0, 112.0) + 1.2
     out.append(extrude_x_beveled(ROTOR_BULGE, -hw, hw, 2.5, POLY, steps=2))
+    # 後ろの脚より後ろでは、弾倉は本体の上の台に載っていて下に隙間が無い（写真。前だけ 3mm 抜ける）
+    out.append(box(-(HALF_MAG - 2.0), MAG_CHANNEL[2] - 1.0, ARM_Z + 25.0, HALF_MAG - 2.0, MAG_Y[0] + 0.3, MAG_Z[1] - 38.0,
+                   POLY))
+    out.append(box(-(HALF_MAG - 2.0), MAG_CHANNEL[2] - 1.0, MAG_Z[0], HALF_MAG - 2.0, MAG_Y[0] + 0.3, -64.5, POLY))   # 前の 20mm も
     return out
 
 
@@ -146,12 +174,11 @@ def housing_shape():
     """受け部（照準器の枠・銃身の覆い）の側面形。標準型のトレースの上を TR 型の上面で置き換える。"""
     from shapely.geometry import Polygon
     g = _poly(O.HOUSING)
-    (fz0, fy0), (fz1, fy1) = TR_FRONT
-    clip = Polygon([(70.0, 0.0), (70.0, TR_TOP_Y), (fz0, fy0), (fz1, fy1), (-140.0, fy1), (-140.0, 0.0)])
+    clip = Polygon([(70.0, 0.0), (70.0, 116.0)] + TR_REAR + TR_FRONT + [(-140.0, TR_FRONT[-1][1]), (-140.0, 0.0)])
     g = g.intersection(clip)
     # TR 型は上面の下が詰まっている（標準型は後ろに覗き窓）。弾倉の上のすき間の天井より上だけ埋める
-    fill = Polygon([(46.0, 158.0), (46.0, TR_TOP_Y), (fz0, fy0), (-110.0, 161.5), (-110.0, 158.0)])
-    return g.union(fill)
+    fill = Polygon([(29.0, 158.0)] + TR_REAR[-2:] + [(-140.0, TR_TOP_Y), (-140.0, 158.0)]).intersection(clip)
+    return g.union(fill).difference(Polygon(TR_PANEL))
 
 
 def housing():
@@ -163,12 +190,15 @@ def housing():
     out = []
     for q in _parts_of(main):
         out.append(extrude_x_rounded(_ring(q), [list(h.coords)[:-1] for h in q.interiors],
-                                     lambda z, y: HALF_HOUSING, 1.5, HOUSING_MAT, steps=2))
+                                     housing_half, 1.5, HOUSING_MAT, steps=2))
     arm = g.intersection(sbox(ARM_Z, y0, z0, y1))
     for q in _parts_of(arm):
         for s in (1, -1):
-            xa, xb = sorted((s * (HALF_MAG + 0.3), s * HALF_HOUSING))
+            xa, xb = sorted((s * (HALF_MAG + 0.3), s * HOUSING_ARCH))
             out.append(extrude_x(_ring(q), xa, xb, HOUSING_MAT))
+    # 上の橋の側面の凹み（側面形に抜いた窓の奥の板）
+    h = housing_half(0.0, max(y for _, y in TR_PANEL)) - TR_PANEL_DEPTH
+    out.append(extrude_x([(z, y) for z, y in TR_PANEL], -h, h, HOUSING_MAT))
     return out
 
 
@@ -180,7 +210,7 @@ def rails():
     out = [box(-nw / 2, y - 0.5, z0, nw / 2, y + nh, z1, M.RAIL),
            box(-hw / 2, y + nh, z0, hw / 2, y + nh + hh, z1, M.RAIL)]
     s0, s1 = SIDE_RAIL_Z
-    r0 = HALF_HOUSING - 0.5
+    r0 = housing_half(0.0, SIDE_RAIL_Y + hw / 2) - 0.5    # 受け部が上へ細くなるので、レールの上の端の高さで面に合わせる
     for s in (1, -1):
         xa, xb = sorted((s * r0, s * (r0 + nh + 0.5)))
         out.append(box(xa, SIDE_RAIL_Y - nw / 2, s0, xb, SIDE_RAIL_Y + nw / 2, s1, M.RAIL_SIDE))
@@ -204,10 +234,21 @@ def _z_rod(x, y, r, z0, z1, mat, n=10):
 def barrel():
     """消炎器（トレースの太さの分布）と、受け部の中に隠れる銃身。"""
     prof = sorted(O.MUZZLE_R)                                  # Z 昇順（銃口側から）
-    prof = [(z, r) for z, r in prof if r < 13.0]
-    out = [lathe(0, BORE_Y, [(MUZZLE_Z, 3.0), (MUZZLE_Z, prof[0][1])] + prof + [(-110.0, prof[-1][1])],
-                 ar15_mesh.N_MID, STEEL_BLACK, cap0=False),
-           lathe(0, BORE_Y, [(MUZZLE_Z - 0.2, 2.9), (MUZZLE_Z + 20.0, 2.9)], ar15_mesh.N_SMALL, M.BORE, cap0=False)]
+    prof = [(z, r) for z, r in prof if r < 13.0 and z >= FH_SLOT_REAR]
+    out = [lathe(0, BORE_Y, [(FH_SLOT_REAR, 7.0), (FH_SLOT_REAR, prof[0][1])] + prof + [(-110.0, prof[-1][1])],
+                 ar15_mesh.N_MID, STEEL_BLACK)]
+    # 前の部分は 3 本の溝（上・左右のやや下）。左右の溝は向かい合って向こうが見える（写真: 横から Y 99〜102 の窓、上は溝で細る）
+    # 前の端は斜めに切れた面（回転体では作れない）の代わりに円すいで細らせる。溝の区間のくびれ（半径 9.3）は省く
+    z0, z1 = FH_SLOTS
+    out += slotted_flash_hider(BORE_Y, z0 - 1.0, FH_SLOT_REAR, FH_R, 7.0, (z0, z1), (90.0, 193.0, 347.0), 26.0,
+                               STEEL_BLACK, bore=False)
+    out.append(lathe(0, BORE_Y, [(FH_SLOT_REAR - 0.5, 6.8), (FH_SLOT_REAR + 2.0, 6.8)], ar15_mesh.N_SMALL, M.BORE))   # 銃身の先（奥の暗い穴）
+    fz = z0 - 1.0
+    out += [lathe(0, BORE_Y, [(MUZZLE_Z, 8.2), (MUZZLE_Z + 2.0, 9.8), (MUZZLE_Z + 4.0, FH_R), (fz, FH_R)],
+                  ar15_mesh.N_MID, STEEL_BLACK, cap0=False, cap1=False),
+            lathe(0, BORE_Y, [(fz, 7.0), (MUZZLE_Z, 7.0)], ar15_mesh.N_MID, STEEL_BLACK, cap0=False, cap1=False),
+            ring_z(BORE_Y, MUZZLE_Z - 0.01, MUZZLE_Z + 0.3, 7.0, 8.2, STEEL_BLACK),
+            ]
     return out
 
 
@@ -229,7 +270,7 @@ def selector():
     """セレクター（トリガーの下の回転する円盤。ボーン selector は Y 軸まわりに回す）と前のつまみ。"""
     z, y = SELECTOR_C
     return [y_cyl(0.0, z, SELECTOR_R, 47.0, 52.5, STEEL_BLACK, n=20),
-            box(-5.0, 47.5, z - SELECTOR_R - 3.0, 5.0, 52.0, z - SELECTOR_R + 2.0, STEEL_BLACK)]
+            box(-5.0, 47.5, z - SELECTOR_R - 0.5, 5.0, 52.0, z - SELECTOR_R + 4.0, STEEL_BLACK)]
 
 
 def mag_release():

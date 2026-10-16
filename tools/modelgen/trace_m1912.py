@@ -38,7 +38,8 @@ REGIONS = {
 
 
 def main(photo):
-    sil = Silhouette(photo, K, X0, Y0, flip=False, thr=165, blur=1.0)
+    # 閾値 120: 紙に落ちた影（明るさ 150〜215）を拾わない。165 では下の縁が影の分 2〜3mm 下にずれていた
+    sil = Silhouette(photo, K, X0, Y0, flip=False, thr=120, blur=1.0)
     out = ['"""Winchester Model 12 トレンチガンの側面形（trace_m1912.py が写真から書き出した座標。手で編集しない）。'
            '単位 mm、(Z, Y)。"""', ""]
     for name, (region, minus) in REGIONS.items():

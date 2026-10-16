@@ -2,6 +2,9 @@
 
   python3 score.py <方式> [--photo 写真] [--pose bone:rx:ry:rz;...] [--img-dir 出力先] [--json 結果.json]
   python3 score.py --all                     # generated/ の全メッシュ版（写真なし）
+  python3 score.py --all --photos photos.local.json --img-dir <出力先>
+                                             # 写真のある銃は写真とも比べる（photos.local.json は {方式: 写真の絶対パス}。
+                                             # ローカル固有のパスなので git に入れない＝.gitignore 済み）
 
 見るもの（作者のこれまでの指摘を機械で拾える形にしたもの。.claude/skills/model-gen/SKILL.md のチェックリスト）:
 - 写真との輪郭のずれ（--photo を渡したとき。trace_<銃>.py と同じ縮尺・原点で写真の影絵とモデルの真横の影絵を重ね、
@@ -13,8 +16,15 @@
 - 面の数（目安 7000 以下）… #14
 - ボーン（コードが参照する名前・アニメーションで動かす部品が揃っているか）
 
-数値は「要確認の候補」を出すもので、合否ではない。写真の付属品（スコープ・手・スリング）や、わざと空けた隙間
-（ボルトとレシーバーの間など）も拾うので、最後は描画を見て判断する。写真はリポジトリに入れない。
+- 写真とモデルの面の食い違い（--photo。写真だけ・モデルだけにある、面積 REGION_MIN_AREA 以上のまとまり。輪郭の
+  ずれは上端・下端しか見ないので、部品の間の隙間（写真では埋まっている）や、トレースから漏れた角はこちらで拾う）
+
+写真との食い違いは、score_expected.json に理由を書いた物（照準器の誇張・写真の背景の写り込み等）だけを「説明済み」に
+し、それ以外は「⚠ 未説明」として終了コード 1 を返す。**未説明が 0 件になるまで、直すか理由を書く**（M1912 の放熱
+カバー +8mm・MP5 の後端キャップ -17.5mm を「誇張の分」と読み流し、作者に指摘された）。写真の中の銃以外の物
+（背景の人物・台）は "ignore" の枠で写真の影絵から除く。
+隙間・折れ目は「要確認の候補」で、わざと空けた隙間（ボルトとレシーバーの間など）も拾うので、描画を見て判断する。
+写真はリポジトリに入れない。
 """
 import argparse
 import importlib
@@ -40,6 +50,9 @@ EDGE_TOL = 2.0                      # 輪郭のずれとして出す差 [mm]
 PX_PER_MM = 2.0                     # 写真との比較の解像度
 SLIT_PX_PER_MM = 4.0                # 隙間を探す影絵の解像度（0.5mm の隙間が 2 画素）
 ROI_MM = 25.0                       # 写真の影絵はモデルの外形からこの距離までだけ見る（別の銃・文字・台を拾わない）
+REGION_MIN_AREA = 25.0              # 写真とモデルの面の食い違いとして出す面積 [mm²]
+REGION_MIN_SIZE = 2.0               # 同じく、前後・上下の幅の下限 [mm]
+EXPECTED = HERE / "score_expected.json"   # 写真との食い違いのうち理由の分かっている物（銃ごと）
 
 # 写真のトレースの設定（trace_<銃>.py の Silhouette の引数と同じにする）: (モジュール, 左右反転, 閾値, ぼかし)
 PHOTO = {
@@ -48,7 +61,7 @@ PHOTO = {
     "hk416_mesh": ("trace_hk416", False, 128, 0.5),       # --photo は trace_hk416.py が書き出した影絵
     "m24_mesh": ("trace_m24", False, 200, 0.6),
     "p90_mesh": ("trace_p90", False, 200, 0.6),
-    "m1912_mesh": ("trace_m1912", False, 165, 1.0),
+    "m1912_mesh": ("trace_m1912", False, 120, 1.0),
     "awm_mesh": ("trace_awm", True, 205, 0.8),        # 左側面の写真（a4）
     "m79_mesh": ("trace_m79", False, 200, 0.6),
     "m2_mesh": ("trace_m2", False, 128, 0.8),         # trace_m2.py の第 2 引数で書き出した前処理済みの写真
@@ -317,6 +330,14 @@ def slits(bones, pose=None, img_dir=None):
 
 
 # ---------------------------------------------------------------- 写真
+def expected(variant):
+    """score_expected.json の銃の分: {"ignore": [{z, y, why}], "expected": [{kind, z, y?, why}]}。"""
+    if not EXPECTED.exists():
+        return {"ignore": [], "expected": []}
+    d = json.load(open(EXPECTED, encoding="utf-8")).get(variant, {})
+    return {"ignore": d.get("ignore", []), "expected": d.get("expected", [])}
+
+
 def silhouettes(variant, bones, photo, pose=None):
     """写真の影絵とモデルの真横の影絵を同じ mm の枠（モデルの外形 + 20mm）に描く。戻り値: (写真, モデル, (Z の最大, Y の最大))
     影絵は左右どちらから見ても鏡像で同じなので、左側面の写真（反転してトレースしたもの）も右側面の投影と比べる。"""
@@ -336,7 +357,84 @@ def silhouettes(variant, bones, photo, pose=None):
         for h in g.interiors:
             dr.polygon(tf(h), fill=0)
     roi = dilate(model_m, int(ROI_MM * P))
-    return (np.asarray(img) > 127) & roi, model_m, (-x0, y0)
+    photo_m = (np.asarray(img) > 127) & roi
+    for box_ in expected(variant)["ignore"]:            # 写真の中の銃以外の物（背景の人物など）
+        (za, zb), (ya, yb) = sorted(box_["z"]), sorted(box_["y"])
+        c0, c1 = int((-zb - x0) * P), int((-za - x0) * P) + 1
+        r0, r1 = int((y0 - yb) * P), int((y0 - ya) * P) + 1
+        photo_m[max(r0, 0):max(r1, 0), max(c0, 0):max(c1, 0)] = False
+    return photo_m, model_m, (-x0, y0)
+
+
+def regions(photo_m, model_m, origin):
+    """写真だけ・モデルだけにある面のまとまり（4 近傍）。輪郭の 1 画素のぶれは 2×2 の開きで消してから数える。"""
+    from collections import deque
+    z0, y0 = origin
+    P = PX_PER_MM
+    out = []
+    for name, a in (("写真だけ（面）", photo_m & ~model_m), ("モデルだけ（面）", model_m & ~photo_m)):
+        a = open2(a)
+        seen = np.zeros_like(a)
+        H, W = a.shape
+        for r0, c0 in zip(*np.nonzero(a)):
+            if seen[r0, c0]:
+                continue
+            q = deque([(r0, c0)]); seen[r0, c0] = True
+            rs, cs = [], []
+            while q:
+                r, c = q.popleft(); rs.append(r); cs.append(c)
+                for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    rr, cc = r + dr, c + dc
+                    if 0 <= rr < H and 0 <= cc < W and a[rr, cc] and not seen[rr, cc]:
+                        seen[rr, cc] = True; q.append((rr, cc))
+            area = len(rs) / P / P
+            zl, zh = z0 - max(cs) / P, z0 - min(cs) / P
+            yl, yh = y0 - max(rs) / P, y0 - min(rs) / P
+            if area >= REGION_MIN_AREA and zh - zl >= REGION_MIN_SIZE and yh - yl >= REGION_MIN_SIZE:
+                out.append({"what": name, "z_mm": [round(zl, 1), round(zh, 1)], "y_mm": [round(yl, 1), round(yh, 1)],
+                            "area_mm2": round(area)})
+    return sorted(out, key=lambda r: -r["area_mm2"])
+
+
+def _overlap(a, b):
+    """区間 a のうち b と重なる割合。"""
+    lo, hi = max(min(a), min(b)), min(max(a), max(b))
+    return max(0.0, hi - lo) / max(max(a) - min(a), 1e-6)
+
+
+def _match(kind, it, x):
+    if x["kind"] != kind:
+        return False
+    if kind == "隙間":
+        if "view" in x and x["view"] != it["view"]:
+            return False
+        rg = it["range_mm"]
+        return all(_overlap(rg[k], x[k.lower()]) >= 0.5 for k in rg if k.lower() in x)
+    if _overlap(it["z_mm"], x["z"]) < 0.5:
+        return False
+    return not ("y" in x and "y_mm" in it and _overlap(it["y_mm"], x["y"]) < 0.5)
+
+
+def explain(variant, res):
+    """写真との食い違いと隙間の各項目に、score_expected.json の理由を付ける（範囲の重なりが半分以上の物）。
+    status が "要修正"（直していない不具合）・"要確認"（実物どおりか確かめていない）の物は別に数える。未説明の数を返す。"""
+    exp = expected(variant)["expected"]
+    items = [("隙間", g) for g in res["slits"]]
+    if "photo" in res:
+        p = res["photo"]
+        items += [(e["edge"], e) for e in p["edge_runs"]] + [(c["what"], c) for c in p["columns"]] + \
+            [(g["what"], g) for g in p["regions"]]
+    n = todo = 0
+    for kind, it in items:
+        x = next((x for x in exp if _match(kind, it, x)), None)
+        if x is None:
+            n += 1
+        else:
+            it["why"] = x["why"]
+            if x.get("status") in ("要修正", "要確認"):
+                it["todo"] = x["status"]; todo += 1
+    res["unexplained"], res["todo"] = n, todo
+    return n
 
 
 def outline_diff(photo_m, model_m, origin):
@@ -381,6 +479,73 @@ def outline_diff(photo_m, model_m, origin):
     return {"iou": round(float(inter / max(union, 1)), 3), "edge_runs": runs, "columns": only}
 
 
+def _diff_rgb(photo_m, model_m):
+    img = np.full(photo_m.shape + (3,), 255, np.uint8)
+    img[photo_m & model_m] = (150, 150, 150)
+    img[photo_m & ~model_m] = (40, 170, 60)
+    img[model_m & ~photo_m] = (220, 50, 50)
+    return img
+
+
+def item_sheet(variant, photo, pm, mm, origin, photo_res, path, pad=12.0, scale=4.0, limit=40):
+    """写真との食い違いを 1 件ずつ、写真の該当箇所（左）と差分（右。灰 = 両方、緑 = 写真だけ、赤 = モデルだけ）を並べた
+    切り抜きの一覧にする。仕分け（直す／理由を書く）は、これを見て 1 件ずつ決める。"""
+    from PIL import ImageFont, ImageOps
+    mod, flip, _, _ = PHOTO[variant]
+    m = importlib.import_module(mod)
+    ph = Image.open(photo).convert("RGB")
+    if flip:
+        ph = ImageOps.mirror(ph)
+    z0, y0 = origin
+    P = PX_PER_MM
+    diff = Image.fromarray(_diff_rgb(pm, mm))
+    union = pm | mm
+    items = [(e["edge"], e) for e in photo_res["edge_runs"]] + [(c["what"], c) for c in photo_res["columns"]] + \
+            [(g["what"], g) for g in photo_res["regions"]]
+    jfont = None
+    for f in ("/usr/share/fonts/truetype/fonts-japanese-gothic.ttf", "C:/Windows/Fonts/meiryo.ttc", "C:/Windows/Fonts/msgothic.ttc"):
+        try:
+            jfont = ImageFont.truetype(f, 15)
+            break
+        except OSError:
+            pass
+    items = [(k, it) for k, it in items if "why" not in it or it.get("todo")]   # 説明済みは出さない
+    rows = []
+    for kind, it in items[:limit]:
+        za, zb = it["z_mm"]
+        if "y_mm" in it:
+            ya, yb = it["y_mm"]
+        else:
+            c0, c1 = int((z0 - zb) * P), int((z0 - za) * P) + 1
+            rr = np.nonzero(union[:, max(c0, 0):max(c1, 1)].any(1))[0]
+            if not len(rr):
+                continue
+            top, bot = y0 - rr.min() / P, y0 - rr.max() / P
+            ya, yb = ((top - 15, top + 15) if kind == "上端" else (bot - 15, bot + 15) if kind == "下端" else (bot, top))
+        za, zb, ya, yb = za - pad, zb + pad, ya - pad, yb + pad
+        w, h = int((zb - za) * scale), int((yb - ya) * scale)
+        if w * h > 1400 * 500:                       # 長すぎる区間は縮めて収める
+            f = min(1400 / w, 500 / h); w, h = int(w * f), int(h * f)
+        pbox = (m.X0 - zb * m.K, m.Y0 - yb * m.K, m.X0 - za * m.K, m.Y0 - ya * m.K)
+        dbox = ((z0 - zb) * P, (y0 - yb) * P, (z0 - za) * P, (y0 - ya) * P)
+        a = ph.crop(tuple(int(round(v)) for v in pbox)).resize((w, h), Image.LANCZOS)
+        b = diff.crop(tuple(int(round(v)) for v in dbox)).resize((w, h), Image.NEAREST)
+        row = Image.new("RGB", (2 * w + 10, h + 22), (40, 40, 40))
+        row.paste(a, (0, 22)); row.paste(b, (w + 10, 22))
+        txt = f"{kind} Z {it['z_mm'][0]}〜{it['z_mm'][1]}" + (f" Y {it['y_mm'][0]}〜{it['y_mm'][1]}" if "y_mm" in it else "") \
+            + ("" if "max_mm" not in it else f" {it['max_mm']:+}mm") + _tag(it)
+        ImageDraw.Draw(row).text((4, 2), txt, fill=(255, 220, 0), font=jfont)
+        rows.append(row)
+    if not rows:
+        return
+    W = max(r.width for r in rows); H = sum(r.height + 6 for r in rows)
+    sheet = Image.new("RGB", (W, H), (20, 20, 20))
+    y = 0
+    for r in rows:
+        sheet.paste(r, (0, y)); y += r.height + 6
+    sheet.save(path)
+
+
 def diff_image(photo_m, model_m, path):
     """灰 = 両方、緑 = 写真だけ、赤 = モデルだけ。"""
     img = np.full(photo_m.shape + (3,), 255, np.uint8)
@@ -411,8 +576,12 @@ def score(variant, photo=None, img_dir=None, pose=None):
     if photo:
         pm, mm, org = silhouettes(variant, bones, photo, pose)
         res["photo"] = outline_diff(pm, mm, org)
+        res["photo"]["regions"] = regions(pm, mm, org)
+    explain(variant, res)
+    if photo:
         if img_dir:
             diff_image(pm, mm, Path(img_dir) / f"photo_{variant}.png")
+            item_sheet(variant, photo, pm, mm, org, res["photo"], Path(img_dir) / f"items_{variant}.png")
     return res
 
 
@@ -425,25 +594,37 @@ def report(r):
         L.append(f"中身の無いボーン: {', '.join(r['bones_empty'])}")
     if r["pose"]:
         L.append("姿勢: " + ", ".join(f"{b} {v}" for b, v in r["pose"].items()))
+    tag = _tag
     if "photo" in r:
         p = r["photo"]
         L.append(f"写真との一致率（IoU）: {p['iou']}")
         for e in p["edge_runs"]:
             L.append(f"  {e['edge']} Z {e['z_mm'][0]}〜{e['z_mm'][1]}: モデルが最大 {e['max_mm']:+}mm"
-                     f"（{'上' if e['max_mm'] > 0 else '下'}にずれ）")
+                     f"（{'上' if e['max_mm'] > 0 else '下'}にずれ）{tag(e)}")
         for c in p["columns"]:
-            L.append(f"  {c['what']}: Z {c['z_mm'][0]}〜{c['z_mm'][1]}")
+            L.append(f"  {c['what']}: Z {c['z_mm'][0]}〜{c['z_mm'][1]}{tag(c)}")
+        for g in p["regions"]:
+            L.append(f"  {g['what']}: Z {g['z_mm'][0]}〜{g['z_mm'][1]}、Y {g['y_mm'][0]}〜{g['y_mm'][1]}"
+                     f"（{g['area_mm2']}mm²）{tag(g)}")
     L.append(f"背景が細く抜けている所（幅 {SLIT_MAX}mm 以下・長さ {SLIT_LEN}mm 以上、6 方向の影絵）: {len(r['slits'])} か所")
-    for g in r["slits"][:15]:
+    for g in r["slits"][:30]:
         rg = "、".join(f"{k} {v[0]}〜{v[1]}" for k, v in g["range_mm"].items())
-        L.append(f"  {g['view']}から: 長さ {g['length_mm']}mm・幅 {g['width_mm']}mm（{rg}）")
+        L.append(f"  {g['view']}から: 長さ {g['length_mm']}mm・幅 {g['width_mm']}mm（{rg}）{tag(g)}")
     if r["folds"]:
         L.append(f"長い浅い折れ目（筋に見える。{FOLD_REPORT:.0f}mm 以上のボーン）: "
                  + ", ".join(f"{b} {n}mm" for b, n in sorted(r["folds"].items(), key=lambda x: -x[1])))
     if r["open_edges"]:
         oe = sorted(r["open_edges"].items(), key=lambda x: -x[1][1])
         L.append("開いた辺（参考）: " + ", ".join(f"{b} {n}本/{ln}mm" for b, (n, ln) in oe[:8]))
+    L.append(f"未説明: {r['unexplained']} 件" + ("（直すか、score_expected.json に理由を書く）" if r["unexplained"] else "")
+             + (f"／記録済みの要修正・要確認: {r['todo']} 件" if r["todo"] else ""))
     return "\n".join(L)
+
+
+def _tag(it):
+    if "why" not in it:
+        return "  [未説明]"
+    return f"  [{it['todo'] + '・記録済み' if it.get('todo') else '説明済み'}] {it['why']}"
 
 
 def main():
@@ -451,6 +632,7 @@ def main():
     ap.add_argument("variant", nargs="?")
     ap.add_argument("--all", action="store_true", help="generated/ の全メッシュ版（写真なし）")
     ap.add_argument("--photo", help="trace_<銃>.py でトレースに使った写真")
+    ap.add_argument("--photos", help="--all のとき、方式ごとの写真のパス（JSON）")
     ap.add_argument("--pose", default="", help="ボーンの回転 'bone:rx:ry:rz;...'（例: 照尺を起こす rear_sight:-90:0:0）")
     ap.add_argument("--img-dir", help="差分画像（写真との重ね・隙間の位置）を書き出すフォルダ")
     ap.add_argument("--json")
@@ -464,11 +646,14 @@ def main():
     vs = sorted(p.name for p in (HERE / "generated").iterdir() if p.name.endswith("_mesh")) if a.all else [a.variant]
     out = []
     for v in vs:
-        r = score(v, None if a.all else a.photo, a.img_dir, pose or None)
+        photos = json.load(open(a.photos, encoding="utf-8")) if a.photos else {}
+        r = score(v, photos.get(v) if a.all else a.photo, a.img_dir, pose or None)
         out.append(r)
         print(report(r))
     if a.json:
         json.dump(out if a.all else out[0], open(a.json, "w"), ensure_ascii=False, indent=1)
+    if any(r["unexplained"] for r in out):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -20,14 +20,16 @@ MAG_AK = Material("mag_ak", (44, 44, 46), noise=0.05, grime=0.14, scratch=0.006)
 MAG_PMAG = Material("mag_pmag", (30, 30, 32), noise=0.05, grime=0.10, scratch=0.002)   # Magpul PMAG（黒い樹脂）
 MP5_RECEIVER = Material("mp5_receiver", (48, 50, 54), noise=0.05, grime=0.12, scratch=0.004)   # MP5 の受け部（黒に近い灰色の塗装。写真）
 # MP5 の材質（使い込まれた感: 塗装の擦れ・角の擦れ・埃）。他の銃の材質は変えない
-MP5_RECEIVER_W = Material("mp5_receiver_w", (48, 50, 54), noise=0.05, grime=0.18, scratch=0.012,
+# 色は作者提供の写真で測った値に寄せる（作者の指摘「MP5 の本体のディテール・テクスチャ見直し」: 受け部は青みのある
+# 暗い鋼、トリガーハウジング・グリップ・ハンドガードは明るい灰色の樹脂の 2 色。全部を同じ黒にしていた）
+MP5_RECEIVER_W = Material("mp5_receiver_w", (28, 34, 42), noise=0.05, grime=0.18, scratch=0.012,
                           wear=0.35, wear_color=(104, 106, 108), edge_wear=0.55, dust=0.12)
-MP5_POLY = Material("mp5_poly", (38, 38, 40), noise=0.06, grime=0.14, scratch=0.004,
-                    wear=0.25, wear_color=(70, 70, 70), edge_wear=0.35, dust=0.16)
+MP5_POLY = Material("mp5_poly", (90, 94, 100), noise=0.06, grime=0.14, scratch=0.004,
+                    wear=0.25, wear_color=(104, 106, 110), edge_wear=0.35, dust=0.16)
 MP5_STEEL = Material("mp5_steel", (36, 36, 37), noise=0.05, grime=0.16, scratch=0.010,
                      wear=0.22, wear_color=(100, 100, 98), edge_wear=0.45, dust=0.10)
-MP5_MAG = Material("mp5_mag", (40, 41, 44), noise=0.05, grime=0.18, scratch=0.014,
-                   wear=0.26, wear_color=(104, 104, 102), edge_wear=0.45, dust=0.12)
+MP5_MAG = Material("mp5_mag", (92, 95, 100), noise=0.05, grime=0.18, scratch=0.014,
+                   wear=0.26, wear_color=(140, 142, 144), edge_wear=0.45, dust=0.12)
 # M24 SWS の材質（使い込まれた感: MP5 と同じ汚し。ストックはざらついた塗装で埃が乗りやすい）
 M24_STOCK = Material("m24_stock", (50, 52, 52), noise=0.10, grime=0.16, scratch=0.006,
                      wear=0.22, wear_color=(84, 86, 84), edge_wear=0.4, dust=0.2)
@@ -135,19 +137,20 @@ PX_BRASS = Material("px_brass", (200, 158, 70))
 PX_COPPER = Material("px_copper", (190, 112, 70))
 
 
-# --- ゲーム内の見え方への補正（作者の実機確認: 「テクスチャが暗い・まだら」）。
-# 黒い仕上げの下塗り色（28〜48）はゲームの光でほぼ真っ黒になり、形が読めなかった。また、黒い下地に明るい「塗装の擦れの斑」
-# （wear）・埃（dust）・汚れのむら（grime）を散らすと、色の差が大きくて斑点に見えた。暗い材質を持ち上げ、斑・むらは弱め、
-# 角の擦れ（edge_wear。部品の輪郭が読める）だけ残す。銃口・穴の奥（BORE）と刻印の色は変えない。
+# --- ゲーム内の見え方への補正（作者の実機確認: 「テクスチャが暗い・まだら」「全体的にテクスチャが気になる」）。
+# 黒い仕上げの下塗り色（28〜48）はゲームの光でほぼ真っ黒になり、形が読めなかった。暗い材質は持ち上げる（texbake が
+# 隙間を暗く焼き込むので、平らな面はやや明るめでよい）。面の中の明暗は、1 テクセルごとのゆらぎ・傷・擦れの斑のような
+# 「形と関係ない模様」を弱め、texbake の「形から決まる陰影」（隙間の遮蔽・角の明るさ）に任せる。8 テクセル/px では
+# 1 テクセルが 3mm あり、テクセル単位の模様はゲーム内で砂のような斑点に見えた。銃口・穴の奥（BORE）と刻印の色は変えない。
 def _game_ready(m):
     from dataclasses import replace
     if m.name in ("bore",) or m.name.startswith("mark_"):
         return m
     c = m.color
     if max(c) < 75:                                   # 黒・暗い灰の仕上げ
-        c = tuple(int(round(v * 0.7 + 26)) for v in c)
-    return replace(m, color=c, noise=m.noise * 0.8, grime=m.grime * 0.55, scratch=m.scratch * 0.7,
-                   wear=m.wear * 0.3, dust=m.dust * 0.35)
+        c = tuple(int(round(v * 0.75 + 34)) for v in c)
+    return replace(m, color=c, noise=m.noise * 0.45, grime=m.grime * 0.55, scratch=m.scratch * 0.35,
+                   wear=m.wear * 0.15, dust=m.dust * 0.35)
 
 
 for _n, _m in list(globals().items()):

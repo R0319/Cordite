@@ -123,7 +123,36 @@ def receiver():
     return out
 
 
-IRON_REAR_Z, IRON_FRONT_Z = -50.0, -183.0   # 折りたたみ式の照準板・ポストの前後（スコープの後ろ・前の台座の上）
+# 照準器（作者の指示「M24 はアイアンサイト見直し」で、折りたたみ式から実物の M24 の照準器に替えた）:
+# 銃口の照星の台（写真のトレース O.FRONT_SIGHT。上面 Y 132.6）にフード付きの照星（輪の中に柱）、スコープの後ろの
+# 台座に穴の照門（後ろに目当ての円盤）。どちらも見やすさのために実物より大きい（sights の目安。照星までが遠いので
+# 柱は目安の 8 割にして、フードを太らせすぎない）
+IRON_REAR_Z = -45.0              # 照門の板（スコープの後ろの台座の上）
+IRON_FRONT_Z = -757.0            # 照星の柱（銃口の台の中央）
+FRONT_HOOD = (-770.0, -745.0, 11.0, 14.0)   # フードの前後・内半径・外半径
+SIGHT_Y = 132.6 + 14.0 + 1.0     # 照準線＝フードの中心（台の上面にフードの外側が 1mm 食い込む）
+
+
+def irons():
+    """M24 の照準器（ボーン iron_sight。スコープを付けるとコードが描かない）。"""
+    from m249 import ring_z, x_cyl, y_cyl
+    sy = SIGHT_Y
+    eye = sights.eye_z(0.0, IRON_REAR_Z)
+    hole = min(sights.BUIS_HOLE_MAX, sights.HOLE_ANGLE * (eye - IRON_REAR_Z))
+    post_w = 0.8 * sights.POST_ANGLE * (eye - IRON_FRONT_Z)
+    # 照門: 台座を挟むクランプ・穴の板・後ろの目当て（円盤）・右の風偏つまみ・上の高低つまみ
+    zr = IRON_REAR_Z
+    out = [box(-10.0, 132.0, zr - 9.0, 10.0, 137.0, zr + 9.0, STEEL_BLACK)]
+    out += sights.aperture_plate(sy, zr - 2.5, zr + 2.5, hole, 136.0, STEEL_BLACK, half_w=7.0, ears=False)
+    out.append(ring_z(sy, zr + 2.5, zr + 6.0, hole / 2, hole / 2 + 7.5, STEEL_BLACK))
+    out.append(x_cyl(zr, sy - 7.0, 3.0, -14.0, -7.0, STEEL_BLACK, n=10))
+    out.append(y_cyl(0.0, zr - 5.5, 3.0, sy + hole / 2 + 2.0, sy + hole / 2 + 7.0, STEEL_BLACK, n=10))
+    # 照星: 台に載る輪のフードと、中の柱（先端＝照準線）
+    z0, z1, r_in, r_out = FRONT_HOOD
+    out.append(ring_z(sy, z0, z1, r_in, r_out, STEEL_BLACK))
+    out.append(box(-6.0, 131.5, z0 + 3.0, 6.0, sy - r_in + 0.5, z1 - 3.0, STEEL_BLACK))
+    out.append(sights.post(post_w, sy - r_in - 0.5, sy, IRON_FRONT_Z, STEEL_BLACK, depth=3.0))
+    return out, sy
 
 
 def scope_base():
@@ -272,10 +301,8 @@ def build():
     add("muzzle", "root", (0, b, MUZZLE_Z), None, [])
     add("handguard", "root", (0, b, -350.0), None, [])
     add("rail_top", "root", (0, 133.5, -26.0), None, [])               # スコープはここに付く（アタッチメント）
-    # デフォルトのアイアンサイト（実銃はスコープ専用で照準器が無い。ゲームでは折りたたみ式を前後の台座に載せる。
-    # サイトのアタッチメントを付けるとコードがこのボーンを描かない）
-    irons, sight_y = sights.default_irons(133.5, IRON_REAR_Z, IRON_FRONT_Z)
-    add("iron_sight", "root", (0, 133.5, IRON_REAR_Z), "iron_sight", irons)
+    iron, sight_y = irons()
+    add("iron_sight", "root", (0, 133.5, IRON_REAR_Z), "iron_sight", iron)
     add("rail_bottom", "root", (0, 66.0, -450.0), None, [])            # 先台の下の吊り輪の台座（二脚）
     add("rail_side", "root", (HALF_FOREND, 95.0, -350.0), None, [])
 
