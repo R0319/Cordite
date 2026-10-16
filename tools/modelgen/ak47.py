@@ -141,33 +141,63 @@ def selector():
 # ダストカバー（作者の指摘「ダストカバーの形」。米国防総省の AK-47 type II の写真で、天面の丸み・側面の盛り上がった帯・
 # 後ろのボタンを確かめた）
 COVER_SPLIT_Y = 152.0            # 下の平らな側面と、上の丸い天面の境（右側面の排莢口の上の縁）
-COVER_DOME_R = 11.0              # 天面の丸み（左右を楕円に丸める。写真で天面は平らな所の無い弧に見える）
-COVER_RIB = [(-118.0, 159.0), (-118.0, 154.0), (-115.5, 152.5), (-92.0, 152.5), (-89.0, 146.0), (-86.0, 141.5),
-             (71.0, 141.5), (74.0, 144.5), (74.5, 150.0), (72.5, 156.0), (69.0, 159.0)]
-COVER_RIB_T = 2.0                # 側面の帯の盛り上がり（プレスの補強。写真の明るい帯）
-COVER_BUTTON = (75.0, 82.0, 147.5, 154.5, 4.5)   # 後ろのボタン（リコイルスプリングのガイド。Z0, Z1, Y0, Y1, 半幅）
+COVER_SHOULDER_R = 6.0           # 天面の左右の肩の丸み（作者提供の後ろ上・後ろ斜めの写真: 天面は広くゆるい弧で、左右の肩だけが丸い。
+                                 # 以前は左右いっぱいの楕円の弧（高さ 11mm）で、後ろから見ると蒲鉾形の塊に見えた）
+COVER_CROWN = 2.5                # 天面の中央の盛り上がり（肩の上の端から中央まで）
+COVER_TAPER_Z = 52.0             # ここから後ろは天面が後ろ下がりに傾き、上から見て後ろへ細くなる（写真: 台形の傾いた面）
+COVER_RAIL_REAR_Z = 54.0         # レール版のレールの後ろの端（天面が傾き始める COVER_TAPER_Z のすぐ後ろ。以前は 60 で、後ろ 6mm が
+                                 # 傾いた天面から最大 3mm 浮いていた）
+COVER_TAPER = 0.42               # 後ろの端での天面の細り（半幅に対する割合）
+COVER_LOW_END_Z = 60.0           # 下の平らな側面（排莢口・ハンドルの溝の上の縁）はここまで。後ろは天面と一続きの傾いた面
+COVER_REAR = [(52.0, 170.0), (58.5, 167.6), (67.8, 157.4), (71.5, 148.0), (73.0, 142.0)]   # 後ろの傾いた面の上の縁（z, y）
+COVER_REAR_BOTTOM = 140.0        # 後ろの傾いた面の下の端（受け部の上面 Y 141 に 1mm 埋める）
+COVER_BUTTON = (70.0, 77.0, 141.5, 148.5, 4.5)   # 後ろのボタン（リコイルスプリングのガイド。傾いた面の下の端から後ろへ突き出る。
+                                                 # Z0, Z1, Y0, Y1, 半幅）
+
+
+def _cover_section(half, top, taper, bottom=None):
+    """ダストカバーの上の部分の断面（右半分を下から: 縦の側面 → 肩の丸み → ゆるい弧の天面 → 中央、を左右対称に）。
+    taper は天面の細り（0〜1。後ろの傾いた所で側面を内側へ倒し、上から見て台形にする）。点の数は一定。"""
+    h = top - COVER_SPLIT_Y
+    r = max(0.4, min(COVER_SHOULDER_R, h * 0.5))
+    crown = max(0.0, min(COVER_CROWN, h * 0.2))
+    ht = half * (1.0 - taper)                       # 肩の外側の左右の位置（細った分だけ内側）
+    ys = top - crown                                # 肩の上の端
+    pts = [(half, COVER_SPLIT_Y if bottom is None else bottom), (half, COVER_SPLIT_Y)]
+    n_sh, n_top = 5, 5
+    for k in range(n_sh + 1):                       # 肩: 外側の縦の接線から上の水平の接線へ
+        a = math.pi / 2 * k / n_sh
+        pts.append((ht - r + r * math.cos(a), ys - r + r * math.sin(a)))
+    xs = ht - r
+    for k in range(1, n_top):                       # 天面: 肩から中央へゆるい弧（放物線）
+        t = k / n_top
+        x = xs * (1.0 - t)
+        pts.append((x, ys + crown * (1.0 - (x / xs) ** 2) if xs > 0 else top))
+    pts.append((0.0, top))
+    return pts + [(-x, y) for x, y in reversed(pts[:-1])]
 
 
 def _cover_dome(up, half):
-    """ダストカバーの上の部分（COVER_SPLIT_Y より上）。up は側面形の上の部分（shapely）。"""
+    """ダストカバーの上の部分（COVER_SPLIT_Y より上）。up は側面形の上の部分（shapely）。前後の位置ごとに断面を並べてつなぐ。
+    天面の高さは側面形の上の縁。COVER_TAPER_Z より後ろは、後ろの端へ向かって天面を細らせる（後ろの傾いた面が台形になる）。"""
     from shapely.geometry import LineString
-    z0, _, z1, _ = up.bounds
-    zs = list(np.linspace(z0, z1, 40))
+    z0 = up.bounds[0]
+    z1 = COVER_REAR[-1][0]
+    rz, ry = [p[0] for p in COVER_REAR], [p[1] for p in COVER_REAR]
+    zs = sorted(set(list(np.linspace(z0, COVER_TAPER_Z, 24)) + list(np.linspace(COVER_TAPER_Z, z1, 14))
+                    + [COVER_LOW_END_Z - 0.01, COVER_LOW_END_Z]))
     sections = []
-    n_arc = 9
     for z in zs:
-        zz = min(max(z, z0 + 1e-3), z1 - 1e-3)
-        hit = up.intersection(LineString([(zz, COVER_SPLIT_Y - 1), (zz, 400)]))
-        top = hit.bounds[3] if not hit.is_empty else COVER_SPLIT_Y + 1
-        d = max(0.5, min(COVER_DOME_R, top - COVER_SPLIT_Y - 0.5))
-        wall = top - d
-        pts = [(half, COVER_SPLIT_Y), (half, wall)]
-        for k in range(1, n_arc):
-            a = math.pi / 2 * k / n_arc
-            pts.append((half * math.cos(a), wall + d * math.sin(a)))
-        pts.append((0.0, top))
-        pts += [(-x, y) for x, y in reversed(pts[:-1])]
-        sections.append((z, pts))
+        if z >= COVER_TAPER_Z:
+            top = float(np.interp(z, rz, ry))
+        else:
+            zz = min(max(z, z0 + 1e-3), COVER_TAPER_Z)
+            hit = up.intersection(LineString([(zz, COVER_SPLIT_Y - 1), (zz, 400)]))
+            top = hit.bounds[3] if not hit.is_empty else COVER_SPLIT_Y + 1
+        t = max(0.0, (z - COVER_TAPER_Z) / (z1 - COVER_TAPER_Z))
+        bottom = COVER_REAR_BOTTOM if z >= COVER_LOW_END_Z else None
+        top = max(top, (COVER_SPLIT_Y if bottom is None else bottom) + 0.8)
+        sections.append((z, _cover_section(half, top, COVER_TAPER * t, bottom)))
     return _loft(sections, M.RECEIVER)
 
 
@@ -199,8 +229,9 @@ def _loft(sections, mat):
 
 
 def dust_cover(rail=False):
-    """ダストカバー（板金の蓋）。写真の特徴: 天面は左右いっぱいの丸い弧、側面には前後に長く盛り上がった帯（前の 2 割は
-    帯の下の縁が高い段になる）、後ろの傾いた端の下からリコイルスプリングのガイドのボタンが突き出る。
+    """ダストカバー（板金の蓋）。作者提供の写真（後ろ上・後ろ斜め上）: 側面は平らで帯は無く、天面は広くゆるい弧で肩だけが
+    丸い。後ろの端は天面から下の縁まで一続きの傾いた面で、上から見て後ろへ細る台形。その下の端の中央から
+    リコイルスプリングのガイドのボタンが突き出る。
     下の平らな側面は受け部の中へ 8mm 差し込み、少しだけ外へ張り出させる（実物のカバーは受け部の外側に被さって面一）。
     右側面は排莢口とハンドルの溝の上の縁になるので、そこだけ下の縁を上げる（左右を X=0 で分けて作る）。
     rail=True で上面にレール。"""
@@ -211,26 +242,14 @@ def dust_cover(rail=False):
     # 側面形: 後ろの端の膨らみ（ボタン）は別の部品にするので、後ろの面を Z 77 の縦にする
     outer = [(min(z, 77.0), y - 8.0 if y <= y_bottom + 0.5 else y) for z, y in o["outer"]]
     g = Polygon(outer).buffer(0)
-    low = g.intersection(sbox(-1e3, -1e3, 1e3, COVER_SPLIT_Y))
+    low = g.intersection(sbox(-1e3, -1e3, COVER_LOW_END_Z, COVER_SPLIT_Y))
     up = g.intersection(sbox(-1e3, COVER_SPLIT_Y, 1e3, 1e3))
     ring = lambda q: list(q.exterior.coords)[:-1]
     low_pts = ring(low.simplify(0.05))
     cuts = [(PORT_Z[0], 0.0, PORT_Z[1], PORT_Y[1]), (SLOT_Z[0], 0.0, SLOT_Z[1], SLOT_Y[1])]
     out = [extrude_x(low_pts, 0.0, half, M.RECEIVER), extrude_x(_right_cut(low_pts, cuts), -half, 0.0, M.RECEIVER)]
-    # 天面: 前後の位置ごとに「縦の側面＋左右いっぱいの楕円の弧」の断面を並べてつなぐ。弧の高さは COVER_DOME_R、
-    # 後ろの傾いた所では天面が下がるので低くする（側面形の上の縁の高さに合わせる）
+    # 天面: 縦の側面＋丸い肩＋ゆるい弧の断面を前後に並べ、後ろの傾いた所では細らせる（_cover_dome）
     out.append(_cover_dome(up, half))
-    # 側面の盛り上がった帯（左右。右は排莢口・溝の上の縁より下を切る）
-    rib = Polygon(COVER_RIB)
-    rib_r = rib
-    for z0, y0, z1, y1 in cuts:
-        rib_r = rib_r.difference(sbox(z0 - 1.0, -1e3, z1 + 1.0, y1 + 0.5))
-    for s_, shape in ((1, rib), (-1, rib_r)):
-        for q in getattr(shape, "geoms", [shape]):
-            if q.area < 5:
-                continue
-            xa, xb = sorted((s_ * (half - 0.4), s_ * (half + COVER_RIB_T)))
-            out.append(extrude_x_beveled(ring(q.simplify(0.05)), xa, xb, 0.6, M.RECEIVER, steps=1))
     # 後ろのボタン
     bz0, bz1, by0, by1, bh = COVER_BUTTON
     out.append(extrude_x_beveled([(bz0, by0), (bz1 - 1.0, by0), (bz1, by0 + 1.5), (bz1, by1 - 1.5), (bz1 - 1.0, by1),
@@ -239,7 +258,7 @@ def dust_cover(rail=False):
     yt = _yr(o)[1]
     if rail:
         slots = 16
-        r1 = z1 - 20
+        r1 = COVER_RAIL_REAR_Z
         r0 = r1 - slots * SLOT_MM
         out += [box(-8, yt - 1, r0, 8, yt + 3, r1, M.RAIL), box(-RAIL_W / 2, yt + 3, r0, RAIL_W / 2, yt + 8, r1, M.RAIL)]
     return out
@@ -757,7 +776,7 @@ def build(variant="wood"):
     if rail:
         lower, (r0, r1), y_bottom, x_side, yc = lower_handguard_rail()
         add("handguard", "root", (0, b, -208.0), "handguard_rail", lower + upper_handguard_rail())
-        add("rail_top", "root", (0, _yr(O.DUST_COVER)[1] + 8, _zr(O.DUST_COVER)[1] - 20), None, [])
+        add("rail_top", "root", (0, _yr(O.DUST_COVER)[1] + 8, COVER_RAIL_REAR_Z), None, [])
         add("rail_bottom", "root", (0, y_bottom, r1), None, [])
         add("rail_side", "root", (x_side, yc, r1), None, [])
     else:
