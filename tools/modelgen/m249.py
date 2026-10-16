@@ -650,48 +650,102 @@ def ammo_box(l=L):
 
 
 BELT_ROUND_N = 6    # 弾帯の弾の周の分割（直径 9.6mm＝ゲーム内で 0.4 画素なので 6 角で足りる。8 角だと面の数が目安 7000 を超えた）
-BELT_RING_N = 6     # リンクの輪の分割（直径 11mm。以前は 10）
+BELT_RING_N = 5     # リンクの輪の分割（直径 11mm＝ゲーム内で 0.46 画素。以前は 10→6。空のリンクのボーンを足して面の数が目安 7000 を超えたので 5）
+
+
+BELT_RING_Z = 22.0  # 自分のリンクの輪の中心（薬莢の底から前へ）。弾帯の 1 発ごとのボーンの pivot の Z
+
+
+def belt_path(l=L):
+    """弾帯の弾の並び [(x, y, 開いた側の向き[度])]。先頭（弾止め側、X=0）から順に。
+    道筋はトレイの上の直線 → 入口の外で下へ曲がる 1/4 円 → 下へ垂れる直線で、弾は道筋に沿って等間隔（link_pitch）に置く
+    （以前は円弧の上の 2 発を角度で置いていたため、間隔が 6.9〜11.4mm と不揃いで弾どうしが重なっていた）。
+    開いた側の向きは「隣の 2 発を結ぶ向き（先頭→末尾）を -90° 回した向き」と定義する（両端は片側の隣で）。
+    トレイでは下、円弧では中心、垂れた所では受け部の側を向く。アニメーション側は pivot から同じ計算で向きを求められる。"""
+    pitch, fy = l.link_pitch, l.feed_y
+    r = 10.0
+    cx, cy = l.rcv_half + 7.8, fy - r                     # 円弧の中心（以前の置き方と同じ位置）
+    x_end = cx                                            # 直線から円弧へ移る所
+    arc = math.pi / 2 * r
+    xy = []
+    s = 0.0
+    while True:
+        if s <= x_end:
+            p = (s, fy)
+        elif s <= x_end + arc:
+            t = math.pi / 2 - (s - x_end) / r                 # 円の上（90°）から右（0°）へ
+            p = (cx + r * math.cos(t), cy + r * math.sin(t))
+        else:
+            p = (cx + r, cy - (s - x_end - arc))
+        if p[1] < l.box[3]:                               # 最後の 1 発はボックスのふたの出口に半分入る
+            break
+        xy.append(p)
+        s += pitch
+    pts = []
+    for i, (x, y) in enumerate(xy):
+        (x0, y0), (x1, y1) = xy[max(i - 1, 0)], xy[min(i + 1, len(xy) - 1)]
+        pts.append((x, y, math.degrees(math.atan2(y1 - y0, x1 - x0)) - 90.0))
+    return pts
+
+
+BELT_TIP_Z = -119.4                                       # 弾帯の弾頭の先（写真）
+BELT_BASE_Z = BELT_TIP_Z + 57.4                           # 薬莢の底
+
+
+def _link_rings(x, y, nd, own=True, held=True):
+    """1 発の位置 (x, y)・開いた側の向き nd に付くリンクの輪。own: 自分のリンクの輪と抽筒溝の舌、held: 前のリンクの 2 つの輪。"""
+    zb = BELT_BASE_Z
+    gap = 70.0                                            # 輪の開き（開いた側の向きを中心に）
+    a0, a1 = nd + gap / 2, nd + 360 - gap / 2
+    out = []
+    if own:
+        out.append(arc_ring(x, y, zb - 26, zb - 18, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))
+        out.append(arc_ring(x, y, zb - 3.2, zb - 1.6, 4.0, 4.6, nd + 120, nd + 240, STEEL_BLACK, n=4))   # 抽筒溝の舌
+    if held:
+        out.append(arc_ring(x, y, zb - 15, zb - 10, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))
+        out.append(arc_ring(x, y, zb - 34, zb - 29, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))
+    return out
+
+
+def _link_back(p0, p1, nd):
+    """2 つの弾 p0→p1 をつなぐ背の板（閉じた側。2 つの輪の幅だけの細い帯 2 本）。"""
+    zb = BELT_BASE_Z
+    n = math.radians(nd + 180.0)
+    ox, oy = 5.3 * math.cos(n), 5.3 * math.sin(n)
+    return [_plate((p0[0] + ox, p0[1] + oy), (p1[0] + ox, p1[1] + oy), za, zc)
+            for za, zc in ((zb - 34, zb - 29), (zb - 15, zb - 10))]
+
+
+def belt_round(i, pts, l=L):
+    """弾帯の i 発目（ボーン belt_ii）: 弾・自分のリンクの輪・抽筒溝の舌・弾 i を抱く前のリンクの 2 つの輪・
+    弾 i-1 とつなぐ背の板。弾 i を囲む物はどのリンクの物でもここに入れる（弾 i と一緒に動けば道筋どおりになる）。
+    リンク（Wikipedia: M27/M13）: 1 枚の板を曲げた部分的な輪。各リンクは 1 つの輪で自分の弾の薬莢（肩の下）を抱き、
+    反対側の 2 つの輪で隣の弾を抱く（隣のリンクの輪と互い違い）。小さな舌が薬莢の抽筒溝に掛かる。"""
+    x, y, nd = pts[i]
+    out = cartridge(x, y, BELT_TIP_Z, n=BELT_ROUND_N) + _link_rings(x, y, nd, held=i > 0)
+    if i > 0:
+        out += _link_back(pts[i - 1][:2], (x, y), nd)
+    return out
 
 
 def belt(l=L):
-    """弾帯（M27 リンク）。トレイの上に平らに並び（リンクの開いた側が下、先頭の弾は弾止めに当たる。FM 3-22.68）、
+    """弾帯（M27 リンク）全体。トレイの上に平らに並び（リンクの開いた側が下、先頭の弾は弾止めに当たる。FM 3-22.68）、
     左側面の入口を出て外で下へ曲がり、ボックスのふたの出口に入る。外へ出ると開いた側は受け部の方を向く。
-    リンク（Wikipedia: M27/M13）: 1 枚の板を曲げた部分的な輪。各リンクは 1 つの輪で自分の弾の薬莢（肩の下）を抱き、
-    反対側の 2 つの輪で隣の弾を抱く（隣のリンクの輪と互い違い）。小さな舌が薬莢の抽筒溝に掛かる。"""
-    pitch, fy = l.link_pitch, l.feed_y
-    pts = []                                              # (x, y, 開いた側の向き[度])
-    x = 0.0
-    while x < l.rcv_half + 8:                             # トレイの上（先頭は X=0、薬室の上）〜入口
-        pts.append((x, fy, -90.0))
-        x += pitch
-    r = 10.0
-    cx, cy = x - pitch * 0.4, fy - r                      # 外で下へ曲がる円弧の中心
-    for a in (60.0, 20.0):
-        t = math.radians(a)
-        pts.append((cx + r * math.cos(t), cy + r * math.sin(t), a + 180.0))   # 開いた側は円弧の中心（内側）を向く
-    xd = cx + r
-    y = cy - pitch * 0.6
-    while y > l.box[3] + 3:
-        pts.append((xd, y, 180.0))
-        y -= pitch
-    out = []
-    zt = -119.4                                           # 弾頭の先（写真）
-    zb = zt + 57.4                                        # 薬莢の底
-    for i, (x, y, nd) in enumerate(pts):
-        out += cartridge(x, y, zt, n=BELT_ROUND_N)
-        gap = 70.0                                        # 輪の開き（開いた側の向きを中心に）
-        a0, a1 = nd + gap / 2, nd + 360 - gap / 2
-        out.append(arc_ring(x, y, zb - 26, zb - 18, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))   # 自分のリンクの輪
-        if i > 0:                                                                        # 前の弾のリンクの 2 つの輪
-            out.append(arc_ring(x, y, zb - 15, zb - 10, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))
-            out.append(arc_ring(x, y, zb - 34, zb - 29, 4.85, 5.5, a0, a1, STEEL_BLACK, n=BELT_RING_N))
-            px, py, _ = pts[i - 1]                                                       # 2 つの弾をつなぐ背の板
-            n = math.radians(nd + 180.0)                                                 # 閉じた側
-            ox, oy = 5.3 * math.cos(n), 5.3 * math.sin(n)
-            for za, zc in ((zb - 34, zb - 29), (zb - 15, zb - 10)):      # 2 つの輪の幅だけの細い帯でつなぐ
-                out.append(_plate((px + ox, py + oy), (x + ox, y + oy), za, zc))
-        out.append(arc_ring(x, y, zb - 3.2, zb - 1.6, 4.0, 4.6, nd + 120, nd + 240, STEEL_BLACK, n=4))  # 抽筒溝の舌
-    return out
+    ボーンは 1 発ずつ（belt_round）。これは部品の単体出力用に全部をまとめた物。"""
+    pts = belt_path(l)
+    return [c for i in range(len(pts)) for c in belt_round(i, pts, l)]
+
+
+LINK_EJECT = (-30.0 + 4.0, 191.0)   # 飛んでいく空のリンクの静止位置（x, y）: 右側面のリンク排出口（Z -122〜-66・Y 186〜196）の内側
+
+
+def link_eject(l=L):
+    """撃つたびに右のリンク排出口から飛ぶ空のリンク 1 個（自分の輪・前の弾を抱いていた 2 つの輪・背の板）。
+    静止位置は受け部の中（見えない）。向きはトレイの上と同じ（開いた側が下）で、2 つの輪は右（排出口の側）。"""
+    x, y = LINK_EJECT
+    x2 = x + l.link_pitch
+    return (_link_rings(x, y, -90.0, held=False) + _link_rings(x2, y, -90.0, own=False)
+            + _link_back((x, y), (x2, y), -90.0))
 
 
 def _plate(p0, p1, z0, z1, mat=None):
@@ -745,7 +799,12 @@ def build(feed="belt"):
 
     if feed == "belt":
         add("magazin", "root", (sum(l.box_x) / 2, l.box[3], sum(l.box[:2]) / 2), "ammo_box", ammo_box())
-        add("mag_ammo", "magazin", (0.0, l.feed_y, -90), "belt", belt())
+        add("mag_ammo", "magazin", (0.0, l.feed_y, -90), None, [])     # 弾帯を束ねる親（リロード・弾切れで隠す）
+        pts = belt_path(l)
+        zr = BELT_BASE_Z - BELT_RING_Z
+        for i, (x, y, _) in enumerate(pts):               # 1 発ずつ（先頭＝弾止め側が belt_00）。発射で隣の静止位置へ送る
+            add(f"belt_{i:02d}", "mag_ammo", (x, y, zr), None, belt_round(i, pts, l))
+        parts["belt"] = [c.scaled(K) for c in belt(l)]
     else:
         add("magazin", "root", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), "magazine_stanag", stanag_mag())
         add("mag_ammo", "magazin", (l.mag_pivot[0], l.mag_pivot[1], l.mag_center_z), None, stanag_rounds())
@@ -754,6 +813,8 @@ def build(feed="belt"):
     case, bullet = ar15_parts.cartridge_556(z_tip=tip, y=b)
     add("ammo", "root", (0, b, tip + 35), None, case)
     add("bullet", "ammo", (0, b, tip + 6), None, bullet)
+    if feed == "belt":                          # 空のリンク（撃つたびに右のリンク排出口から飛ぶ。薬莢の ammo と同じ扱い）
+        add("link_eject", "root", (*LINK_EJECT, BELT_BASE_Z - BELT_RING_Z), "link", link_eject())
 
     from shapely.geometry import Polygon
     c = Polygon(O.GRIP["outer"]).centroid

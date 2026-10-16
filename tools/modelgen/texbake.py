@@ -25,7 +25,8 @@ N_DIRS = 96             # 方向の数（球面に均等）
 SKIP = ("right_hand", "left_hand", "rightItem", "leftItem")
 # 動かす部品（自分の形だけで遮る）。名前の先頭で判定
 MOVING = ("magazin", "mag_ammo", "ammo", "bullet", "bolt", "charging_handle", "trigger", "selector", "mag_release",
-          "port_cover", "slide_stop", "bipod", "feed_cover", "handle", "pump", "lever", "sight_leaf", "safety")
+          "port_cover", "slide_stop", "bipod", "feed_cover", "handle", "pump", "lever", "sight_leaf", "safety",
+          "link_eject")
 
 # 仕上げの強さ（全材質共通）
 AO_FLOOR = 0.30         # いちばん奥まった所の明るさ（平らな面＝1）
@@ -261,6 +262,8 @@ def finish(geo_bones, tex, mat_map, mats, seed=1, debug=None):
     for i, n in enumerate(names):
         if n.startswith(MOVING):
             gid[i] = i + 1
+        elif n.startswith("belt_"):          # 弾帯の 1 発ずつのボーンは、弾帯どうしでは遮り合う（1 本の帯として焼く）
+            gid[i] = len(names) + 1
     m = filled & (bone >= 0)
     P, Nm = pos[m].astype(np.float64), nrm[m].astype(np.float64)
     op_, sk_, cv_ = openness(P, Nm, gid[bone[m]], cell)
