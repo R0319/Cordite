@@ -66,6 +66,8 @@ PHOTO = {
     "m79_mesh": ("trace_m79", False, 200, 0.6),
     "m2_mesh": ("trace_m2", False, 128, 0.8),         # trace_m2.py の第 2 引数で書き出した前処理済みの写真
 }
+# 写真と同じ姿勢にして比べる銃（写真の可動部の状態。--pose を渡したときはそちら）
+PHOTO_POSE = {"m79_mesh": {"rear_sight": [-90.0, 0.0, 0.0]}}      # 写真は照尺を起こした状態
 CODE_BONES = ("muzzle_flash", "idle_view", "iron_view", "ammo", "right_hand", "left_hand")
 PART_BONES = ("receiver", "trigger", "magazin", "mag_ammo", "bolt", "charging_handle", "selector", "mag_release")
 SKIP = ("right_hand", "left_hand", "rightItem", "leftItem")
@@ -574,7 +576,7 @@ def score(variant, photo=None, img_dir=None, pose=None):
         "open_edges": open_edges(bones),
     }
     if photo:
-        pm, mm, org = silhouettes(variant, bones, photo, pose)
+        pm, mm, org = silhouettes(variant, bones, photo, pose or PHOTO_POSE.get(variant))
         res["photo"] = outline_diff(pm, mm, org)
         res["photo"]["regions"] = regions(pm, mm, org)
     explain(variant, res)

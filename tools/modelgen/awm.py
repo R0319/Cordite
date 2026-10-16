@@ -284,7 +284,12 @@ def muzzle_brake():
 # ---------------------------------------------------------------- ボルト
 def bolt_shroud():
     """ボルトの後ろの覆い（トレース）。ボルトと一緒に前後する。"""
-    return [extrude_x_beveled(_ring(_poly(O.SHROUD).simplify(0.3)), -11.0, 11.0, 2.5, STEEL_BLACK, steps=2)]
+    # 後ろの端は Z 29.5 の垂直な面で、そこから細いピン（コッキングピースの指示）が出る（写真を 8 倍に拡大して読んだ。
+    # トレースはピンと覆いの角をつないで丸く膨らんでいた）
+    from shapely.geometry import box as sbox
+    g = _poly(O.SHROUD).intersection(sbox(-50.0, 100.0, 29.5, 200.0)).simplify(0.3)
+    return [extrude_x_beveled(_ring(g), -11.0, 11.0, 2.5, STEEL_BLACK, steps=2),
+            lathe(0.0, 141.5, [(28.0, 1.6), (34.0, 1.6)], 8, STEEL_BLACK)]
 
 
 def bolt_body():
@@ -342,7 +347,9 @@ def safety():
 
 def mag_release():
     """弾倉止め（トリガーガードの前に下がるレバー。前へ押すと外れる）。"""
-    return [box(-3.0, 50.0, -45.5, 3.0, 76.0, -41.0, STEEL_BLACK)]
+    # 写真: 細い棒（Z -43〜-45.5）が Y 66 から 44 まで垂れ、先は丸い
+    return [extrude_x_beveled([(-43.0, 76.0), (-45.5, 76.0), (-45.5, 45.5), (-44.8, 44.3), (-43.7, 44.3), (-43.0, 45.5)],
+                              -2.5, 2.5, 0.6, STEEL_BLACK, steps=1)]
 
 
 def magazine():
