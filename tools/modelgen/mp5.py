@@ -27,11 +27,12 @@ RCV_MAT = M.MP5_RECEIVER_W  # 受け部・チューブ（写真では樹脂部�
 BORE_Y = 153.5          # 銃身の軸（写真の銃口の上下の中点）
 SIGHT_Y = 205.0         # 照準線（照星のポストの先端＝フードのリングの中心の少し下）
 MUZZLE_Z = -331.0
+MUZZLE_Y = 154.7         # 照星より前の銃口側の中心（写真の上下の中点。銃身の軸より 1.2mm 上に写る）
 BOLT_FACE_Z = -106.0    # ボルトの前面＝薬室の後端（銃身 225mm を銃口から逆算）
 REAR_SIGHT_Z = 53.0     # 照門ドラムの中心（照準半径 340mm の後ろの端）
 FRONT_POST_Z = -285.0   # 照星のポスト（リングの中心）
-FRONT_HOOD_HALF = 9.0   # リングのフードの前後の半分（写真の側面で 18mm。7mm の薄い輪にしていた）
-FRONT_HOOD_BACK = 0.0   # フードの中心とポストの前後のずれ
+FRONT_HOOD_HALF = 8.75  # リングのフードの前後の半分（写真の側面で Z -294.5〜-277。7mm の薄い輪にしていた）
+FRONT_HOOD_BACK = -0.5  # フードの中心とポストの前後のずれ（写真）
 # ADS の目は照門の 140mm 後ろ（作者指示: 照門のドラムに近すぎて手前の受け部が画面を覆っていた）。照門の穴と照星の
 # ポストは見やすいように誇張し、この距離で大きさを決める（実物は穴 3.2mm・ポスト 2mm。sights の目安）
 EYE_RELIEF = 140.0
@@ -60,6 +61,7 @@ PORT_INNER_X = 15.0     # 排莢口から見えるボルトの側面（受け部
 BOLT_MAT = M.STEEL      # ボルト（受け部より明るい鋼。暗いと空洞と見分けがつかない）
 BOLT_TRAVEL_MAX = 70.0  # ボルトの後退量の上限（🟡 実物の値は未確認。ボルトの後端が受け部の後端を越えない長さを決める）
 CH_TUBE_Y = 181.8          # コッキングチューブの軸（上の縁 189.4。写真のトレースの上の縁 189〜190 に合わせる。183.6 では 2mm 高かった）
+CH_TUBE_REAR = -160.0     # チューブの太い所の前の端（写真）
 CH_SLOT_Z = (-206.0, -126.0)   # コッキングハンドルの溝（チューブの左側面。前の端が閉鎖位置）
 STOCK_TRAVEL = 120.0    # ストックを縮めたときの前進量（HK 公表の全長 700→550mm の差は 150。写真の伸長位置からの量は 🟡 仮）
 
@@ -217,7 +219,9 @@ def cocking_tube():
     zs = [p[0] for p in O.COCKING_TUBE["outer"]]
     z0, z1 = min(zs), max(zs)
     yc, r = CH_TUBE_Y, 7.6
-    out = [lathe(0, yc, [(z0, r), (z1 + 4.0, r)], ar15_mesh.N_MID, RCV_MAT)]
+    # 受け部の前の 50mm は写真で 2mm 太く（上の縁 191.3）見える。前の細い所とは 10mm かけてつなぐ
+    out = [lathe(0, yc, [(z0, r), (CH_TUBE_REAR - 10.0, r), (CH_TUBE_REAR, r + 1.9), (z1 + 4.0, r + 1.9)],
+                 ar15_mesh.N_MID, RCV_MAT)]
     out.append(box(r - 1.5, yc - 1.8, CH_SLOT_Z[0], r + 0.2, yc + 1.8, CH_SLOT_Z[1], M.BORE))   # 溝（左）
     return out
 
@@ -288,9 +292,9 @@ def barrel():
     """銃身（ハンドガードの中は見えない）と銃口側（写真の太さの分布。3 つの突起のある先端）。"""
     prof = sorted(O.MUZZLE_R)
     out = [lathe(0, BORE_Y, [(BOLT_FACE_Z - 0.5 - 225.0 + 30.0, 8.0), (BOLT_FACE_Z, 8.0)], ar15_mesh.N_MID, M.STEEL)]
-    out.append(lathe(0, BORE_Y, [(prof[0][0], 4.5)] + prof + [(prof[-1][0], 4.5)], ar15_mesh.N_MID, STEEL_BLACK,
+    out.append(lathe(0, MUZZLE_Y, [(prof[0][0], 4.5)] + prof + [(prof[-1][0], 4.5)], ar15_mesh.N_MID, STEEL_BLACK,
                      cap0=False, cap1=False))
-    out.append(lathe(0, BORE_Y, [(MUZZLE_Z - 0.2, 4.5), (MUZZLE_Z + 20.0, 4.5)], ar15_mesh.N_SMALL, M.BORE, cap0=False))
+    out.append(lathe(0, MUZZLE_Y, [(MUZZLE_Z - 0.2, 4.5), (MUZZLE_Z + 20.0, 4.5)], ar15_mesh.N_SMALL, M.BORE, cap0=False))
     return out
 
 
@@ -425,6 +429,7 @@ def bolt():
 
 
 # ---------------------------------------------------------------- 弾倉
+MAG_WELL_FRONT = -101.5  # 弾倉口の前の縁（写真）
 MAG_TOP_Y = 134.0       # 弾倉の上端（差すと受け部の下＝弾倉口の中に隠れる）
 MAG_SHELL = 10.0        # 上部の中空の深さ
 MAG_WALL = 1.0
@@ -440,7 +445,7 @@ def _mag_body():
     g = Polygon(O.MAGAZINE["outer"])
     top = max(p[1] for p in O.MAGAZINE["outer"])
     zs = [p[0] for p in O.MAGAZINE["outer"] if p[1] >= top - 1.0]
-    zf, zr = min(zs), max(zs)
+    zf, zr = max(min(zs), MAG_WELL_FRONT), max(zs)     # 上部は弾倉口の前の縁より前へ出さない（3mm 出ていた）
     return unary_union([g, sbox(zf, top - 2.0, zr, MAG_TOP_Y)]), (zf, zr)
 
 
@@ -450,6 +455,7 @@ def magazine():
     from shapely.geometry import box as sbox
     body, (zf, zr) = _mag_body()
     solid = body.intersection(sbox(-400.0, -200.0, 0.0, MAG_TOP_Y - MAG_SHELL + 0.5))
+    solid = solid.buffer(-3.0, quad_segs=3).buffer(3.0, quad_segs=3).simplify(0.2)   # 底板の角は丸い（写真）
     out = [extrude_x_beveled(list(solid.exterior.coords)[:-1], -HALF_MAG, HALF_MAG, 1.2, M.MP5_MAG, steps=1)]
     y0, w, h = MAG_TOP_Y - MAG_SHELL, MAG_WALL, HALF_MAG
     for s in (1, -1):

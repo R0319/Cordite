@@ -21,7 +21,7 @@ import materials as M
 import sights
 import p90_outline as O
 from core import box, extrude_x, extrude_x_beveled, extrude_x_rounded, lathe
-from m249 import x_cyl, y_cyl
+from m249 import ring_z, slotted_flash_hider, x_cyl, y_cyl
 from rig import add_locators
 
 K = 1.0 / ar15_parts.MM_PER_PX
@@ -31,6 +31,9 @@ STEEL_BLACK = M.P90_STEEL
 
 BORE_Y = 102.3
 MUZZLE_Z = -166.3
+FH_R = 10.95                # 消炎器の前の部分の半径（トレース）
+FH_SLOTS = (-161.0, -145.0)   # 溝の前後（写真）
+FH_SLOT_REAR = -143.0       # 溝のある前の部分の後ろの端（ここから後ろはトレースの太さの回転体）
 BOLT_FACE_Z = 97.7          # 薬室の後端（銃身 264mm を銃口から逆算。ブルパップなのでトリガーより後ろ）
 
 # 左右の半幅（全幅 55mm が上限）。作者提供の TR 型の図（正面・後面・上面。上面図のレールが 15px＝規格の 21mm で縮尺を
@@ -84,8 +87,8 @@ SIDE_RAIL_Y = 157.5           # 頭（幅 24mm）が上面（TR_TOP_Y）から�
 # トリガーの穴の後ろ（写真でトリガーの側面が見える所）と、その下のセレクター（回転する円盤）
 TRIGGER_WELL = [(17.7, 82.2), (-8.0, 82.2), (-8.0, 52.5), (9.5, 52.5), (13.6, 54.4), (17.7, 62.6), (18.8, 73.5)]
 SELECTOR_C = (-1.0, 49.0)   # 円盤の中心 (Z, Y)
-SELECTOR_R = 15.0
-SELECTOR_SLOT = [(-3.0, 47.5), (-17.5, 47.5), (-17.5, 53.0), (-3.0, 53.0)]   # 前のつまみの所だけ（円盤は本体に埋まる）
+SELECTOR_R = 10.5           # 前の刻みのある縁が Z -11.5（写真。15 では 7mm 前に出ていた）
+SELECTOR_SLOT = [(-3.0, 47.5), (-12.0, 47.5), (-12.0, 53.0), (-3.0, 53.0)]   # 前のつまみの所だけ（円盤は本体に埋まる）
 
 MAG_RELEASE = (181.5, 196.0, 117.5, 131.0)    # 弾倉止め（弾倉の後ろの左右のレバー。前後 z, 上下 y）
 ROTOR_BULGE = [(178.0, 118.0), (150.0, 118.0), (150.0, 110.0), (156.0, 104.0), (172.0, 103.0), (178.0, 108.0)]
@@ -231,10 +234,21 @@ def _z_rod(x, y, r, z0, z1, mat, n=10):
 def barrel():
     """消炎器（トレースの太さの分布）と、受け部の中に隠れる銃身。"""
     prof = sorted(O.MUZZLE_R)                                  # Z 昇順（銃口側から）
-    prof = [(z, r) for z, r in prof if r < 13.0]
-    out = [lathe(0, BORE_Y, [(MUZZLE_Z, 3.0), (MUZZLE_Z, prof[0][1])] + prof + [(-110.0, prof[-1][1])],
-                 ar15_mesh.N_MID, STEEL_BLACK, cap0=False),
-           lathe(0, BORE_Y, [(MUZZLE_Z - 0.2, 2.9), (MUZZLE_Z + 20.0, 2.9)], ar15_mesh.N_SMALL, M.BORE, cap0=False)]
+    prof = [(z, r) for z, r in prof if r < 13.0 and z >= FH_SLOT_REAR]
+    out = [lathe(0, BORE_Y, [(FH_SLOT_REAR, 7.0), (FH_SLOT_REAR, prof[0][1])] + prof + [(-110.0, prof[-1][1])],
+                 ar15_mesh.N_MID, STEEL_BLACK)]
+    # 前の部分は 3 本の溝（上・左右のやや下）。左右の溝は向かい合って向こうが見える（写真: 横から Y 99〜102 の窓、上は溝で細る）
+    # 前の端は斜めに切れた面（回転体では作れない）の代わりに円すいで細らせる。溝の区間のくびれ（半径 9.3）は省く
+    z0, z1 = FH_SLOTS
+    out += slotted_flash_hider(BORE_Y, z0 - 1.0, FH_SLOT_REAR, FH_R, 7.0, (z0, z1), (90.0, 193.0, 347.0), 26.0,
+                               STEEL_BLACK, bore=False)
+    out.append(lathe(0, BORE_Y, [(FH_SLOT_REAR - 0.5, 6.8), (FH_SLOT_REAR + 2.0, 6.8)], ar15_mesh.N_SMALL, M.BORE))   # 銃身の先（奥の暗い穴）
+    fz = z0 - 1.0
+    out += [lathe(0, BORE_Y, [(MUZZLE_Z, 8.2), (MUZZLE_Z + 2.0, 9.8), (MUZZLE_Z + 4.0, FH_R), (fz, FH_R)],
+                  ar15_mesh.N_MID, STEEL_BLACK, cap0=False, cap1=False),
+            lathe(0, BORE_Y, [(fz, 7.0), (MUZZLE_Z, 7.0)], ar15_mesh.N_MID, STEEL_BLACK, cap0=False, cap1=False),
+            ring_z(BORE_Y, MUZZLE_Z - 0.01, MUZZLE_Z + 0.3, 7.0, 8.2, STEEL_BLACK),
+            ]
     return out
 
 
@@ -256,7 +270,7 @@ def selector():
     """セレクター（トリガーの下の回転する円盤。ボーン selector は Y 軸まわりに回す）と前のつまみ。"""
     z, y = SELECTOR_C
     return [y_cyl(0.0, z, SELECTOR_R, 47.0, 52.5, STEEL_BLACK, n=20),
-            box(-5.0, 47.5, z - SELECTOR_R - 3.0, 5.0, 52.0, z - SELECTOR_R + 2.0, STEEL_BLACK)]
+            box(-5.0, 47.5, z - SELECTOR_R - 0.5, 5.0, 52.0, z - SELECTOR_R + 4.0, STEEL_BLACK)]
 
 
 def mag_release():

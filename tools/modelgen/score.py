@@ -61,7 +61,7 @@ PHOTO = {
     "hk416_mesh": ("trace_hk416", False, 128, 0.5),       # --photo は trace_hk416.py が書き出した影絵
     "m24_mesh": ("trace_m24", False, 200, 0.6),
     "p90_mesh": ("trace_p90", False, 200, 0.6),
-    "m1912_mesh": ("trace_m1912", False, 165, 1.0),
+    "m1912_mesh": ("trace_m1912", False, 120, 1.0),
     "awm_mesh": ("trace_awm", True, 205, 0.8),        # 左側面の写真（a4）
     "m79_mesh": ("trace_m79", False, 200, 0.6),
     "m2_mesh": ("trace_m2", False, 128, 0.8),         # trace_m2.py の第 2 引数で書き出した前処理済みの写真
@@ -509,6 +509,7 @@ def item_sheet(variant, photo, pm, mm, origin, photo_res, path, pad=12.0, scale=
             break
         except OSError:
             pass
+    items = [(k, it) for k, it in items if "why" not in it or it.get("todo")]   # 説明済みは出さない
     rows = []
     for kind, it in items[:limit]:
         za, zb = it["z_mm"]

@@ -12,6 +12,8 @@ Winchester Model 1912（Model 12）トレンチガン（第二次大戦の米軍
 """
 import math
 
+import numpy as np
+
 import ar15_mesh
 import ar15_parts
 import materials as M
@@ -24,12 +26,12 @@ K = 1.0 / ar15_parts.MM_PER_PX
 WOOD = M.M1912_WOOD
 BLUED = M.M1912_BLUED
 
-BORE_Y = 102.5
-BARREL_R = 11.0             # 銃身の外径 22mm（写真の上の縁 Y 113.5）
+BORE_Y = 101.3             # 写真の銃身の上下の中点（受け部の前 Y 111.5〜90.6。前は 102.5 で、銃身・放熱カバー・着剣部が 1.2mm 高かった）
+BARREL_R = 10.5            # 銃身の外径 21mm
 MUZZLE_Z = -646.0
 BREECH_Z = -150.0           # 銃身の後端（受け部の前の輪の後ろ）＝薬室の後端
-TUBE_Y, TUBE_R = 76.5, 11.5   # 弾倉の筒（写真 Y 65〜88）
-TUBE_Z = (-553.0, -150.0)   # 前の端は着剣部の留め具の後ろの面（写真 Z -554）
+TUBE_Y, TUBE_R = 76.5, 11.5   # 弾倉の筒（写真 Y 65〜88。上と銃身の間は 3mm 抜けて向こうが見える）
+TUBE_Z = (-555.0, -150.0)   # 前の端は丸く、着剣部の留め具の後ろの面に当たる（写真 Z -553〜-555）
 
 # 左右の半幅（推定）
 HALF_RCV = 16.0             # 受け部 32mm
@@ -47,12 +49,18 @@ PUMP_TRAVEL = 70.0          # ポンプ・ボルトを引く量（12 番の実�
 
 # 先台（ポンプ。木の筒に 18 本の溝）
 FOREND_Z = (-447.0, -268.0)
-FOREND_Y, FOREND_R = 73.0, 19.5
+FOREND_Y, FOREND_R = 71.0, 19.0
+# 先台は前ほど細い（写真の下の縁: Z -320 で 52.0、-360 で 53.3、-400 で 54.7、-440 で 57.5。影を除いた明るさの段で読んだ）
+FOREND_TAPER = [(-447.0, 12.0), (-440.0, 14.5), (-430.0, 15.8), (-400.0, 16.3), (-360.0, 17.7), (-320.0, 19.0), (-300.0, 19.5),
+                (-268.0, 19.5)]
+# 先台と受け部の間の鋼の筒（写真の下の縁: Z -180〜-210 で 57.5、-250 で 60.3）
+SLIDE_SLEEVE_Y = 74.0
+SLIDE_SLEEVE = [(-268.0, 16.3), (-240.0, 16.3), (-225.0, 16.5), (-163.0, 16.5)]
 FOREND_GROOVES = 18
 
 # 放熱カバー（銃身の上半分を覆う穴あきの板）と着剣部
-SHIELD_Z = (-549.0, -271.0)
-SHIELD_R = 14.0             # 上の縁 Y 116.5（写真で測り直した 115.5〜116。銃身の上の縁より 3mm 高いだけ）
+SHIELD_Z = (-549.0, -273.5)
+SHIELD_R = 15.3             # 上の縁 Y 116.6（写真のトレース）
 SHIELD_T = 1.6              # 板の厚さ
 SHIELD_DOWN = 10.0          # 横の縁が水平より下へ回り込む角度（写真の下の縁 Y 100）
 SHIELD_REAR = (-271.0, -300.0, 23.0)   # 後ろの端の区間（前後 z と回り込む角度。写真の下の縁 Y 97）
@@ -63,6 +71,7 @@ SHIELD_HOLE_R = 3.4
 # 照準: 照星は無い（写真の着剣部の上に玉は写っていない）。受け部の上面から放熱カバーの上の縁に沿って狙う。
 # 照準線は受け部の上面（Y 117.5）の 1mm 上
 SIGHT_Y = 118.5
+STOCK_FRONT_LOW = [(31.0, 54.0), (25.5, 58.5), (19.5, 60.5), (22.0, 64.5), (31.0, 64.5)]
 SAFETY = (-42.0, 52.0)      # 安全装置（トリガーガードの前のボタン。横に押す）
 
 
@@ -116,6 +125,8 @@ def stock():
                      radius_fn=lambda nz, ny: 6.0 if ny < -0.6 else 8.0, cap_grid=14.0)]   # 格子: 放射状の筋を防ぐ
     for q in [q for q in getattr(plate, "geoms", [plate]) if q.geom_type == "Polygon"]:
         out.append(extrude_x_beveled(_ring(q.simplify(0.3)), -HALF_BUTT + 2.5, HALF_BUTT - 2.5, 3.0, M.RUBBER, steps=2))
+    # グリップの前の下（受け部の後ろの下）: トレースの範囲（Z 29 から後ろ・Y 59.5 から上）から漏れていた木の縁（写真）
+    out.append(extrude_x_beveled(STOCK_FRONT_LOW, -HALF_WRIST + 1.5, HALF_WRIST - 1.5, 3.0, WOOD, steps=2))
     return out
 
 
@@ -140,9 +151,9 @@ def receiver():
 
 
 # トリガーガードとトリガーの中心線と半幅 (Z, Y, r)。写真では内側が光って輪郭が途切れるので、細かい目盛りを重ねて読んだ
-GUARD_PATH = [(5.0, 57.5, 1.8), (5.8, 50.0, 1.6), (5.5, 43.0, 1.6), (4.0, 38.5, 1.6), (1.0, 35.5, 1.5), (-4.0, 33.8, 1.4),
-              (-15.0, 33.2, 1.4), (-28.0, 33.4, 1.4), (-36.0, 35.0, 1.5), (-41.0, 38.5, 1.7), (-43.2, 44.0, 1.9),
-              (-43.5, 49.5, 2.1), (-43.0, 57.5, 2.6)]
+GUARD_PATH = [(5.1, 57.9, 1.3), (5.8, 50.0, 1.1), (5.6, 45.2, 1.1), (4.8, 40.0, 1.1), (2.7, 36.7, 1.05), (-2.0, 34.1, 1.0),
+              (-9.0, 32.6, 1.0), (-20.0, 32.4, 1.0), (-29.0, 32.6, 1.0), (-36.0, 34.0, 1.0), (-41.9, 40.0, 1.1),
+              (-43.6, 45.2, 1.6), (-44.2, 50.5, 2.4), (-44.8, 55.0, 3.2)]   # 写真を 8 倍に拡大して読み直した（前は 1mm 高く 2 倍太かった）
 TRIGGER_PATH = [(-4.5, 58.0, 1.8), (-3.0, 52.0, 1.3), (-1.0, 47.5, 1.1), (0.3, 43.0, 1.0), (-0.3, 39.5, 0.9),
                 (-1.8, 36.5, 0.8)]
 
@@ -150,7 +161,7 @@ TRIGGER_PATH = [(-4.5, 58.0, 1.8), (-3.0, 52.0, 1.3), (-1.0, 47.5, 1.1), (0.3, 4
 def trigger_guard():
     """トリガーガード（底の平らな輪。前の脚の上に安全装置のボタン）と、受け部の下に沿う板（写真の Y 55〜59.5）。"""
     from m24 import _stroke
-    plate = [(12.0, 59.6), (12.0, 57.0), (8.0, 55.0), (-50.0, 55.0), (-53.0, 57.0), (-53.0, 59.6)]
+    plate = [(12.0, 59.6), (12.0, 57.5), (8.0, 57.5), (-50.0, 57.5), (-53.0, 58.0), (-53.0, 59.6)]
     return [extrude_x_beveled(_stroke(GUARD_PATH), -HALF_GUARD, HALF_GUARD, 0.8, BLUED, steps=1),
             extrude_x_beveled(plate, -HALF_GUARD - 1.5, HALF_GUARD + 1.5, 1.0, BLUED, steps=1)]
 
@@ -186,7 +197,11 @@ def barrel():
     col = Polygon(O.COLLAR["outer"]).simplify(0.3)
     out.append(extrude_x_beveled(_ring(col), -HALF_RCV + 0.5, HALF_RCV - 0.5, 4.0, BLUED, steps=2))
     t0, t1 = TUBE_Z
-    out.append(lathe(0, TUBE_Y, [(t0, TUBE_R), (t1, TUBE_R)], ar15_mesh.N_MID, BLUED))
+    out.append(lathe(0, TUBE_Y, [(t0, TUBE_R - 4.0), (t0 + 1.2, TUBE_R - 1.2), (t0 + 4.0, TUBE_R), (t1, TUBE_R)],
+                     ar15_mesh.N_MID, BLUED))
+    out.append(lathe(0, SLIDE_SLEEVE_Y, SLIDE_SLEEVE, ar15_mesh.N_MID, BLUED))   # 先台と受け部の間の鋼の筒
+    out.append(lathe(0, BORE_Y, [(-180.0, BARREL_R), (-176.0, BARREL_R + 1.8), (BREECH_Z - 12.0, BARREL_R + 1.8)],
+                     ar15_mesh.N_MID, BLUED))   # 受け部の前の銃身の太い所（写真の上の縁 2mm 高い）
     out += heat_shield() + adapter()
     return out
 
@@ -216,19 +231,19 @@ def heat_shield():
 # 着剣部（作者の指摘「M1912 のモデルを見直して」。競売カタログの写真を 3 倍に拡大して読んだ。Z, Y）: 銃身を包む筒、
 # その下の薄い板（ねじ 3 本。下の縁は大きな弧に抜け、前は鉤になって下がる）、前の下の着剣の突起、後ろで弾倉の筒の
 # 先を抱く留め具と、その下の板・負い紐の輪。それまではトレースの輪郭を幅 25mm の塊にしていて、金槌の頭のように見えた
-ADAPTER_Z = (-549.0, -652.0)     # 筒（放熱カバーの前から銃口の 6mm 先まで。前の上の角は丸い。写真）
-ADAPTER_COLLAR = (-578.0, 14.0)  # 筒の後ろの太い帯（前の端 z、半径。写真の上の縁 Y 116.5）
-ADAPTER_SLEEVE_R = 12.0          # 筒の半径（写真の上の縁 Y 114.3）
-ADAPTER_PLATE = [(-553.0, 101.0), (-652.0, 101.0), (-652.0, 86.0), (-645.5, 80.0), (-642.6, 72.8), (-639.5, 72.5),
-                 (-637.5, 78.0), (-630.0, 86.9), (-611.0, 89.3), (-586.0, 90.1), (-576.0, 86.5), (-572.0, 82.0),
-                 (-572.0, 80.0), (-553.0, 80.0)]
+ADAPTER_Z = (-549.0, -648.0)     # 筒（放熱カバーの前から銃口の 2mm 先まで。前の上の角は丸い。写真の前の端 -647.8）
+ADAPTER_COLLAR = (-578.0, 14.7)  # 筒の後ろの太い帯（前の端 z、半径。写真の上の縁 Y 116.5）
+ADAPTER_SLEEVE_R = 13.3          # 筒の半径（写真の上の縁 Y 114.6）
+ADAPTER_PLATE = [(-553.0, 101.0), (-648.0, 101.0), (-648.5, 86.0), (-645.5, 80.0), (-642.6, 72.8), (-639.5, 72.5),
+                 (-635.5, 76.5), (-628.0, 86.5), (-622.0, 89.0), (-611.0, 89.3), (-588.0, 90.1),
+                 (-583.0, 85.0), (-578.0, 78.5), (-574.0, 73.0), (-572.0, 69.5), (-553.0, 69.5)]   # 後ろは弾倉の筒の先の前で下へ（凹んだ弧）
 ADAPTER_PLATE_HALF = 5.0
 ADAPTER_SCREWS = (-564.3, -602.7, -640.2)   # Y 91.6
-ADAPTER_LUG = (-643.0, -657.4, 79.0, 5.0)   # 着剣の突起（前後 z, 中心 y, 半径）
+ADAPTER_LUG = (-641.0, -657.4, 79.5, 6.5)   # 着剣の突起（前後 z, 中心 y, 半径）
 ADAPTER_CLAMP_Z = (-553.0, -572.0)          # 弾倉の筒の先を抱く留め具
-ADAPTER_TAB = (-553.0, -570.0, 53.0)        # 留め具の下の台（前後 z、下の端 y）
-ADAPTER_STUD = (-560.0, 5.5, 48.6)          # その下の丸い突起（中心 z、半径、下の端 y）
-SLING_LOOP = (-591.0, 7.0, 65.0, 1.3, 25.0)  # 負い紐の輪（前の端 z、左右の半幅、高さ y、針金の半径、傾き）
+ADAPTER_TAB = (-550.5, -569.0, 53.0)        # 留め具の下の台（前後 z、下の端 y）
+ADAPTER_STUD = (-559.0, 5.0, 48.6)          # その下の丸い突起（中心 z、半径、下の端 y）
+SLING_LOOP = (-591.0, 7.0, 67.3, 1.3, 14.0)  # 負い紐の輪（前の端 z、左右の半幅、高さ y、針金の半径、傾き）
 
 
 def adapter():
@@ -240,7 +255,11 @@ def adapter():
            lathe(0, BORE_Y, [(ADAPTER_COLLAR[0], ADAPTER_COLLAR[1] - 1.0), (ADAPTER_COLLAR[0] + 1.0, ADAPTER_COLLAR[1]),
                              (z0, ADAPTER_COLLAR[1])], ar15_mesh.N_MID, BLUED)]
     h = ADAPTER_PLATE_HALF
-    out.append(extrude_x_beveled(ADAPTER_PLATE, -h, h, 1.2, BLUED, steps=1))
+    from shapely.geometry import Polygon, box as sbox
+    from shapely.geometry import Point
+    plate = Polygon(ADAPTER_PLATE).buffer(0.8, quad_segs=3).union(Point(ADAPTER_SCREWS[1], 89.5).buffer(4.0, quad_segs=3))
+    plate = plate.intersection(sbox(-660.0, 60.0, -553.0, 101.0))   # 真ん中のねじのまわりは下へふくらむ（写真）
+    out.append(extrude_x_beveled(_ring(plate.simplify(0.3)), -h, h, 1.2, BLUED, steps=1))
     for z in ADAPTER_SCREWS:
         for s_ in (1, -1):
             xa, xb = sorted((s_ * (h - 0.3), s_ * (h + 0.7)))
@@ -248,9 +267,10 @@ def adapter():
     lz0, lz1, ly, lr = ADAPTER_LUG
     out.append(lathe(0, ly, [(lz1, lr - 1.0), (lz1 + 1.0, lr), (lz0, lr)], ar15_mesh.N_SMALL, BLUED))
     cz0, cz1 = ADAPTER_CLAMP_Z
-    out.append(lathe(0, TUBE_Y, [(cz1, TUBE_R + 2.0), (cz0, TUBE_R + 2.0)], ar15_mesh.N_MID, BLUED))
+    # 留め具: 弾倉の筒の先（Z -553 の丸い端）の前の塊。筒を抱く輪ではない（写真を 8 倍に拡大して確かめた）
+    out.append(extrude_x_beveled([(cz0, 69.5), (cz1, 69.5), (cz1, 90.0), (cz0, 90.0)], -9.0, 9.0, 2.0, BLUED, steps=2))
     tz0, tz1, ty = ADAPTER_TAB
-    out.append(extrude_x_beveled([(tz0, ty), (tz0, TUBE_Y - 5.0), (tz1, TUBE_Y - 5.0), (tz1, ty)], -h - 1.0, h + 1.0,
+    out.append(extrude_x_beveled([(tz0, ty), (tz0, TUBE_Y - 5.0), (tz1, TUBE_Y - 5.0), (tz1, 60.0), (tz1 + 4.0, ty)], -h - 1.0, h + 1.0,
                                  1.5, BLUED, steps=2))
     sz, sr, sy = ADAPTER_STUD
     out.append(y_cyl(0.0, sz, sr, sy, ty + 1.0, BLUED))
@@ -266,14 +286,17 @@ def adapter():
 def pump():
     """先台（木の筒に 18 本の溝。ボーン pump）と左右の作動桿（先台から受け部へ伸びる）。"""
     z0, z1 = FOREND_Z
-    r = FOREND_R
-    prof = [(z0, r - 5.0), (z0 + 2.5, r - 1.5), (z0 + 7.0, r)]
+    zs, rs = zip(*FOREND_TAPER)
+    R = lambda z: float(np.interp(z, zs, rs))
+    prof = [(z0, R(z0) - 5.0), (z0 + 2.5, R(z0 + 2.5) - 1.5), (z0 + 7.0, R(z0 + 7.0))]
     pitch = (z1 - z0 - 22.0) / FOREND_GROOVES
     for i in range(FOREND_GROOVES):
         zc = z0 + 12.0 + (i + 0.5) * pitch
-        prof += [(zc - 2.4, r), (zc - 1.2, r - 2.6), (zc + 1.2, r - 2.6), (zc + 2.4, r)]   # 写真の深い溝
-    prof += [(z1 - 6.0, r), (z1 - 2.0, r - 1.5), (z1, r - 4.0)]
+        prof += [(zc - 2.4, R(zc - 2.4)), (zc - 1.2, R(zc) - 0.8), (zc + 1.2, R(zc) - 0.8), (zc + 2.4, R(zc + 2.4))]   # 溝（写真の下の縁でほとんど凹まない浅い溝）
+    prof += [(z1 - 3.0, R(z1 - 3.0)), (z1 - 1.0, R(z1) - 0.7), (z1, R(z1) - 2.0)]
     out = [lathe(0, FOREND_Y, prof, ar15_mesh.N_MID, WOOD)]
+    # 先台の上（弾倉の筒の上、銃身の下）: 写真では銃身の下まで暗く、隙間が見えない（作動桿の前の部分が先台の上を通る）
+    out.append(box(-8.0, 86.0, z0 + 6.0, 8.0, BORE_Y - BARREL_R + 0.5, z1, M.M1912_STEEL))
     for s in (1, -1):
         xa, xb = sorted((s * 7.5, s * 10.0))
         # 上は 92 まで（写真ではポンプと受け部の間は銃身の下まで暗く、隙間が見えない。90 だと 1.5mm 抜けて見えた。
