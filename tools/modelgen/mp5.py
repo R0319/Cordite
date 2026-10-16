@@ -14,7 +14,7 @@ import materials as M
 import sights
 import mp5_outline as O
 from ak47 import _clip, _yr, _zr
-from core import box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
+from core import MeshPart, box, extrude_x, extrude_x_beveled, inflate_x, lathe, densify
 from m249 import outline_parts, rotated, x_cyl, y_cyl
 from rig import add_locators
 import ar15_parts
@@ -95,6 +95,9 @@ RCV_BOTTOM = 130.0       # 受け部の断面の下端（トリガーハウジ�
 RCV_TOP_R = 15.0         # 上の角の丸み（実物の断面は上がほぼ半円。作者の指摘「角張ったところは弾倉ぐらい」）
 RCV_GROOVE = (142.5, 156.5, 1.8)   # 側面の長い溝（上下の範囲・深さ。写真の暗い帯 Y 140〜160）
 RCV_GROOVE_Z = (-80.0, 77.0)       # 溝のある前後の範囲（写真）
+# 後端キャップの上の部分（作者の指摘「ここの角が取れてない」）。受け部と同じ断面で後ろへ続き、上の角を斜めに落とす
+# （写真: Z 114.5 から Z 126 で Y 171 まで下がる平らな面）。トレースの stock_latch は Y 175 で切っていたので漏れていた
+CAP_CHAMFER = (114.5, 126.0, 171.0)   # 斜めの面の前の端 z、後ろの端 z、後ろの端の高さ y
 
 
 def _rcv_section(groove=True, port=False):
@@ -132,6 +135,48 @@ def _rcv_section(groove=True, port=False):
     return pts
 
 
+def _loft_closed(sections, mat):
+    """凸の断面 [(z, [(x, y)...])...]（点の数をそろえる）を前後につないだ閉じた筒。前後の蓋は重心からの扇。"""
+    verts, faces, charts, cuv = [], [], [], []
+    n = len(sections[0][1])
+    for z, pts in sections:
+        verts += [(x, y, z) for x, y in pts]
+    p0 = sections[0][1]
+    per = [0.0]
+    for i in range(n):
+        per.append(per[-1] + math.dist(p0[i], p0[(i + 1) % n]))
+    for j in range(len(sections) - 1):
+        za, zb = sections[j][0], sections[j + 1][0]
+        for i in range(n):
+            a, b = j * n + i, j * n + (i + 1) % n
+            faces.append([a, b, b + n, a + n])
+            charts.append(0)
+            cuv.append([(per[i], za), (per[i + 1], za), (per[i + 1], zb), (per[i], zb)])
+    for j, front in ((0, True), (len(sections) - 1, False)):
+        z, pts = sections[j]
+        c = len(verts)
+        verts.append((sum(p[0] for p in pts) / n, sum(p[1] for p in pts) / n, z))
+        for i in range(n):
+            a, b = j * n + i, j * n + (i + 1) % n
+            faces.append([c, b, a] if front else [c, a, b])
+            charts.append(None)
+            cuv.append(None)
+    return MeshPart(verts, faces, mat, None, charts, cuv, {0: "band"}).finalize()
+
+
+def end_cap():
+    """後端キャップの上の部分: 受け部の断面のまま後ろへ伸ばし、CAP_CHAMFER の斜めの面で上を切る。"""
+    z0 = _zr(O.RECEIVER)[1]
+    c0, c1, yb = CAP_CHAMFER
+    top = _yr(O.RECEIVER)[1]
+    sec = _rcv_section(groove=False)
+    sections = [(z0, sec)]
+    for k in range(13):
+        yt = top - (top - yb) * k / 12
+        sections.append((c0 + (c1 - c0) * k / 12, [(x, min(y, yt)) for x, y in sec]))
+    return [_loft_closed(sections, RCV_MAT)]
+
+
 def receiver():
     """受け部（板金の筒）。断面（上が丸く、側面に長い溝）を前後に押し出して作る。右側面の排莢口は、その区間だけ
     窓を切り欠いた断面にする（前後の区間の端面が窓の前後の壁になる）。奥は暗い面、間をボルトが動く。"""
@@ -158,7 +203,7 @@ def receiver():
         out.append(extrude_x_beveled([(z0, top - 3.0), (z1, top - 3.0), (z1 - 1.5, top + 2.5), (z0 + 1.5, top + 2.5)],
                                      -5.0, 5.0, 1.0, RCV_MAT, steps=1))
     # 後端キャップ＋ストックの受けと止め金（丸みのある樹脂・金属。角を大きく丸める）
-    out += outline_parts(O.STOCK_LATCH, -h + 1.0, h - 1.0, RCV_MAT, bevel=5.0, steps=3)
+    out += outline_parts(O.STOCK_LATCH, -h + 1.0, h - 1.0, RCV_MAT, bevel=5.0, steps=3) + end_cap()
     return out
 
 

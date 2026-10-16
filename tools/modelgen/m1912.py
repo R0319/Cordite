@@ -18,7 +18,7 @@ import materials as M
 import sights
 import m1912_outline as O
 from core import MeshPart, box, extrude_x_beveled, extrude_x_rounded, inflate_x, lathe, densify
-from m249 import x_cyl
+from m249 import ring_z, rotated, x_cyl, y_cyl
 from rig import add_locators
 
 K = 1.0 / ar15_parts.MM_PER_PX
@@ -30,7 +30,7 @@ BARREL_R = 11.0             # 銃身の外径 22mm（写真の上の縁 Y 113.5�
 MUZZLE_Z = -646.0
 BREECH_Z = -150.0           # 銃身の後端（受け部の前の輪の後ろ）＝薬室の後端
 TUBE_Y, TUBE_R = 76.5, 11.5   # 弾倉の筒（写真 Y 65〜88）
-TUBE_Z = (-545.0, -150.0)
+TUBE_Z = (-553.0, -150.0)   # 前の端は着剣部の留め具の後ろの面（写真 Z -554）
 
 # 左右の半幅（推定）
 HALF_RCV = 16.0             # 受け部 32mm
@@ -53,12 +53,15 @@ FOREND_GROOVES = 18
 
 # 放熱カバー（銃身の上半分を覆う穴あきの板）と着剣部
 SHIELD_Z = (-549.0, -271.0)
-SHIELD_R = 18.0             # 上の縁 Y 120.5
-SHIELD_DOWN = 21.0          # 横の縁が水平より下へ回り込む角度（写真の下の縁 Y 96）
+SHIELD_R = 14.0             # 上の縁 Y 116.5（写真で測り直した 115.5〜116。銃身の上の縁より 3mm 高いだけ）
+SHIELD_T = 1.6              # 板の厚さ
+SHIELD_DOWN = 10.0          # 横の縁が水平より下へ回り込む角度（写真の下の縁 Y 100）
+SHIELD_REAR = (-271.0, -300.0, 23.0)   # 後ろの端の区間（前後 z と回り込む角度。写真の下の縁 Y 97）
+SHIELD_BAND = 5.0           # 後ろの端の留め輪（板と銃身の隙間をふさぐ）の前後の長さ
 SHIELD_HOLE_Y = 108.5       # 横の穴の列（写真）
 SHIELD_HOLES = 20           # 1 列の穴の数（写真で数えた）
 SHIELD_HOLE_R = 3.4
-# 照準: 受け部の上面の溝から銃口の玉（ビード）を狙う。放熱カバーの上の縁（120.5）が銃身（113.5）より高く、銃身の上の
+# 照準: 受け部の上面の溝から銃口の玉（ビード）を狙う。放熱カバーの上の縁（116.5）が銃身（113.5）より高く、銃身の上の
 # 実物の玉（3〜4mm）は覗くとカバーに隠れる。ゲーム向けに誇張して、着剣部の前の端に台を立てて大きな玉を載せる
 # （上の端＝照準線。カバーの上に玉の上 3 分の 2 が見える）。大きさは ADS の目からの距離で決める（sights の目安）
 SIGHT_Y = 125.0
@@ -187,24 +190,30 @@ def barrel():
     col = Polygon(O.COLLAR["outer"]).simplify(0.3)
     out.append(extrude_x_beveled(_ring(col), -HALF_RCV + 0.5, HALF_RCV - 0.5, 4.0, BLUED, steps=2))
     t0, t1 = TUBE_Z
-    out.append(lathe(0, TUBE_Y, [(t0, TUBE_R + 0.5), (t0 + 7.0, TUBE_R + 0.5), (t0 + 7.0, TUBE_R), (t1, TUBE_R)],
-                     ar15_mesh.N_MID, BLUED))
+    out.append(lathe(0, TUBE_Y, [(t0, TUBE_R), (t1, TUBE_R)], ar15_mesh.N_MID, BLUED))
     out += heat_shield() + adapter()
     return out
 
 
 def heat_shield():
-    """放熱カバー: 銃身の上半分を覆う板（横の縁は水平より SHIELD_DOWN 下まで回る）と、横の穴の列（暗い円）。"""
+    """放熱カバー: 銃身の上半分を覆う板（横の縁は水平より SHIELD_DOWN 下まで回る。後ろの端の区間だけ深い）、後ろの端の
+    留め輪、横の穴の列（暗い円。板の面に沿わせて傾ける）。
+    作者の指摘「放熱カバーが薄すぎない？」: 半径 18mm で銃身（11mm）との間に 5.8mm の空きがあり、後ろの開いた端から
+    薄い板の筒に見えていた。写真では上の縁が銃身より 3mm 高いだけで、後ろの端は銃身に留めてある"""
     z0, z1 = SHIELD_Z
-    out = [arc_z(BORE_Y, SHIELD_R - 1.2, SHIELD_R, z0, z1, -SHIELD_DOWN, 180.0 + SHIELD_DOWN, BLUED, n=24)]
+    rz1, rz0, rdown = SHIELD_REAR
+    r_in = SHIELD_R - SHIELD_T
+    out = [arc_z(BORE_Y, r_in, SHIELD_R, z0, rz0, -SHIELD_DOWN, 180.0 + SHIELD_DOWN, BLUED, n=24),
+           arc_z(BORE_Y, r_in, SHIELD_R, rz0, rz1, -rdown, 180.0 + rdown, BLUED, n=24),
+           ring_z(BORE_Y, z1 - SHIELD_BAND, z1, BARREL_R - 0.1, r_in + 0.1, BLUED)]
     dy = SHIELD_HOLE_Y - BORE_Y
-    xs = math.sqrt(SHIELD_R ** 2 - dy ** 2)
+    ang = math.degrees(math.asin(dy / SHIELD_R))
     pitch = (z1 - z0 - 24.0) / (SHIELD_HOLES - 1)
     for i in range(SHIELD_HOLES):
         z = z1 - 12.0 - i * pitch
         for s in (1, -1):
-            xa, xb = sorted((s * (xs - 1.0), s * (xs + 0.25)))
-            out.append(x_cyl(z, SHIELD_HOLE_Y, SHIELD_HOLE_R, xa, xb, M.BORE, n=8))
+            xa, xb = sorted((s * (SHIELD_R - 1.0), s * (SHIELD_R + 0.15)))
+            out += rotated([x_cyl(z, BORE_Y, SHIELD_HOLE_R, xa, xb, M.BORE, n=8)], "z", s * ang, (0.0, BORE_Y, z))
     return out
 
 
@@ -220,7 +229,9 @@ ADAPTER_PLATE_HALF = 5.0
 ADAPTER_SCREWS = (-564.3, -602.7, -640.2)   # Y 91.6
 ADAPTER_LUG = (-643.0, -657.4, 79.0, 5.0)   # 着剣の突起（前後 z, 中心 y, 半径）
 ADAPTER_CLAMP_Z = (-553.0, -572.0)          # 弾倉の筒の先を抱く留め具
-ADAPTER_TAB = (-551.0, -569.0, 48.6)        # 留め具の下の板（下の端 y）
+ADAPTER_TAB = (-553.0, -570.0, 53.0)        # 留め具の下の台（前後 z、下の端 y）
+ADAPTER_STUD = (-560.0, 5.5, 48.6)          # その下の丸い突起（中心 z、半径、下の端 y）
+SLING_LOOP = (-591.0, 7.0, 65.0, 1.3, 25.0)  # 負い紐の輪（前の端 z、左右の半幅、高さ y、針金の半径、傾き）
 
 
 def adapter():
@@ -239,12 +250,15 @@ def adapter():
     cz0, cz1 = ADAPTER_CLAMP_Z
     out.append(lathe(0, TUBE_Y, [(cz1, TUBE_R + 2.0), (cz0, TUBE_R + 2.0)], ar15_mesh.N_MID, BLUED))
     tz0, tz1, ty = ADAPTER_TAB
-    out.append(extrude_x_beveled([(tz0, ty + 3.0), (tz0, TUBE_Y - 5.0), (tz1, TUBE_Y - 5.0), (tz1, ty + 3.0),
-                                  (tz1 + 2.0, ty), (tz0 - 2.0, ty)], -h, h, 1.0, BLUED, steps=1))
-    # 負い紐の輪（横に寝た針金の輪。側面からは細長く見える）
-    for xa, xb in ((-8.0, -6.0), (6.0, 8.0)):
-        out.append(box(xa, 65.0, -591.0, xb, 68.0, -560.0, M.M1912_STEEL))
-    out.append(box(-8.0, 65.0, -593.0, 8.0, 68.0, -589.0, M.M1912_STEEL))
+    out.append(extrude_x_beveled([(tz0, ty), (tz0, TUBE_Y - 5.0), (tz1, TUBE_Y - 5.0), (tz1, ty)], -h - 1.0, h + 1.0,
+                                 1.5, BLUED, steps=2))
+    sz, sr, sy = ADAPTER_STUD
+    out.append(y_cyl(0.0, sz, sr, sy, ty + 1.0, BLUED))
+    # 負い紐の輪（丸い針金の輪。写真では前へ寝て、横へ傾いているので側面から上下 2 本の線に見える）
+    lz, lx, ly, lr, tilt = SLING_LOOP
+    loop = [lathe(sx, ly, [(lz + lr, lr), (tz1 + 2.0, lr)], 8, M.M1912_STEEL) for sx in (-lx, lx)]
+    loop.append(x_cyl(lz + lr, ly, lr, -lx - lr, lx + lr, M.M1912_STEEL, n=8))
+    out += rotated(loop, "z", tilt, (0.0, ly, 0.0))
     # 照準の玉（誇張。筒の前の端の上に台を立てて載せる）
     r = BEAD_D / 2
     out += [box(-1.5, BORE_Y + ADAPTER_SLEEVE_R - 1.0, BEAD_Z - 1.5, 1.5, SIGHT_Y - r, BEAD_Z + 1.5, BLUED),
