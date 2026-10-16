@@ -609,7 +609,10 @@ def report(r):
             L.append(f"  {g['what']}: Z {g['z_mm'][0]}〜{g['z_mm'][1]}、Y {g['y_mm'][0]}〜{g['y_mm'][1]}"
                      f"（{g['area_mm2']}mm²）{tag(g)}")
     L.append(f"背景が細く抜けている所（幅 {SLIT_MAX}mm 以下・長さ {SLIT_LEN}mm 以上、6 方向の影絵）: {len(r['slits'])} か所")
-    for g in r["slits"][:30]:
+    # 長い順に 30 件まで。未説明・要修正・要確認の物は 30 件を超えても必ず出す（一覧の外に隠れないように）
+    for i, g in enumerate(r["slits"]):
+        if i >= 30 and "why" in g and "todo" not in g:
+            continue
         rg = "、".join(f"{k} {v[0]}〜{v[1]}" for k, v in g["range_mm"].items())
         L.append(f"  {g['view']}から: 長さ {g['length_mm']}mm・幅 {g['width_mm']}mm（{rg}）{tag(g)}")
     if r["folds"]:
