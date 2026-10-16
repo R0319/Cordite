@@ -216,9 +216,10 @@ def heat_shield():
 # 着剣部（作者の指摘「M1912 のモデルを見直して」。競売カタログの写真を 3 倍に拡大して読んだ。Z, Y）: 銃身を包む筒、
 # その下の薄い板（ねじ 3 本。下の縁は大きな弧に抜け、前は鉤になって下がる）、前の下の着剣の突起、後ろで弾倉の筒の
 # 先を抱く留め具と、その下の板・負い紐の輪。それまではトレースの輪郭を幅 25mm の塊にしていて、金槌の頭のように見えた
-ADAPTER_Z = (-549.0, -649.0)     # 筒（放熱カバーの前から銃口まで）
+ADAPTER_Z = (-549.0, -652.0)     # 筒（放熱カバーの前から銃口の 6mm 先まで。前の上の角は丸い。写真）
+ADAPTER_COLLAR = (-578.0, 14.0)  # 筒の後ろの太い帯（前の端 z、半径。写真の上の縁 Y 116.5）
 ADAPTER_SLEEVE_R = 12.0          # 筒の半径（写真の上の縁 Y 114.3）
-ADAPTER_PLATE = [(-553.0, 101.0), (-649.0, 101.0), (-649.0, 86.0), (-645.5, 80.0), (-642.6, 72.8), (-639.5, 72.5),
+ADAPTER_PLATE = [(-553.0, 101.0), (-652.0, 101.0), (-652.0, 86.0), (-645.5, 80.0), (-642.6, 72.8), (-639.5, 72.5),
                  (-637.5, 78.0), (-630.0, 86.9), (-611.0, 89.3), (-586.0, 90.1), (-576.0, 86.5), (-572.0, 82.0),
                  (-572.0, 80.0), (-553.0, 80.0)]
 ADAPTER_PLATE_HALF = 5.0
@@ -233,8 +234,11 @@ SLING_LOOP = (-591.0, 7.0, 65.0, 1.3, 25.0)  # 負い紐の輪（前の端 z、�
 def adapter():
     """着剣部（銃口と弾倉の筒の先をまとめて留める金具）。上の説明の部品。"""
     z0, z1 = ADAPTER_Z
-    out = [lathe(0, BORE_Y, [(z1, ADAPTER_SLEEVE_R - 1.5), (z1 + 1.5, ADAPTER_SLEEVE_R), (z0, ADAPTER_SLEEVE_R)],
-                 ar15_mesh.N_MID, BLUED)]
+    out = [lathe(0, BORE_Y, [(z1, ADAPTER_SLEEVE_R - 5.0), (z1 + 1.5, ADAPTER_SLEEVE_R - 2.0), (z1 + 5.0, ADAPTER_SLEEVE_R),
+                              (z0, ADAPTER_SLEEVE_R)],
+                 ar15_mesh.N_MID, BLUED),
+           lathe(0, BORE_Y, [(ADAPTER_COLLAR[0], ADAPTER_COLLAR[1] - 1.0), (ADAPTER_COLLAR[0] + 1.0, ADAPTER_COLLAR[1]),
+                             (z0, ADAPTER_COLLAR[1])], ar15_mesh.N_MID, BLUED)]
     h = ADAPTER_PLATE_HALF
     out.append(extrude_x_beveled(ADAPTER_PLATE, -h, h, 1.2, BLUED, steps=1))
     for z in ADAPTER_SCREWS:

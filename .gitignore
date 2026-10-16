@@ -35,3 +35,6 @@ codex-watch.ps1
 
 # モデル生成ツールの Python キャッシュ
 tools/modelgen/__pycache__/
+
+# 自動採点の写真のパス（ローカル固有。tools/modelgen/score.py --photos）
+tools/modelgen/photos.local.json
