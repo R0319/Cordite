@@ -91,7 +91,8 @@ def add_pistol_locators(m: Model, muzzle, sight_line_y, bore_y, grip_center):
 def _bottom_at(bones, z, half_x=1.0):
     """前後位置 z の断面で、銃の中心線付近（|x| < half_x）の一番低い所の高さ [px]。"""
     import score
-    T = score.world_tris([b for b in bones if b["name"] not in SUPPORT_SKIP]) / score.MM_PER_PX
+    T = score.world_tris([b for b in bones if b["name"] not in SUPPORT_SKIP
+                                 and not b["name"].startswith(("belt_", "link_eject"))]) / score.MM_PER_PX
     low = math.inf
     for t in T:
         dz = t[:, 2] - z

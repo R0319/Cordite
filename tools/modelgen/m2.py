@@ -226,20 +226,41 @@ BELT_Y = [88.0, 94.0, 99.0, 99.0, 99.0, 99.0, 99.0]
 ROUND_TIP_Z = FEEDWAY[0] + 4.0
 
 
-def belt_rounds():
-    out = []
-    for x, y in zip(BELT_X, BELT_Y):
-        out += cartridge_50(x, y, ROUND_TIP_Z)
+BELT_RING_Z = (112.0, 128.0)   # リンクの 2 つの輪（弾頭の先から後ろへ）。弾帯の 1 発ごとのボーンの pivot の Z はこの中央
+
+
+def belt_open_deg(i):
+    """i 発目のリンクの開いた側の向き [度]: 隣の 2 発を結ぶ向き（先頭→末尾）を -90° 回した向き（両端は片側の隣で）。
+    M249 と同じ定義（アニメーション側は pivot から同じ計算で求める）。水平の所では真下（270°）。"""
+    n = len(BELT_X)
+    a, b = belt_pivot(max(i - 1, 0)), belt_pivot(min(i + 1, n - 1))
+    return math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) - 90.0
+
+
+def belt_round(i):
+    """弾帯の i 発目（先頭＝給弾口の奥が 0。ボーン belt_ii）: 弾とそのリンク（M9。弾ごとに 2 つの輪、開いた側 60°）。"""
+    x, y, _ = belt_pivot(i)
+    nd = belt_open_deg(i)
+    out = cartridge_50(x, y, ROUND_TIP_Z)
+    for z in BELT_RING_Z:
+        out.append(arc_ring(x, y, ROUND_TIP_Z + z - 4.0, ROUND_TIP_Z + z + 4.0, 9.6, 11.0, nd + 30.0, nd + 330.0,
+                            M.STEEL_DARK, n=8))
     return out
 
 
-def belt_links():
-    """リンク（M9。弾ごとに 2 つの輪で隣とつなぐ）。"""
-    out = []
-    for x, y in zip(BELT_X, BELT_Y):
-        for z in (ROUND_TIP_Z + 112.0, ROUND_TIP_Z + 128.0):
-            out.append(arc_ring(x, y, z - 4.0, z + 4.0, 9.6, 11.0, -60.0, 240.0, M.STEEL_DARK, n=8))
-    return out
+def belt_pivot(i):
+    j = len(BELT_X) - 1 - i
+    return (BELT_X[j], BELT_Y[j], ROUND_TIP_Z + sum(BELT_RING_Z) / 2)
+
+
+LINK_EJECT = (-RCV_HALF + 8.0, 99.0)   # 飛んでいく空のリンクの静止位置（x, y）: 給弾口の右の出口（Z -545〜-395）の内側
+
+
+def link_eject():
+    """撃つたびに給弾口の右（給弾と反対の側）から飛ぶ空のリンク 1 個。静止位置は受け部の中（見えない）。"""
+    x, y = LINK_EJECT
+    return [arc_ring(x, y, ROUND_TIP_Z + z - 4.0, ROUND_TIP_Z + z + 4.0, 9.6, 11.0, 300.0, 600.0, M.STEEL_DARK, n=8)
+            for z in BELT_RING_Z]
 
 
 def ammo_can():
@@ -281,12 +302,15 @@ def build():
     add("muzzle", "barrel", (0, b, MUZZLE_Z), None, [])
     add("handguard", "root", (0, b, -750.0), None, [])
     add("rail_top", "root", (0, 133.0, -400.0), None, [])
-    add("magazin", "root", CAN_CENTER, "ammo_can", ammo_can() + belt_links())
-    add("mag_ammo", "magazin", (0, 99.0, ROUND_TIP_Z), None, belt_rounds())
+    add("magazin", "root", CAN_CENTER, "ammo_can", ammo_can())
+    add("mag_ammo", "magazin", (0, 99.0, ROUND_TIP_Z), None, [])     # 弾帯を束ねる親（リロード・弾切れで隠す）
+    for i in range(len(BELT_X)):            # 1 発ずつ（先頭＝給弾口の奥が belt_00）。発射で隣の静止位置へ送る
+        add(f"belt_{i:02d}", "mag_ammo", belt_pivot(i), None, belt_round(i))
     # 薬室の 1 発（排莢で飛ぶ薬莢 ammo と弾頭 bullet）
     rd = cartridge_50(0, b, -598.0)
     add("ammo", "root", (0, b, -510.0), None, rd[:1])
     add("bullet", "ammo", (0, b, -598.0), None, rd[1:])
+    add("link_eject", "root", (*LINK_EJECT, ROUND_TIP_Z + sum(BELT_RING_Z) / 2), None, link_eject())
 
     # 両手で後ろのグリップを握る（手先＝グリップの前の面の少し前）
     add_locators(m, muzzle=(0, b * K, MUZZLE_Z * K), sight_line_y=SIGHT_Y * K, rear_sight_z=LEAF_Z * K,
