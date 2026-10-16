@@ -33,15 +33,23 @@ BORE_Y = 102.3
 MUZZLE_Z = -166.3
 BOLT_FACE_Z = 97.7          # 薬室の後端（銃身 264mm を銃口から逆算。ブルパップなのでトリガーより後ろ）
 
-# 左右の半幅（全幅 55mm が上限。斜め前の写真で、ストックがいちばん幅広く、前のハンドストップが細い）
-HALF_STOCK = 27.5
-HALF_UPPER = 26.0           # 本体の上半分（弾倉の下）
+# 左右の半幅（全幅 55mm が上限）。作者提供の TR 型の図（正面・後面・上面。上面図のレールが 15px＝規格の 21mm で縮尺を
+# 確かめた）で読み直した: いちばん幅広いのは弾倉の後ろの肩（弾倉止めのまわり）の 55mm で、ストックは 48mm、
+# 受け部は前の部分 41mm・弾倉をまたぐ後ろの脚 48mm で、どちらも上のレールの下で 29mm まで細くなる
+HALF_STOCK = 24.0
+HALF_UPPER = 24.0           # 本体の上半分（弾倉の下）
+HALF_SHOULDER = 27.5        # 弾倉の後ろの肩（上面図のふくらみ Z 150〜190）
+SHOULDER_Z = (150.0, 190.0)
 HALF_GRIP = 24.0            # 親指の穴のまわり
 HALF_TRIGGER = 19.0         # トリガーの穴のまわり
 HALF_FRONT = 17.5           # 前のハンドストップ
-HALF_UNDER_HOUSING = 23.0   # 受け部の下に隠れる所（受け部の側面と同じ面にしない）
+HALF_UNDER_HOUSING = 20.0   # 受け部の下に隠れる所（受け部の側面と同じ面にしない）
 BODY_BEVEL = 7.0            # 本体の角の丸み（P90 は角の大きく丸い樹脂の塊。トリガーの穴の下の壁 15mm で 7 が上限）
-HALF_HOUSING = 25.0         # 受け部（弾倉 44mm を左右の側板で挟む幅。作者の指摘「サイト周りが太っちょ」で 52 → 50mm）
+HOUSING_FRONT = 20.5        # 受け部の前の部分 41mm（弾倉 44mm より細く、弾倉の側面が少しはみ出す。正面図・上面図）
+HOUSING_ARCH = 24.0         # 弾倉をまたぐ後ろの脚（上面図で前の部分から段になって太る）
+HOUSING_ARCH_Z = -3.0       # 段の位置（上面図）
+HOUSING_TOP = 14.5          # レールの下（正面図・後面図で 29mm。レールは 21mm）
+HALF_HOUSING = HOUSING_FRONT   # 前の部分の側面に付く部品（コッキングハンドルのガイド・玉）の基準
 HALF_MAG = 22.0             # 弾倉 44mm（5.7×28mm 弾 40.5mm を横向きに収める）
 
 # 弾倉（写真）: 後ろの端は本体の段の前、前の端は受け部の前のブロックの手前
@@ -61,14 +69,14 @@ TR_FRONT = [(-109.6, 170.0), (-124.6, 150.4), (-130.9, 127.9)]   # 前の斜め�
 TR_REAR = [(46.6, 118.0), (42.9, 135.4), (35.4, 150.4), (27.9, 161.6), (24.1, 170.0)]   # 後ろの脚の後ろの縁（弾倉をまたぐ）
 TR_PANEL = [(-74.0, 154.5), (-18.0, 154.5), (-18.0, 166.0), (-74.0, 166.0)]   # 上の橋の側面の凹んだ枠（写真の暗い長方形）
 TR_PANEL_DEPTH = 2.5
-TR_TAPER = (145.0, 170.0, 21.0)   # 上の部分は上へ細くなる（作者提供の三面図の後ろの図: 弾倉の上で約 46mm、上面で約 37mm）。
-                                  # Y 145 から上面で半幅 21 へ（TR 型の写真では側板が厚めなので三面図より太め）
+TR_TAPER = (142.0, 168.0)  # この高さの間で HOUSING_TOP まで細くなる（後面図: 弾倉の上の 47mm からレールの下の 28mm へ）
 
 
 def housing_half(z, y):
-    """受け部の半幅（高さで変わる）。"""
-    y0, y1, top = TR_TAPER
-    return HALF_HOUSING + (top - HALF_HOUSING) * min(1.0, max(0.0, (y - y0) / (y1 - y0)))
+    """受け部の半幅（前後の位置と高さで変わる）。"""
+    lo = _lerp(HOUSING_FRONT, HOUSING_ARCH, (z - HOUSING_ARCH_Z + 6.0) / 6.0)
+    y0, y1 = TR_TAPER
+    return _lerp(lo, HOUSING_TOP, (y - y0) / (y1 - y0))
 TR_RAIL_Z = (-108.0, 24.0)  # 上面レールの前後
 SIDE_RAIL_Z = (-91.0, -67.0)   # 左右の短いレール（前の端）
 SIDE_RAIL_Y = 157.5           # 頭（幅 24mm）が上面（TR_TOP_Y）からはみ出さない高さ
@@ -94,10 +102,10 @@ def _lerp(a, b, t):
 
 def body_half(z, y):
     """本体の半幅。上半分（弾倉の下）と下半分（グリップ・穴のまわり）を高さで混ぜる。"""
-    if z >= 200.0:
-        up = HALF_STOCK
-    elif z >= 165.0:
-        up = _lerp(HALF_UPPER, HALF_STOCK, (z - 165.0) / 35.0)
+    s0, s1 = SHOULDER_Z
+    if z >= s0 - 10.0:
+        up = _lerp(HALF_UPPER, HALF_SHOULDER, (z - s0 + 10.0) / 10.0) if z < s1 else \
+            _lerp(HALF_SHOULDER, HALF_STOCK, (z - s1) / 10.0)
     elif z >= 60.0:
         up = HALF_UPPER
     else:
@@ -179,7 +187,7 @@ def housing():
     arm = g.intersection(sbox(ARM_Z, y0, z0, y1))
     for q in _parts_of(arm):
         for s in (1, -1):
-            xa, xb = sorted((s * (HALF_MAG + 0.3), s * HALF_HOUSING))
+            xa, xb = sorted((s * (HALF_MAG + 0.3), s * HOUSING_ARCH))
             out.append(extrude_x(_ring(q), xa, xb, HOUSING_MAT))
     # 上の橋の側面の凹み（側面形に抜いた窓の奥の板）
     h = housing_half(0.0, max(y for _, y in TR_PANEL)) - TR_PANEL_DEPTH
@@ -195,7 +203,7 @@ def rails():
     out = [box(-nw / 2, y - 0.5, z0, nw / 2, y + nh, z1, M.RAIL),
            box(-hw / 2, y + nh, z0, hw / 2, y + nh + hh, z1, M.RAIL)]
     s0, s1 = SIDE_RAIL_Z
-    r0 = housing_half(0.0, SIDE_RAIL_Y) - 0.5
+    r0 = housing_half(0.0, SIDE_RAIL_Y + hw / 2) - 0.5    # 受け部が上へ細くなるので、レールの上の端の高さで面に合わせる
     for s in (1, -1):
         xa, xb = sorted((s * r0, s * (r0 + nh + 0.5)))
         out.append(box(xa, SIDE_RAIL_Y - nw / 2, s0, xb, SIDE_RAIL_Y + nw / 2, s1, M.RAIL_SIDE))

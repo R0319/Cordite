@@ -15,7 +15,6 @@ import math
 import ar15_mesh
 import ar15_parts
 import materials as M
-import sights
 import m1912_outline as O
 from core import MeshPart, box, extrude_x_beveled, extrude_x_rounded, inflate_x, lathe, densify
 from m249 import ring_z, rotated, x_cyl, y_cyl
@@ -61,12 +60,9 @@ SHIELD_BAND = 5.0           # 後ろの端の留め輪（板と銃身の隙間�
 SHIELD_HOLE_Y = 108.5       # 横の穴の列（写真）
 SHIELD_HOLES = 20           # 1 列の穴の数（写真で数えた）
 SHIELD_HOLE_R = 3.4
-# 照準: 受け部の上面の溝から銃口の玉（ビード）を狙う。放熱カバーの上の縁（116.5）が銃身（113.5）より高く、銃身の上の
-# 実物の玉（3〜4mm）は覗くとカバーに隠れる。ゲーム向けに誇張して、着剣部の前の端に台を立てて大きな玉を載せる
-# （上の端＝照準線。カバーの上に玉の上 3 分の 2 が見える）。大きさは ADS の目からの距離で決める（sights の目安）
-SIGHT_Y = 125.0
-BEAD_Z = -650.0
-BEAD_D = sights.POST_ANGLE * 1.2 * (sights.eye_z(0.0, 20.0) - BEAD_Z)   # 丸くて光る玉が目印なので照星の 1.2 倍
+# 照準: 照星は無い（写真の着剣部の上に玉は写っていない）。受け部の上面から放熱カバーの上の縁に沿って狙う。
+# 照準線は受け部の上面（Y 117.5）の 1mm 上
+SIGHT_Y = 118.5
 SAFETY = (-42.0, 52.0)      # 安全装置（トリガーガードの前のボタン。横に押す）
 
 
@@ -235,7 +231,7 @@ SLING_LOOP = (-591.0, 7.0, 65.0, 1.3, 25.0)  # 負い紐の輪（前の端 z、�
 
 
 def adapter():
-    """着剣部（銃口と弾倉の筒の先をまとめて留める金具）。上の説明の部品と、照準の玉。"""
+    """着剣部（銃口と弾倉の筒の先をまとめて留める金具）。上の説明の部品。"""
     z0, z1 = ADAPTER_Z
     out = [lathe(0, BORE_Y, [(z1, ADAPTER_SLEEVE_R - 1.5), (z1 + 1.5, ADAPTER_SLEEVE_R), (z0, ADAPTER_SLEEVE_R)],
                  ar15_mesh.N_MID, BLUED)]
@@ -259,11 +255,6 @@ def adapter():
     loop = [lathe(sx, ly, [(lz + lr, lr), (tz1 + 2.0, lr)], 8, M.M1912_STEEL) for sx in (-lx, lx)]
     loop.append(x_cyl(lz + lr, ly, lr, -lx - lr, lx + lr, M.M1912_STEEL, n=8))
     out += rotated(loop, "z", tilt, (0.0, ly, 0.0))
-    # 照準の玉（誇張。筒の前の端の上に台を立てて載せる）
-    r = BEAD_D / 2
-    out += [box(-1.5, BORE_Y + ADAPTER_SLEEVE_R - 1.0, BEAD_Z - 1.5, 1.5, SIGHT_Y - r, BEAD_Z + 1.5, BLUED),
-            lathe(0, SIGHT_Y - r, [(BEAD_Z - r, 0.01), (BEAD_Z - r * 0.7, r * 0.7), (BEAD_Z, r),
-                                   (BEAD_Z + r * 0.7, r * 0.7), (BEAD_Z + r, 0.01)], 10, M.BRASS)]
     return out
 
 
