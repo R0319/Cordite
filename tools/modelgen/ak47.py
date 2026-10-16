@@ -609,12 +609,15 @@ def charging_handle():
 # ---------------------------------------------------------------- 弾倉
 MAG_REAR_Z = MAG_CATCH_BOX[0] + 0.5     # 弾倉の後ろの縁（図面ではマガジンキャッチと 1 つの影絵なので、ここで切る）
 MAG_RIBS = (0.30, 0.68)                 # 側面の補強リブ（前の縁→後ろの縁の割合。図面の縦の 4 本線＝リブ 2 本の両縁）
-MAG_TOP_Y = 100.0                       # 弾倉の上端（差すと受け部の中＝Y 99 より上に隠れる）
-MAG_SHELL_Y = 86.0                      # ここから上は中空（壁と給弾リップ）。下は詰まった本体で、その上面が送り板
+MAG_TOP_Y = 124.0                       # 弾倉の上端（給弾リップの上面）。受け部の下面（Y 99）から 25mm 中へ入る。ボルト（ボア軸 133 から
+                                        # 半径 7.5 → 下面 125.5）がリップの上を通って上の弾を押し出すので、その直下に置く 🟡 推定
+                                        # （以前は 100 で 1mm しか入らず、差したときに下へ貼り付けたように見えた。作者の指摘）
+MAG_SHELL_Y = 110.0                     # ここから上は中空（壁と給弾リップ）。下は詰まった本体で、その上面が送り板
+MAG_REAR_LUG_Y = 86.0                   # 後ろの掛け金の突起（マガジンキャッチが掛かる）の基準の高さ
 MAG_WALL = 1.0                          # 上部の壁の厚さ
 MAG_LIP = (5.6, 2.4, 46.0)              # 給弾リップ（内側の縁の X、上下の厚さ、後ろの壁から前への長さ）
 MAG_ROUND_X = 2.7                       # 中の弾の左右のずれ（複列。上の弾と次の弾が互い違い）
-MAG_ROUND_Y = (94.3, 84.6)              # 上の弾・次の弾の軸の高さ（上の弾の頂部がリップの上面に揃う）
+MAG_ROUND_Y = (118.3, 108.6)            # 上の弾・次の弾の軸の高さ（上の弾の頂部がリップの上面に揃う）
 
 
 def _mag_edges():
@@ -640,6 +643,9 @@ def magazine_ak():
     from shapely.geometry import LineString, Polygon, box as sbox
     body = Polygon(O.MAGAZINE["outer"]).intersection(sbox(-400.0, -200.0, MAG_REAR_Z, 200.0))
     body = max(getattr(body, "geoms", [body]), key=lambda q: q.area)
+    # 図面の影絵は受け部の下面（Y 100）で切れているので、受け部の中へ入る上の部分を前後の縁の延長で足す
+    zf_top = min(z for z, y in O.MAGAZINE["outer"] if y >= 99.5)
+    body = body.union(sbox(zf_top, 99.0, MAG_REAR_Z, MAG_TOP_Y))
     # 詰まった本体は MAG_SHELL_Y まで。その上は中空の箱（外したときに上から弾と送り板が見える）
     solid = body.intersection(sbox(-400.0, -200.0, 0.0, MAG_SHELL_Y + 0.5))
     solid = max(getattr(solid, "geoms", [solid]), key=lambda q: q.area)
@@ -691,8 +697,9 @@ def magazine_top(body):
     zf = min(z for z, y in prof if y >= MAG_TOP_Y - 0.5)                          # 上端での前の縁
     out.append(extrude_x_beveled([(zf - 3.0, MAG_TOP_Y - 1.0), (zf + w + 0.5, MAG_TOP_Y - 6.0), (zf + w + 0.5, MAG_TOP_Y + 2.5),
                                   (zf - 2.0, MAG_TOP_Y + 2.5)], -6.0, 6.0, 0.6, M.MAG_AK, steps=1))
-    out.append(extrude_x_beveled([(z1 - 0.5, MAG_SHELL_Y - 2.0), (z1 + 2.5, MAG_SHELL_Y - 1.0), (z1 + 2.5, MAG_SHELL_Y + 6.0),
-                                  (z1 - 0.5, MAG_SHELL_Y + 6.0)], -4.5, 4.5, 0.6, M.MAG_AK, steps=1))
+    ly = MAG_REAR_LUG_Y
+    out.append(extrude_x_beveled([(z1 - 0.5, ly - 2.0), (z1 + 2.5, ly - 1.0), (z1 + 2.5, ly + 6.0),
+                                  (z1 - 0.5, ly + 6.0)], -4.5, 4.5, 0.6, M.MAG_AK, steps=1))
     return out
 
 
